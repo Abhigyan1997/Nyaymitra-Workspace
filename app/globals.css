@@ -1,0 +1,177 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: Geist, system-ui, sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  color-scheme: dark;
+  /* NyayMitra Dark Theme - Professional Legal Operations */
+  --background: #09090B; /* Deep black background */
+  --foreground: #F5F5F7; /* Almost white text */
+  --card: #1A1A1D; /* Subtle raised card background */
+  --card-foreground: #F5F5F7;
+  --popover: #1A1A1D;
+  --popover-foreground: #F5F5F7;
+  --primary: #F59E0B; /* Warm amber primary */
+  --primary-foreground: #09090B;
+  --secondary: #3B82F6; /* Bright blue secondary */
+  --secondary-foreground: #F5F5F7;
+  --muted: #404045; /* Medium gray */
+  --muted-foreground: #A0A0A7; /* Soft gray text */
+  --accent: #10B981; /* Emerald for success */
+  --accent-foreground: #09090B;
+  --destructive: #EF4444; /* Red for danger */
+  --destructive-foreground: #F5F5F7;
+  --border: #262629; /* Subtle borders */
+  --input: #262629;
+  --ring: #F59E0B;
+  --chart-1: #F59E0B;
+  --chart-2: #3B82F6;
+  --chart-3: #10B981;
+  --chart-4: #8B5CF6;
+  --chart-5: #EC4899;
+  --radius: 1rem; /* 16px border radius */
+  --sidebar: #1A1A1D;
+  --sidebar-foreground: #F5F5F7;
+  --sidebar-primary: #F59E0B;
+  --sidebar-primary-foreground: #09090B;
+  --sidebar-accent: #3B82F6;
+  --sidebar-accent-foreground: #F5F5F7;
+  --sidebar-border: #262629;
+  --sidebar-ring: #F59E0B;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+
+  /* Typography Scale */
+  h1 {
+    @apply text-[36px] sm:text-[40px] font-bold leading-tight tracking-tight;
+  }
+
+  h2 {
+    @apply text-[28px] sm:text-[32px] font-bold leading-snug tracking-tight;
+  }
+
+  h3 {
+    @apply text-[20px] sm:text-[24px] font-semibold leading-snug tracking-tight;
+  }
+
+  h4 {
+    @apply text-[16px] font-semibold leading-relaxed tracking-tight;
+  }
+
+  h5 {
+    @apply text-[14px] font-semibold uppercase tracking-widest text-muted-foreground;
+  }
+
+  p {
+    @apply text-[15px] leading-relaxed text-muted-foreground;
+  }
+
+  /* Utility Classes */
+  .text-display-lg {
+    @apply text-[48px] font-bold leading-tight tracking-tight;
+  }
+
+  .text-display-md {
+    @apply text-[40px] font-bold leading-tight tracking-tight;
+  }
+
+  .text-display-sm {
+    @apply text-[36px] font-bold leading-tight tracking-tight;
+  }
+
+  .text-heading-xl {
+    @apply text-[32px] font-bold leading-snug tracking-tight;
+  }
+
+  .text-heading-lg {
+    @apply text-[28px] font-bold leading-snug tracking-tight;
+  }
+
+  .text-heading-md {
+    @apply text-[24px] font-semibold leading-snug tracking-tight;
+  }
+
+  .text-heading-sm {
+    @apply text-[20px] font-semibold leading-snug tracking-tight;
+  }
+
+  .text-heading-xs {
+    @apply text-[16px] font-semibold leading-snug tracking-normal;
+  }
+
+  .text-label-lg {
+    @apply text-[14px] font-semibold uppercase tracking-wider text-muted-foreground;
+  }
+
+  .text-label-md {
+    @apply text-[12px] font-semibold uppercase tracking-wide text-muted-foreground;
+  }
+
+  .text-body-md {
+    @apply text-[15px] font-medium leading-relaxed text-foreground;
+  }
+
+  .text-body-sm {
+    @apply text-[14px] font-medium leading-relaxed text-muted-foreground;
+  }
+
+  .text-body-xs {
+    @apply text-[13px] font-medium leading-relaxed text-muted-foreground;
+  }
+
+  .text-mono {
+    @apply font-mono text-[14px] leading-relaxed;
+  }
+}
