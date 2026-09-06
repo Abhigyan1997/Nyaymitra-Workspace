@@ -32,16 +32,13 @@ interface User {
   profilePhoto?: string
 }
 
+// Navigation items with dynamic badge support
 const navItems = [
   { label: 'Overview', icon: BarChart3, href: '/dashboard', badge: null },
-  // { label: 'Matters', icon: Briefcase, href: '/dashboard/matters', badge: '12' },
   { label: 'Documents', icon: FileText, href: '/dashboard/documents', badge: null },
   { label: 'Compliance', icon: CheckSquare, href: '/dashboard/compliance', badge: null },
-  { label: 'Contracts', icon: FileCheck, href: '/dashboard/contracts', badge: '4' },
-  // { label: 'Legal Health', icon: Heart, href: '/dashboard/legal-health', badge: null },
+  { label: 'Contracts', icon: FileCheck, href: '/dashboard/contracts', badge: 'dynamic' }, // 'dynamic' indicates we'll fetch the count
   { label: 'Advisor', icon: Users, href: '/dashboard/team', badge: null },
-  // { label: 'Support', icon: HelpCircle, href: '/dashboard/support', badge: '3' },
-  // { label: 'Notifications', icon: Bell, href: '/dashboard/notifications', badge: '5' },
 ]
 
 const bottomItems = [
@@ -54,6 +51,66 @@ export function Sidebar() {
   const pathname = usePathname()
   const [user, setUser] = useState<User | null>(null)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const [contractCount, setContractCount] = useState<number | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  // Get auth token
+  const getAuthToken = () => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('authToken') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem('accessToken') ||
+        localStorage.getItem('userToken')
+
+      try {
+        const userStr = localStorage.getItem('user')
+        if (userStr) {
+          const user = JSON.parse(userStr)
+          if (user.token) return user.token
+          if (user.accessToken) return user.accessToken
+        }
+      } catch (e) {
+        // Ignore
+      }
+      return token || null
+    }
+    return null
+  }
+
+  // Fetch contract count
+  useEffect(() => {
+    const fetchContractCount = async () => {
+      try {
+        const token = getAuthToken()
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://nyaymitra-backend-production.up.railway.app/api/v1'
+
+        const response = await fetch(`${API_BASE_URL}/contracts/dashboard/stats`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { 'Authorization': `Bearer ${token}` }),
+          },
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch contract stats')
+        }
+
+        const result = await response.json()
+        const stats = result.data || result
+
+        // Get total contracts from stats
+        const total = stats.totalContracts || 0
+        setContractCount(total)
+      } catch (error) {
+        console.error('Failed to fetch contract count:', error)
+        setContractCount(0)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchContractCount()
+  }, [])
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user')
@@ -90,6 +147,16 @@ export function Sidebar() {
   const getUserRole = () => {
     if (!user?.role) return 'Partner'
     return user.role.charAt(0).toUpperCase() + user.role.slice(1)
+  }
+
+  // Get badge display value
+  const getBadgeValue = (badge: string | null | number) => {
+    if (badge === 'dynamic') {
+      if (isLoading) return '...'
+      if (contractCount === null || contractCount === 0) return null
+      return contractCount > 99 ? '99+' : contractCount.toString()
+    }
+    return badge
   }
 
   const SidebarContent = () => (
@@ -136,44 +203,49 @@ export function Sidebar() {
         transition={{ delay: 0.15 }}
         className="flex-1 p-4 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-sidebar-accent scrollbar-track-transparent"
       >
-        {navItems.map((item, index) => (
-          <motion.div
-            key={item.href}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.15 + index * 0.05 }}
-          >
-            <Link
-              href={item.href}
-              className={`flex items-center justify-between px-4 py-2.5 rounded-lg transition-all duration-200 group ${isActive(item.href)
-                ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20'
-                : 'text-sidebar-foreground hover:bg-sidebar-accent/20'
-                }`}
+        {navItems.map((item, index) => {
+          const badgeValue = getBadgeValue(item.badge)
+
+          return (
+            <motion.div
+              key={item.href}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.15 + index * 0.05 }}
             >
-              <div className="flex items-center gap-3">
-                <item.icon
-                  className={`w-5 h-5 ${isActive(item.href)
-                    ? 'text-sidebar-primary-foreground'
-                    : 'text-muted-foreground group-hover:text-sidebar-foreground'
-                    }`}
-                />
-                <span className="font-semibold text-sm">{item.label}</span>
-              </div>
-              {item.badge && (
-                <motion.span
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  className={`text-xs font-bold px-2 py-0.5 rounded-full ${isActive(item.href)
-                    ? 'bg-sidebar-primary-foreground text-sidebar-primary'
-                    : 'bg-sidebar-accent text-sidebar-accent-foreground'
-                    }`}
-                >
-                  {item.badge}
-                </motion.span>
-              )}
-            </Link>
-          </motion.div>
-        ))}
+              <Link
+                href={item.href}
+                className={`flex items-center justify-between px-4 py-2.5 rounded-lg transition-all duration-200 group ${isActive(item.href)
+                    ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent/20'
+                  }`}
+              >
+                <div className="flex items-center gap-3">
+                  <item.icon
+                    className={`w-5 h-5 ${isActive(item.href)
+                        ? 'text-sidebar-primary-foreground'
+                        : 'text-muted-foreground group-hover:text-sidebar-foreground'
+                      }`}
+                  />
+                  <span className="font-semibold text-sm">{item.label}</span>
+                </div>
+                {badgeValue && (
+                  <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                    className={`text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center ${isActive(item.href)
+                        ? 'bg-sidebar-primary-foreground text-sidebar-primary'
+                        : 'bg-sidebar-accent text-sidebar-accent-foreground'
+                      }`}
+                  >
+                    {badgeValue}
+                  </motion.span>
+                )}
+              </Link>
+            </motion.div>
+          )
+        })}
       </motion.nav>
 
       {/* Bottom Items */}
