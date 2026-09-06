@@ -38,7 +38,7 @@ export function LoginForm() {
 
     try {
       const response = await axios.post(
-        'https://nyaymitra-backend-production.up.railway.app/api/v1/auth/login',
+        'http://localhost:5000/api/v1/auth/login',
         {
           email: data.email.trim().toLowerCase(),
           password: data.password,
@@ -54,21 +54,38 @@ export function LoginForm() {
 
       const { token, user, message } = response.data
 
+      // Store user data
       localStorage.setItem('token', token)
       localStorage.setItem('user', JSON.stringify(user))
       localStorage.setItem('userId', user.userId)
       localStorage.setItem('userName', user.fullName)
       localStorage.setItem('userEmail', user.email)
       localStorage.setItem('userProfile', JSON.stringify(user))
-      localStorage.setItem('userType', 'user')
+      localStorage.setItem('userType', user.role || 'user')
 
       toast.success(message || 'Logged in successfully!', {
         description: `Welcome back, ${user.fullName}!`,
       })
 
+      // Role-based redirection
       setTimeout(() => {
-        const redirectTo = new URLSearchParams(window.location.search).get('redirect') || '/dashboard'
-        router.push(redirectTo)
+        const redirectTo = new URLSearchParams(window.location.search).get('redirect')
+
+        if (redirectTo) {
+          router.push(redirectTo)
+        } else {
+          // Redirect based on role
+          const userRole = user.role?.toLowerCase() || ''
+
+          if (userRole === 'lawyer' || userRole === 'attorney' || userRole === 'legal') {
+            router.push('/lawyer-dashboard')
+          } else if (userRole === 'business' || userRole === 'client' || userRole === 'user') {
+            router.push('/dashboard')
+          } else {
+            // Default fallback
+            router.push('/dashboard')
+          }
+        }
       }, 1000)
     } catch (err: any) {
       let errorMessage = 'An error occurred during login'
@@ -214,7 +231,6 @@ export function LoginForm() {
             disabled={isLoading}
             className="w-full bg-gradient-to-br from-[#8b6914] to-[#c9a84c] text-white font-semibold py-3.5 rounded-xl hover:shadow-lg hover:shadow-[rgba(201,168,76,0.3)] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2 relative overflow-hidden"
           >
-            {/* Shine effect */}
             <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />
             {isLoading ? (
               <>
@@ -253,26 +269,6 @@ export function LoginForm() {
             Create Business Account →
           </Link>
         </motion.div>
-
-        {/* Demo Credentials */}
-        {/* <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.4 }}
-          className="mt-6 p-4 bg-[#f4f3f0] border border-[rgba(0,0,0,0.06)] rounded-xl"
-        >
-          <p className="font-mono text-[9px] font-semibold text-[#6b6b6b] uppercase tracking-[0.08em] mb-2">
-            Demo Credentials
-          </p>
-          <div className="space-y-1">
-            <p className="font-mono text-xs text-[#3a3a3a]">
-              <span className="text-[#6b6b6b]">Email:</span> demo@nyaymitra.com
-            </p>
-            <p className="font-mono text-xs text-[#3a3a3a]">
-              <span className="text-[#6b6b6b]">Password:</span> password
-            </p>
-          </div>
-        </motion.div> */}
 
         {/* Trust Badges */}
         <motion.div

@@ -50,23 +50,33 @@
 :root {
   color-scheme: dark;
   /* NyayMitra Dark Theme - Professional Legal Operations */
-  --background: #09090B; /* Deep black background */
-  --foreground: #F5F5F7; /* Almost white text */
-  --card: #1A1A1D; /* Subtle raised card background */
+  --background: #09090B;
+  /* Deep black background */
+  --foreground: #F5F5F7;
+  /* Almost white text */
+  --card: #1A1A1D;
+  /* Subtle raised card background */
   --card-foreground: #F5F5F7;
   --popover: #1A1A1D;
   --popover-foreground: #F5F5F7;
-  --primary: #F59E0B; /* Warm amber primary */
+  --primary: #F59E0B;
+  /* Warm amber primary */
   --primary-foreground: #09090B;
-  --secondary: #3B82F6; /* Bright blue secondary */
+  --secondary: #3B82F6;
+  /* Bright blue secondary */
   --secondary-foreground: #F5F5F7;
-  --muted: #404045; /* Medium gray */
-  --muted-foreground: #A0A0A7; /* Soft gray text */
-  --accent: #10B981; /* Emerald for success */
+  --muted: #404045;
+  /* Medium gray */
+  --muted-foreground: #A0A0A7;
+  /* Soft gray text */
+  --accent: #10B981;
+  /* Emerald for success */
   --accent-foreground: #09090B;
-  --destructive: #EF4444; /* Red for danger */
+  --destructive: #EF4444;
+  /* Red for danger */
   --destructive-foreground: #F5F5F7;
-  --border: #262629; /* Subtle borders */
+  --border: #262629;
+  /* Subtle borders */
   --input: #262629;
   --ring: #F59E0B;
   --chart-1: #F59E0B;
@@ -74,7 +84,8 @@
   --chart-3: #10B981;
   --chart-4: #8B5CF6;
   --chart-5: #EC4899;
-  --radius: 1rem; /* 16px border radius */
+  --radius: 1rem;
+  /* 16px border radius */
   --sidebar: #1A1A1D;
   --sidebar-foreground: #F5F5F7;
   --sidebar-primary: #F59E0B;
@@ -89,6 +100,7 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground font-sans;
   }

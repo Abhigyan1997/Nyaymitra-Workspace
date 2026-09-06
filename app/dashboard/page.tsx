@@ -2,21 +2,28 @@
 
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 import {
   Briefcase,
   FileText,
   Clock,
-  DollarSign,
-  TrendingUp,
   AlertCircle,
   CheckCircle2,
   Users,
-  Activity,
   Zap,
   Calendar,
   Shield,
   ArrowRight,
+  Plus,
+  Upload,
+  TrendingUp,
+  Eye,
+  Loader2,
 } from 'lucide-react'
+
+// ==========================================
+// TYPES & INTERFACES
+// ==========================================
 
 interface User {
   id: string
@@ -28,25 +35,14 @@ interface User {
   profilePhoto?: string
 }
 
-interface FocusItem {
-  icon: React.ReactNode
+interface AttentionItem {
+  id: string
   title: string
+  description: string
+  action: string
+  actionLabel: string
+  severity: 'high' | 'medium' | 'low'
   daysUntil?: number
-  priority: 'high' | 'medium'
-}
-
-interface KPICard {
-  title: string
-  value: string
-  trend?: string
-  icon: React.ComponentType<{ className?: string }>
-}
-
-interface ComplianceItem {
-  name: string
-  dueDate: string
-  status: 'upcoming' | 'completed' | 'delayed'
-  frequency: string
 }
 
 interface Matter {
@@ -54,11 +50,27 @@ interface Matter {
   title: string
   type: string
   priority: 'high' | 'medium' | 'low'
-  lawyer: string
+  professional: string
   stage: string
   progress: number
   dueDate: string
   status: 'under-review' | 'in-progress' | 'completed'
+}
+
+interface Contract {
+  id: string
+  name: string
+  status: 'awaiting-signature' | 'in-review' | 'approved' | 'executed'
+  nextAction: string
+  dueDate: string
+}
+
+interface ComplianceItem {
+  id: string
+  name: string
+  dueDate: string
+  status: 'upcoming' | 'completed' | 'delayed'
+  frequency: string
 }
 
 interface ActivityEvent {
@@ -69,12 +81,22 @@ interface ActivityEvent {
   icon: React.ComponentType<{ className?: string }>
 }
 
-interface RiskItem {
-  id: string
-  title: string
-  severity: 'high' | 'medium' | 'low'
-  impact: string
-  days?: number
+interface LegalHealth {
+  score: number
+  status: 'healthy' | 'good' | 'at-risk'
+  contracts: number
+  compliance: number
+  documentation: number
+  risk: 'low' | 'medium' | 'high'
+  attentionCount: number
+}
+
+interface MonthlyOperations {
+  requestsReceived: number
+  requestsCompleted: number
+  contractsReviewed: number
+  contractsDrafted: number
+  pendingActions: number
 }
 
 // ==========================================
@@ -91,7 +113,7 @@ const Card = ({
   hover?: boolean
 }) => (
   <div
-    className={`rounded-xl p-6 border border-white/8 bg-black/40 backdrop-blur-sm transition-all duration-300 ${hover ? 'hover:border-amber-400/50 hover:bg-black/50' : ''
+    className={`rounded-xl p-4 sm:p-6 border border-white/8 bg-black/40 backdrop-blur-sm transition-all duration-300 ${hover ? 'hover:border-amber-400/50 hover:bg-black/50' : ''
       } ${className}`}
   >
     {children}
@@ -105,7 +127,7 @@ const Label = ({ children }: { children: React.ReactNode }) => (
 )
 
 const SectionTitle = ({ children }: { children: React.ReactNode }) => (
-  <h2 className="text-sm font-medium tracking-wide text-amber-400 mb-6 uppercase">
+  <h2 className="text-sm font-medium tracking-wide text-amber-400 mb-4 sm:mb-6 uppercase">
     {children}
   </h2>
 )
@@ -117,7 +139,9 @@ const PriorityBadge = ({ priority }: { priority: 'high' | 'medium' | 'low' }) =>
     low: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   }
   return (
-    <span className={`text-xs px-2 py-1 rounded border ${colors[priority]}`}>
+    <span
+      className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border ${colors[priority]}`}
+    >
       {priority.charAt(0).toUpperCase() + priority.slice(1)}
     </span>
   )
@@ -139,13 +163,41 @@ const StatusBadge = ({
     completed: 'Completed',
   }
   return (
-    <span className={`text-xs px-2 py-1 rounded border ${colors[status]}`}>
+    <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border ${colors[status]}`}>
       {labels[status]}
     </span>
   )
 }
 
-const ComplianceStatus = ({ status }: { status: 'upcoming' | 'completed' | 'delayed' }) => {
+const ContractStatusBadge = ({
+  status,
+}: {
+  status: 'awaiting-signature' | 'in-review' | 'approved' | 'executed'
+}) => {
+  const colors = {
+    'awaiting-signature': 'bg-red-500/10 text-red-400 border-red-500/20',
+    'in-review': 'bg-amber-400/10 text-amber-400 border-amber-400/20',
+    approved: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    executed: 'bg-green-500/10 text-green-400 border-green-500/20',
+  }
+  const labels = {
+    'awaiting-signature': 'Awaiting Signature',
+    'in-review': 'In Review',
+    approved: 'Approved',
+    executed: 'Executed',
+  }
+  return (
+    <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border ${colors[status]}`}>
+      {labels[status]}
+    </span>
+  )
+}
+
+const ComplianceStatus = ({
+  status,
+}: {
+  status: 'upcoming' | 'completed' | 'delayed'
+}) => {
   const colors = {
     upcoming: 'bg-amber-400/10 text-amber-400 border-amber-400/20',
     completed: 'bg-green-500/10 text-green-400 border-green-500/20',
@@ -157,87 +209,742 @@ const ComplianceStatus = ({ status }: { status: 'upcoming' | 'completed' | 'dela
     delayed: 'Delayed',
   }
   return (
-    <span className={`text-xs px-2 py-1 rounded border ${colors[status]}`}>
+    <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border ${colors[status]}`}>
       {labels[status]}
     </span>
   )
 }
+
+const DashboardSkeleton = () => (
+  <div className="min-h-screen bg-gradient-to-b from-black to-slate-950">
+    <div className="px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 lg:pt-12 pb-6 sm:pb-8 border-b border-white/5">
+      <div className="max-w-7xl mx-auto">
+        <div className="animate-pulse">
+          <div className="h-4 w-24 bg-white/10 rounded mb-2" />
+          <div className="h-12 sm:h-14 lg:h-16 w-48 bg-white/10 rounded mb-2" />
+          <div className="h-4 w-64 bg-white/10 rounded" />
+        </div>
+      </div>
+    </div>
+    <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
+      <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 lg:space-y-12">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="animate-pulse">
+            <div className="rounded-xl p-4 sm:p-6 border border-white/8 bg-black/40">
+              <div className="h-6 w-32 bg-white/10 rounded mb-4" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {[1, 2, 3, 4].map((j) => (
+                  <div key={j} className="h-20 bg-white/5 rounded" />
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+)
+
+// ==========================================
+// DASHBOARD SECTIONS (EXTRACTED COMPONENTS)
+// ==========================================
+
+interface DashboardHeaderProps {
+  greeting: string
+  firstName: string
+  companyName: string
+  onNewRequest: () => void
+  onUploadDocument: () => void
+}
+
+const DashboardHeader = ({
+  greeting,
+  firstName,
+  companyName,
+  onNewRequest,
+  onUploadDocument,
+}: DashboardHeaderProps) => (
+  <motion.div
+    initial={{ opacity: 0, y: -10 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.5 }}
+    className="px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 lg:pt-12 pb-6 sm:pb-8 border-b border-white/5"
+  >
+    <div className="max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+        >
+          <p className="text-xs sm:text-sm font-medium text-amber-400 mb-1 sm:mb-2">
+            {greeting},
+          </p>
+          <h1 className="text-3xl sm:text-4xl lg:text-6xl font-light tracking-tight text-white mb-1">
+            {firstName}
+          </h1>
+          <p className="text-xs sm:text-sm text-gray-400">
+            {companyName} — Legal Operations Workspace
+          </p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, x: 10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, delay: 0.15 }}
+          className="flex flex-col sm:flex-row gap-2 sm:gap-3"
+        >
+          <button
+            onClick={onNewRequest}
+            className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg bg-amber-400 text-black font-medium text-sm hover:bg-amber-300 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            New Legal Request
+          </button>
+          <button
+            onClick={onUploadDocument}
+            className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg border border-amber-400/30 bg-amber-400/5 text-amber-400 font-medium text-sm hover:bg-amber-400/10 transition-colors"
+          >
+            <Upload className="w-4 h-4" />
+            Upload
+          </button>
+        </motion.div>
+      </div>
+    </div>
+  </motion.div>
+)
+
+interface AttentionPanelProps {
+  items: AttentionItem[]
+}
+
+const AttentionPanel = ({ items }: AttentionPanelProps) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.5, delay: 0.2 }}
+  >
+    <Card>
+      <SectionTitle>Needs Your Attention</SectionTitle>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {items.map((item, idx) => (
+          <motion.div
+            key={item.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.22 + idx * 0.05 }}
+            className={`p-3 sm:p-4 rounded-lg border transition-colors ${item.severity === 'high'
+                ? 'bg-red-500/5 border-red-500/20 hover:border-red-500/30'
+                : item.severity === 'medium'
+                  ? 'bg-amber-400/5 border-amber-400/20 hover:border-amber-400/30'
+                  : 'bg-blue-500/5 border-blue-500/20 hover:border-blue-500/30'
+              }`}
+          >
+            <div className="mb-2 sm:mb-3">
+              <p className="text-xs sm:text-sm font-medium text-white mb-0.5">
+                {item.title}
+              </p>
+              <p className="text-[10px] sm:text-xs text-gray-400">
+                {item.description}
+              </p>
+            </div>
+
+            {item.daysUntil && (
+              <p
+                className={`text-[10px] sm:text-xs font-medium mb-2 sm:mb-3 ${item.severity === 'high'
+                    ? 'text-red-400'
+                    : item.severity === 'medium'
+                      ? 'text-amber-400'
+                      : 'text-blue-400'
+                  }`}
+              >
+                {item.daysUntil} day{item.daysUntil !== 1 ? 's' : ''} left
+              </p>
+            )}
+
+            <button
+              className={`w-full text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 sm:py-2 rounded font-medium transition-colors ${item.severity === 'high'
+                  ? 'bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20'
+                  : item.severity === 'medium'
+                    ? 'bg-amber-400/10 border border-amber-400/20 text-amber-400 hover:bg-amber-400/20'
+                    : 'bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20'
+                }`}
+            >
+              {item.actionLabel}
+            </button>
+          </motion.div>
+        ))}
+      </div>
+    </Card>
+  </motion.div>
+)
+
+interface OverviewMetricsProps {
+  activeMatters: number
+  contracts: number
+  pendingActions: number
+  complianceDue: number
+}
+
+const OverviewMetrics = ({
+  activeMatters,
+  contracts,
+  pendingActions,
+  complianceDue,
+}: OverviewMetricsProps) => {
+  const metrics = [
+    { title: 'Active Matters', value: activeMatters, icon: Briefcase },
+    { title: 'Contracts', value: contracts, icon: FileText },
+    { title: 'Pending Actions', value: pendingActions, icon: Clock },
+    { title: 'Compliance Due', value: complianceDue, icon: Calendar },
+  ]
+
+  return (
+    <motion.div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      {metrics.map((metric, idx) => {
+        const Icon = metric.icon
+        return (
+          <motion.div
+            key={idx}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.35 + idx * 0.05 }}
+          >
+            <Card hover>
+              <div className="flex items-start justify-between mb-2 sm:mb-3">
+                <Label>{metric.title}</Label>
+                <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 flex-shrink-0" />
+              </div>
+              <p className="text-2xl sm:text-3xl lg:text-4xl font-light text-white">
+                {metric.value}
+              </p>
+            </Card>
+          </motion.div>
+        )
+      })}
+    </motion.div>
+  )
+}
+
+interface WorkInProgressProps {
+  matters: Matter[]
+}
+
+const WorkInProgress = ({ matters }: WorkInProgressProps) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.4, delay: 0.5 }}
+  >
+    <Card>
+      <SectionTitle>Work in Progress</SectionTitle>
+      <div className="space-y-4">
+        {matters.map((matter, idx) => (
+          <motion.div
+            key={matter.id}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3, delay: 0.52 + idx * 0.05 }}
+            className="pb-4 border-b border-white/5 last:border-0 last:pb-0"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-3 mb-2 sm:mb-3">
+              <div className="min-w-0 flex-1">
+                <h4 className="text-sm font-medium text-white truncate">
+                  {matter.title}
+                </h4>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {matter.type} • {matter.professional}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                <PriorityBadge priority={matter.priority} />
+                <StatusBadge status={matter.status} />
+              </div>
+            </div>
+
+            <div className="mb-2 sm:mb-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] sm:text-xs text-gray-400">
+                  {matter.stage}
+                </span>
+                <span className="text-[10px] sm:text-xs text-gray-400">
+                  {matter.progress}%
+                </span>
+              </div>
+              <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-gradient-to-r from-amber-400 to-amber-500"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${matter.progress}%` }}
+                  transition={{ duration: 1, delay: 0.55 }}
+                />
+              </div>
+            </div>
+
+            <p className="text-[10px] sm:text-xs text-gray-500">
+              Due: {matter.dueDate}
+            </p>
+          </motion.div>
+        ))}
+      </div>
+
+      <motion.button
+        whileHover={{ x: 4 }}
+        className="mt-4 sm:mt-6 flex items-center gap-2 text-xs sm:text-sm text-amber-400 hover:text-amber-300 transition-colors font-medium"
+      >
+        View All Matters <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+      </motion.button>
+    </Card>
+  </motion.div>
+)
+
+interface LegalHealthCardProps {
+  data: LegalHealth
+}
+
+const LegalHealthCard = ({ data }: LegalHealthCardProps) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.4, delay: 0.5 }}
+  >
+    <Card>
+      <SectionTitle>Legal Health</SectionTitle>
+
+      <motion.div
+        initial={{ scale: 0.95 }}
+        animate={{ scale: 1 }}
+        transition={{ duration: 0.5, delay: 0.55 }}
+        className="mb-6 sm:mb-8"
+      >
+        <div className="flex items-end gap-3 sm:gap-4 mb-4 sm:mb-6">
+          <div className="flex-shrink-0">
+            <div className="relative w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0">
+              <svg
+                viewBox="0 0 120 120"
+                className="transform -rotate-90 w-full h-full"
+              >
+                <circle
+                  cx="60"
+                  cy="60"
+                  r="54"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="8"
+                  className="text-white/10"
+                />
+                <motion.circle
+                  cx="60"
+                  cy="60"
+                  r="54"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="8"
+                  strokeDasharray={`${2 * Math.PI * 54}`}
+                  strokeDashoffset={`${2 * Math.PI * 54 * (1 - data.score / 100)}`}
+                  strokeLinecap="round"
+                  className="text-amber-400"
+                  initial={{ strokeDashoffset: 2 * Math.PI * 54 }}
+                  animate={{
+                    strokeDashoffset: 2 * Math.PI * 54 * (1 - data.score / 100),
+                  }}
+                  transition={{ duration: 1, delay: 0.6, ease: 'easeOut' }}
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-lg sm:text-xl font-light text-white">
+                  {data.score}
+                </span>
+                <span className="text-[10px] text-gray-400">/100</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs sm:text-sm font-medium text-amber-400 mb-1">
+              {data.status.charAt(0).toUpperCase() + data.status.slice(1)}
+            </p>
+            <p className="text-[10px] sm:text-xs text-gray-400">Legal Operations</p>
+          </div>
+        </div>
+      </motion.div>
+
+      <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
+        <div className="flex items-center justify-between text-xs sm:text-sm">
+          <span className="text-gray-300">Contracts</span>
+          <span className="text-white font-medium">{data.contracts}%</span>
+        </div>
+        <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+          <motion.div
+            className="h-full bg-gradient-to-r from-amber-400 to-amber-500"
+            initial={{ width: 0 }}
+            animate={{ width: `${data.contracts}%` }}
+            transition={{ duration: 0.8, delay: 0.65 }}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
+        <div className="flex items-center justify-between text-xs sm:text-sm">
+          <span className="text-gray-300">Compliance</span>
+          <span className="text-white font-medium">{data.compliance}%</span>
+        </div>
+        <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+          <motion.div
+            className="h-full bg-gradient-to-r from-green-400 to-green-500"
+            initial={{ width: 0 }}
+            animate={{ width: `${data.compliance}%` }}
+            transition={{ duration: 0.8, delay: 0.7 }}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
+        <div className="flex items-center justify-between text-xs sm:text-sm">
+          <span className="text-gray-300">Documentation</span>
+          <span className="text-white font-medium">{data.documentation}%</span>
+        </div>
+        <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+          <motion.div
+            className="h-full bg-gradient-to-r from-blue-400 to-blue-500"
+            initial={{ width: 0 }}
+            animate={{ width: `${data.documentation}%` }}
+            transition={{ duration: 0.8, delay: 0.75 }}
+          />
+        </div>
+      </div>
+
+      {data.attentionCount > 0 && (
+        <div className="p-3 sm:p-4 rounded-lg bg-amber-400/5 border border-amber-400/20 mb-4 sm:mb-6">
+          <p className="text-xs sm:text-sm text-amber-400 font-medium">
+            {data.attentionCount} area{data.attentionCount !== 1 ? 's' : ''} need{data.attentionCount !== 1 ? '' : 's'}{' '}
+            attention
+          </p>
+        </div>
+      )}
+
+      <motion.button
+        whileHover={{ x: 4 }}
+        className="w-full flex items-center justify-center gap-2 text-xs sm:text-sm text-amber-400 hover:text-amber-300 transition-colors font-medium py-2 rounded-lg hover:bg-amber-400/5"
+      >
+        View Full Assessment <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+      </motion.button>
+    </Card>
+  </motion.div>
+)
+
+interface ContractsAttentionProps {
+  contracts: Contract[]
+}
+
+const ContractsAttention = ({ contracts }: ContractsAttentionProps) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.4, delay: 0.6 }}
+  >
+    <Card>
+      <SectionTitle>Contracts Requiring Attention</SectionTitle>
+      <div className="space-y-3 sm:space-y-4">
+        {contracts.map((contract, idx) => (
+          <motion.div
+            key={contract.id}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3, delay: 0.62 + idx * 0.05 }}
+            className="p-3 sm:p-4 rounded-lg bg-white/5 border border-white/5 hover:border-amber-400/30 transition-colors cursor-pointer"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
+              <div className="flex-1 min-w-0">
+                <h4 className="text-xs sm:text-sm font-medium text-white truncate mb-1">
+                  {contract.name}
+                </h4>
+                <p className="text-[10px] sm:text-xs text-gray-400">
+                  {contract.nextAction}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <ContractStatusBadge status={contract.status} />
+              </div>
+            </div>
+            <p className="text-[10px] sm:text-xs text-gray-500 mt-2">
+              Due: {contract.dueDate}
+            </p>
+          </motion.div>
+        ))}
+      </div>
+
+      <motion.button
+        whileHover={{ x: 4 }}
+        className="mt-4 sm:mt-6 flex items-center gap-2 text-xs sm:text-sm text-amber-400 hover:text-amber-300 transition-colors font-medium"
+      >
+        View All Contracts <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+      </motion.button>
+    </Card>
+  </motion.div>
+)
+
+interface CompliancePreviewProps {
+  items: ComplianceItem[]
+}
+
+const CompliancePreview = ({ items }: CompliancePreviewProps) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.4, delay: 0.7 }}
+  >
+    <Card>
+      <SectionTitle>Upcoming Compliance</SectionTitle>
+      <div className="space-y-3 sm:space-y-4">
+        {items.map((item, idx) => (
+          <motion.div
+            key={item.id}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3, delay: 0.72 + idx * 0.05 }}
+            className="flex items-start justify-between gap-3 pb-3 sm:pb-4 border-b border-white/5 last:border-0 last:pb-0"
+          >
+            <div className="flex-1 min-w-0">
+              <p className="text-xs sm:text-sm font-medium text-white mb-1">
+                {item.name}
+              </p>
+              <p className="text-[10px] sm:text-xs text-gray-500">{item.frequency}</p>
+            </div>
+            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+              <p className="text-[10px] sm:text-xs font-medium text-amber-400">
+                {item.dueDate}
+              </p>
+              <ComplianceStatus status={item.status} />
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      <motion.button
+        whileHover={{ x: 4 }}
+        className="mt-4 sm:mt-6 flex items-center gap-2 text-xs sm:text-sm text-amber-400 hover:text-amber-300 transition-colors font-medium"
+      >
+        View Compliance Calendar <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+      </motion.button>
+    </Card>
+  </motion.div>
+)
+
+interface RecentActivityProps {
+  events: ActivityEvent[]
+}
+
+const RecentActivity = ({ events }: RecentActivityProps) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.4, delay: 0.7 }}
+  >
+    <Card>
+      <SectionTitle>Recent Activity</SectionTitle>
+      <div className="space-y-3 sm:space-y-4">
+        {events.map((event) => {
+          const Icon = event.icon
+          return (
+            <motion.div
+              key={event.id}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+              className="flex items-start gap-3 pb-3 sm:pb-4 border-b border-white/5 last:border-0 last:pb-0"
+            >
+              <div className="mt-0.5 p-1.5 sm:p-2 rounded-lg bg-amber-400/10 border border-amber-400/20 flex-shrink-0">
+                <Icon className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm text-white">
+                  {event.action}
+                  <span className="text-gray-400 ml-1 sm:ml-2 text-[10px] sm:text-xs">
+                    by {event.actor}
+                  </span>
+                </p>
+                <p className="text-[10px] sm:text-xs text-gray-600 mt-0.5">
+                  {event.timestamp}
+                </p>
+              </div>
+            </motion.div>
+          )
+        })}
+      </div>
+
+      <motion.button
+        whileHover={{ x: 4 }}
+        className="mt-4 sm:mt-6 flex items-center gap-2 text-xs sm:text-sm text-amber-400 hover:text-amber-300 transition-colors font-medium"
+      >
+        View All Activity <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+      </motion.button>
+    </Card>
+  </motion.div>
+)
+
+interface MonthlySummaryProps {
+  data: MonthlyOperations
+  month: string
+}
+
+const MonthlySummary = ({ data, month }: MonthlySummaryProps) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.4, delay: 0.85 }}
+  >
+    <Card>
+      <SectionTitle>{month} Legal Operations</SectionTitle>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6">
+        <div>
+          <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">
+            Requests Received
+          </p>
+          <p className="text-xl sm:text-2xl font-light text-white">
+            {data.requestsReceived}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">
+            Completed
+          </p>
+          <p className="text-xl sm:text-2xl font-light text-green-400">
+            {data.requestsCompleted}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">
+            Contracts Reviewed
+          </p>
+          <p className="text-xl sm:text-2xl font-light text-white">
+            {data.contractsReviewed}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">
+            Contracts Drafted
+          </p>
+          <p className="text-xl sm:text-2xl font-light text-white">
+            {data.contractsDrafted}
+          </p>
+        </div>
+        <div className="sm:col-span-1">
+          <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">
+            Pending Actions
+          </p>
+          <p className="text-xl sm:text-2xl font-light text-amber-400">
+            {data.pendingActions}
+          </p>
+        </div>
+      </div>
+
+      <motion.button
+        whileHover={{ x: 4 }}
+        className="mt-6 sm:mt-8 flex items-center gap-2 text-xs sm:text-sm text-amber-400 hover:text-amber-300 transition-colors font-medium"
+      >
+        View Monthly Report <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+      </motion.button>
+    </Card>
+  </motion.div>
+)
 
 // ==========================================
 // MAIN DASHBOARD
 // ==========================================
 
 export default function DashboardPage() {
+  const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [greeting, setGreeting] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user')
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser))
-      } catch (error) {
-        console.error('Failed to parse user:', error)
-      }
+
+    if (!storedUser) {
+      setIsLoading(false)
+      setIsAuthenticated(false)
+      router.push('/')
+      return
     }
 
-    // Set greeting based on current time
-    const hour = new Date().getHours()
-    if (hour >= 5 && hour < 12) {
-      setGreeting('Good morning')
-    } else if (hour >= 12 && hour < 17) {
-      setGreeting('Good afternoon')
-    } else if (hour >= 17 && hour < 21) {
-      setGreeting('Good evening')
-    } else {
-      setGreeting('Good night')
+    try {
+      const parsedUser = JSON.parse(storedUser)
+      setUser(parsedUser)
+      setIsAuthenticated(true)
+
+      const hour = new Date().getHours()
+      if (hour >= 5 && hour < 12) {
+        setGreeting('Good morning')
+      } else if (hour >= 12 && hour < 17) {
+        setGreeting('Good afternoon')
+      } else if (hour >= 17 && hour < 21) {
+        setGreeting('Good evening')
+      } else {
+        setGreeting('Good night')
+      }
+    } catch (error) {
+      console.error('Failed to parse user:', error)
+      localStorage.removeItem('user')
+      router.push('/login')
+    } finally {
+      setIsLoading(false)
     }
-  }, [])
+  }, [router])
+
+  if (isLoading) {
+    return <DashboardSkeleton />
+  }
+
+  if (!isAuthenticated) {
+    return null
+  }
 
   const firstName = user?.fullName?.split(' ')[0] || 'User'
   const companyName = 'FreshFlow AI Pvt Ltd'
 
-  // Mock data
-  const todaysFocus: FocusItem[] = [
+  // ==========================================
+  // MOCK DATA STRUCTURE
+  // ==========================================
+
+  const attentionItems: AttentionItem[] = [
     {
-      icon: <AlertCircle className="w-4 h-4" />,
-      title: 'GST Filing due tomorrow',
-      daysUntil: 1,
-      priority: 'high',
+      id: '1',
+      title: 'Vendor Agreement',
+      description: 'Awaiting your approval',
+      action: 'review',
+      actionLabel: 'Review',
+      severity: 'high',
+      daysUntil: 0,
     },
     {
-      icon: <FileText className="w-4 h-4" />,
-      title: 'Vendor Agreement awaiting signature',
-      priority: 'high',
+      id: '2',
+      title: 'GST Return',
+      description: 'Filing due in 3 days',
+      action: 'view',
+      actionLabel: 'View',
+      severity: 'high',
+      daysUntil: 3,
     },
     {
-      icon: <Calendar className="w-4 h-4" />,
-      title: 'Trademark objection response due in 5 days',
+      id: '3',
+      title: 'Employment Agreement',
+      description: 'Legal review completed',
+      action: 'review',
+      actionLabel: 'Review',
+      severity: 'medium',
+    },
+    {
+      id: '4',
+      title: 'Trademark Matter',
+      description: 'Response due in 5 days',
+      action: 'view',
+      actionLabel: 'View',
+      severity: 'medium',
       daysUntil: 5,
-      priority: 'medium',
     },
-    {
-      icon: <Briefcase className="w-4 h-4" />,
-      title: 'Employment Agreement pending review',
-      priority: 'medium',
-    },
-  ]
-
-  const kpiCards: KPICard[] = [
-    { title: 'Open Matters', value: '23', icon: Briefcase },
-    { title: 'Contracts', value: '147', icon: FileText },
-    { title: 'Pending Approvals', value: '8', icon: Clock },
-    { title: 'Upcoming Compliance', value: '3', icon: Calendar },
-    { title: 'Documents', value: '1,247', icon: FileText },
-    { title: 'Assigned Professionals', value: '12', icon: Users },
-  ]
-
-  const complianceItems: ComplianceItem[] = [
-    { name: 'GST Return', dueDate: 'Aug 15', status: 'upcoming', frequency: 'Monthly' },
-    { name: 'TDS Payment', dueDate: 'Aug 7', status: 'upcoming', frequency: 'Monthly' },
-    { name: 'PF Contribution', dueDate: 'Aug 20', status: 'upcoming', frequency: 'Monthly' },
-    { name: 'Board Meeting', dueDate: 'Aug 22', status: 'upcoming', frequency: 'Quarterly' },
-    { name: 'Annual Return', dueDate: 'Oct 31', status: 'upcoming', frequency: 'Annual' },
   ]
 
   const matters: Matter[] = [
@@ -246,10 +953,10 @@ export default function DashboardPage() {
       title: 'Contract Review - Vendor Agreement',
       type: 'Contracts',
       priority: 'high',
-      lawyer: 'Sharma & Associates',
+      professional: 'Sharma & Associates',
       stage: 'Legal Review',
-      progress: 65,
-      dueDate: 'Aug 8, 2024',
+      progress: 72,
+      dueDate: 'Aug 12, 2024',
       status: 'under-review',
     },
     {
@@ -257,22 +964,87 @@ export default function DashboardPage() {
       title: 'IP Registration - Trademark Filing',
       type: 'IP',
       priority: 'medium',
-      lawyer: 'Patent House',
+      professional: 'IP Professional',
       stage: 'Filing',
-      progress: 40,
-      dueDate: 'Aug 20, 2024',
+      progress: 45,
+      dueDate: 'Aug 25, 2024',
       status: 'in-progress',
     },
     {
       id: '3',
-      title: 'Compliance Audit - FY 2023-24',
-      type: 'Compliance',
+      title: 'Employment Agreement Review',
+      type: 'Employment',
       priority: 'medium',
-      lawyer: 'Chartered Advisors',
-      stage: 'Final Review',
-      progress: 100,
-      dueDate: 'Jul 31, 2024',
-      status: 'completed',
+      professional: 'Medha Banerjee',
+      stage: 'Drafting',
+      progress: 45,
+      dueDate: 'Aug 18, 2024',
+      status: 'in-progress',
+    },
+  ]
+
+  const legalHealth: LegalHealth = {
+    score: 87,
+    status: 'healthy',
+    contracts: 92,
+    compliance: 88,
+    documentation: 74,
+    risk: 'low',
+    attentionCount: 2,
+  }
+
+  const contracts: Contract[] = [
+    {
+      id: '1',
+      name: 'Vendor Agreement',
+      status: 'awaiting-signature',
+      nextAction: 'Sign Agreement',
+      dueDate: 'Aug 12',
+    },
+    {
+      id: '2',
+      name: 'SaaS Agreement',
+      status: 'in-review',
+      nextAction: 'Await Lawyer Review',
+      dueDate: 'Aug 15',
+    },
+    {
+      id: '3',
+      name: 'Employment Agreement',
+      status: 'awaiting-signature',
+      nextAction: 'Review & Approve',
+      dueDate: 'Aug 18',
+    },
+  ]
+
+  const complianceItems: ComplianceItem[] = [
+    {
+      id: '1',
+      name: 'GST Return',
+      dueDate: 'Aug 15',
+      status: 'upcoming',
+      frequency: 'Monthly',
+    },
+    {
+      id: '2',
+      name: 'TDS Payment',
+      dueDate: 'Aug 17',
+      status: 'upcoming',
+      frequency: 'Monthly',
+    },
+    {
+      id: '3',
+      name: 'PF Contribution',
+      dueDate: 'Aug 20',
+      status: 'upcoming',
+      frequency: 'Monthly',
+    },
+    {
+      id: '4',
+      name: 'Board Meeting',
+      dueDate: 'Aug 22',
+      status: 'upcoming',
+      frequency: 'Quarterly',
     },
   ]
 
@@ -286,487 +1058,86 @@ export default function DashboardPage() {
     },
     {
       id: '2',
-      action: 'Trademark filed',
-      actor: 'Patent House',
+      action: 'Agreement revised',
+      actor: 'Legal Professional',
       timestamp: '4 hours ago',
-      icon: Zap,
+      icon: FileText,
     },
     {
       id: '3',
       action: 'Matter assigned',
-      actor: 'Sharma & Associates',
+      actor: 'NyayMitra',
       timestamp: '1 day ago',
       icon: Briefcase,
     },
   ]
 
-  const riskItems: RiskItem[] = [
-    {
-      id: '1',
-      title: 'Employment Agreements Missing',
-      severity: 'high',
-      impact: 'Non-compliance risk',
-      days: 3,
-    },
-    {
-      id: '2',
-      title: 'Expired Vendor Agreement',
-      severity: 'high',
-      impact: 'Legal dispute risk',
-    },
-    {
-      id: '3',
-      title: 'GST Filing Tomorrow',
-      severity: 'high',
-      impact: 'Penalty risk',
-      days: 1,
-    },
-  ]
+  const monthlyOperations: MonthlyOperations = {
+    requestsReceived: 18,
+    requestsCompleted: 13,
+    contractsReviewed: 7,
+    contractsDrafted: 4,
+    pendingActions: 3,
+  }
 
-  const insights = {
-    strengths: [
-      'All GST filings completed on time',
-      'All mandatory registrations updated',
-      'Vendor contracts centralized',
-    ],
-    attentionRequired: [
-      'Two contracts expiring',
-      'Board resolution pending',
-      'Trademark renewal approaching',
-    ],
+  // Handlers (placeholder for now)
+  const handleNewRequest = () => {
+    console.log('New Legal Request clicked')
+    // TODO: Open modal or navigate to request form
+  }
+
+  const handleUploadDocument = () => {
+    console.log('Upload Document clicked')
+    // TODO: Open upload dialog
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-black to-slate-950">
-      {/* HERO SECTION */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="px-8 pt-12 pb-8 border-b border-white/5"
-      >
-        <div className="max-w-7xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-          >
-            <p className="text-sm font-medium text-amber-400 mb-2">{greeting},</p>
-            <h1 className="text-6xl font-light tracking-tight text-white mb-1">
-              {firstName}
-            </h1>
-            <p className="text-sm text-gray-400 mb-6">
-              {companyName} — Legal Operations Workspace
-            </p>
-          </motion.div>
+      <DashboardHeader
+        greeting={greeting}
+        firstName={firstName}
+        companyName={companyName}
+        onNewRequest={handleNewRequest}
+        onUploadDocument={handleUploadDocument}
+      />
 
-          {/* TODAY'S FOCUS */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="mt-8"
-          >
-            <Label>Today's Focus</Label>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
-              {todaysFocus.map((item, idx) => (
-                <motion.div
-                  key={idx}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.3 + idx * 0.05 }}
-                  className="flex items-start gap-3 p-3 rounded-lg bg-white/5 border border-white/5 hover:border-amber-400/30 transition-colors"
-                >
-                  <div
-                    className={`mt-1 ${item.priority === 'high' ? 'text-red-400' : 'text-amber-400'
-                      }`}
-                  >
-                    {item.icon}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-white line-clamp-2">
-                      {item.title}
-                    </p>
-                    {item.daysUntil && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        {item.daysUntil} day{item.daysUntil !== 1 ? 's' : ''} left
-                      </p>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        </div>
-      </motion.div>
+      <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
+        <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 lg:space-y-12">
+          {/* NEEDS YOUR ATTENTION */}
+          <AttentionPanel items={attentionItems} />
 
-      <div className="px-8 py-12">
-        <div className="max-w-7xl mx-auto space-y-12">
-          {/* LEGAL HEALTH SCORE HERO */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.25 }}
-          >
-            <Card hover className="lg:col-span-full">
-              <div className="grid lg:grid-cols-3 gap-8">
-                {/* Score Section */}
-                <div className="lg:col-span-1">
-                  <Label>Legal Health Score</Label>
-                  <motion.div
-                    initial={{ scale: 0.95 }}
-                    animate={{ scale: 1 }}
-                    transition={{ duration: 0.5, delay: 0.35 }}
-                    className="mt-6 flex items-center gap-6"
-                  >
-                    {/* Circular Progress */}
-                    <div className="relative w-32 h-32 flex-shrink-0">
-                      <svg
-                        viewBox="0 0 120 120"
-                        className="transform -rotate-90 w-full h-full"
-                      >
-                        <circle
-                          cx="60"
-                          cy="60"
-                          r="54"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="8"
-                          className="text-white/10"
-                        />
-                        <motion.circle
-                          cx="60"
-                          cy="60"
-                          r="54"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="8"
-                          strokeDasharray={`${2 * Math.PI * 54}`}
-                          strokeDashoffset={`${2 * Math.PI * 54 * (1 - 87 / 100)}`}
-                          strokeLinecap="round"
-                          className="text-amber-400"
-                          initial={{ strokeDashoffset: 2 * Math.PI * 54 }}
-                          animate={{ strokeDashoffset: 2 * Math.PI * 54 * (1 - 87 / 100) }}
-                          transition={{ duration: 1, delay: 0.4, ease: 'easeOut' }}
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-3xl font-light text-white">87</span>
-                        <span className="text-xs text-gray-400">/100</span>
-                      </div>
-                    </div>
+          {/* OVERVIEW METRICS */}
+          <OverviewMetrics
+            activeMatters={12}
+            contracts={47}
+            pendingActions={5}
+            complianceDue={3}
+          />
 
-                    {/* Score Details */}
-                    <div>
-                      <p className="text-sm font-medium text-amber-400 mb-4">Healthy</p>
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Briefcase className="w-4 h-4 text-amber-400" />
-                          <span className="text-sm text-gray-300">23 Active Matters</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-amber-400" />
-                          <span className="text-sm text-gray-300">14 Active Contracts</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <AlertCircle className="w-4 h-4 text-amber-400" />
-                          <span className="text-sm text-gray-300">3 Compliance Due</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Shield className="w-4 h-4 text-red-400" />
-                          <span className="text-sm text-gray-300">2 High Risk Contracts</span>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-
-                  <button className="mt-8 w-full px-4 py-2 rounded-lg bg-amber-400/10 border border-amber-400/30 text-amber-400 text-sm font-medium hover:bg-amber-400/20 transition-colors">
-                    View Full Report
-                  </button>
-                </div>
-
-                {/* Insights Section */}
-                <div className="lg:col-span-2 space-y-6">
-                  {/* Strengths */}
-                  <div>
-                    <h3 className="text-sm font-medium text-green-400 mb-4 flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Strengths
-                    </h3>
-                    <ul className="space-y-2">
-                      {insights.strengths.map((item, idx) => (
-                        <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
-                          <span className="text-green-400 mt-1">✓</span>
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Attention Required */}
-                  <div>
-                    <h3 className="text-sm font-medium text-amber-400 mb-4 flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4" />
-                      Attention Required
-                    </h3>
-                    <ul className="space-y-2">
-                      {insights.attentionRequired.map((item, idx) => (
-                        <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
-                          <span className="text-amber-400 mt-1">⚠</span>
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          </motion.div>
-
-          {/* KPI GRID */}
-          <motion.div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {kpiCards.map((card, idx) => {
-              const Icon = card.icon
-              return (
-                <motion.div
-                  key={idx}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.5 + idx * 0.05 }}
-                >
-                  <Card hover>
-                    <div className="flex items-start justify-between mb-4">
-                      <Label>{card.title}</Label>
-                      <Icon className="w-5 h-5 text-amber-400" />
-                    </div>
-                    <p className="text-4xl font-light text-white mb-2">
-                      {card.value}
-                    </p>
-                    {card.trend && (
-                      <p className="text-sm text-gray-400">{card.trend}</p>
-                    )}
-                  </Card>
-                </motion.div>
-              )
-            })}
-          </motion.div>
-
-          {/* COMPLIANCE CALENDAR */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.65 }}
-          >
-            <Card>
-              <SectionTitle>Compliance Calendar</SectionTitle>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {complianceItems.map((item, idx) => (
-                  <motion.div
-                    key={idx}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.3, delay: 0.65 + idx * 0.03 }}
-                    className="p-4 rounded-lg bg-white/5 border border-white/5 hover:border-amber-400/30 transition-colors"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <p className="text-sm font-medium text-white">{item.name}</p>
-                      <ComplianceStatus status={item.status} />
-                    </div>
-                    <p className="text-xs text-gray-500 mb-2">{item.frequency}</p>
-                    <p className="text-xs font-medium text-amber-400">{item.dueDate}</p>
-                  </motion.div>
-                ))}
-              </div>
-            </Card>
-          </motion.div>
-
-          {/* PRIORITIES & RECENT MATTERS */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.7 }}
-            className="grid lg:grid-cols-3 gap-6"
-          >
-            {/* RECENT MATTERS - LARGE */}
+          {/* WORK IN PROGRESS + LEGAL HEALTH */}
+          <motion.div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
             <div className="lg:col-span-2">
-              <Card>
-                <SectionTitle>Recent Matters</SectionTitle>
-                <div className="space-y-4">
-                  {matters.map((matter, idx) => (
-                    <motion.div
-                      key={matter.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.3, delay: 0.72 + idx * 0.05 }}
-                      className="pb-4 border-b border-white/5 last:border-0 last:pb-0"
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <h4 className="text-sm font-medium text-white">
-                            {matter.title}
-                          </h4>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {matter.type} • {matter.lawyer}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <PriorityBadge priority={matter.priority} />
-                          <StatusBadge status={matter.status} />
-                        </div>
-                      </div>
-
-                      <div className="mb-3">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-gray-400">
-                            {matter.stage}
-                          </span>
-                          <span className="text-xs text-gray-400">
-                            {matter.progress}%
-                          </span>
-                        </div>
-                        <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                          <motion.div
-                            className="h-full bg-gradient-to-r from-amber-400 to-amber-500"
-                            initial={{ width: 0 }}
-                            animate={{ width: `${matter.progress}%` }}
-                            transition={{ duration: 1, delay: 0.75 }}
-                          />
-                        </div>
-                      </div>
-
-                      <p className="text-xs text-gray-500">
-                        Due: {matter.dueDate}
-                      </p>
-                    </motion.div>
-                  ))}
-                </div>
-              </Card>
+              <WorkInProgress matters={matters} />
             </div>
-
-            {/* RISK CENTER */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.75 }}
-            >
-              <Card>
-                <SectionTitle>Risk Center</SectionTitle>
-                <div className="space-y-3">
-                  {riskItems.map((risk) => (
-                    <div
-                      key={risk.id}
-                      className={`p-3 rounded-lg border ${risk.severity === 'high'
-                        ? 'bg-red-500/5 border-red-500/20'
-                        : 'bg-amber-400/5 border-amber-400/20'
-                        }`}
-                    >
-                      <div className="flex items-start gap-2 mb-2">
-                        <AlertCircle
-                          className={`w-4 h-4 flex-shrink-0 mt-0.5 ${risk.severity === 'high'
-                            ? 'text-red-400'
-                            : 'text-amber-400'
-                            }`}
-                        />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-white">
-                            {risk.title}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {risk.impact}
-                          </p>
-                        </div>
-                      </div>
-                      {risk.days && (
-                        <p className="text-xs text-gray-600 ml-6 mb-2">
-                          {risk.days} day{risk.days !== 1 ? 's' : ''} remaining
-                        </p>
-                      )}
-                      <button className="w-full text-xs px-2 py-1.5 rounded bg-white/5 border border-white/10 text-white hover:bg-white/10 transition-colors">
-                        Resolve
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            </motion.div>
-          </motion.div>
-
-          {/* RECENT ACTIVITY */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.8 }}
-          >
-            <Card>
-              <SectionTitle>Recent Activity</SectionTitle>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {activityFeed.map((event) => {
-                  const Icon = event.icon
-                  return (
-                    <motion.div
-                      key={event.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="flex items-start gap-4 p-4 rounded-lg bg-white/5 border border-white/5 hover:border-amber-400/30 transition-colors"
-                    >
-                      <div className="mt-1 p-2 rounded-lg bg-amber-400/10 border border-amber-400/20 flex-shrink-0">
-                        <Icon className="w-4 h-4 text-amber-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white">
-                          {event.action}
-                          <span className="text-gray-400 ml-2">by {event.actor}</span>
-                        </p>
-                        <p className="text-xs text-gray-600 mt-1">
-                          {event.timestamp}
-                        </p>
-                      </div>
-                    </motion.div>
-                  )
-                })}
-              </div>
-            </Card>
-          </motion.div>
-
-          {/* QUICK ACTIONS */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.85 }}
-          >
             <div>
-              <SectionTitle>Quick Actions</SectionTitle>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                {[
-                  { label: 'Raise Legal Request', icon: Zap },
-                  { label: 'Upload Contract', icon: FileText },
-                  { label: 'Book Consultation', icon: Clock },
-                  { label: 'Invite Team', icon: Users },
-                  { label: 'Request Review', icon: CheckCircle2 },
-                  { label: 'Legal Assessment', icon: Shield },
-                ].map((action, idx) => {
-                  const Icon = action.icon
-                  return (
-                    <motion.button
-                      key={idx}
-                      whileHover={{ scale: 1.05, borderColor: 'rgba(245, 158, 11, 0.5)' }}
-                      whileTap={{ scale: 0.95 }}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3, delay: 0.87 + idx * 0.02 }}
-                      className="p-4 rounded-xl border border-white/8 bg-black/40 backdrop-blur-sm hover:bg-black/50 transition-all duration-300 group"
-                    >
-                      <Icon className="w-5 h-5 mx-auto mb-2 text-amber-400 group-hover:scale-110 transition-transform" />
-                      <p className="text-xs font-medium text-center text-white line-clamp-2">
-                        {action.label}
-                      </p>
-                    </motion.button>
-                  )
-                })}
-              </div>
+              <LegalHealthCard data={legalHealth} />
             </div>
           </motion.div>
+
+          {/* CONTRACTS REQUIRING ATTENTION */}
+          <ContractsAttention contracts={contracts} />
+
+          {/* COMPLIANCE + ACTIVITY */}
+          <motion.div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            <CompliancePreview items={complianceItems} />
+            <RecentActivity events={activityFeed} />
+          </motion.div>
+
+          {/* MONTHLY OPERATIONS SUMMARY */}
+          <MonthlySummary
+            data={monthlyOperations}
+            month="August Legal Operations"
+          />
         </div>
       </div>
     </div>

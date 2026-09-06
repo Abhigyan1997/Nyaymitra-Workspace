@@ -1,6 +1,6 @@
 'use client'
 
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
@@ -17,6 +17,9 @@ import {
   LogOut,
   User,
   FileCheck,
+  Scale,
+  Menu,
+  X
 } from 'lucide-react'
 
 interface User {
@@ -30,13 +33,13 @@ interface User {
 }
 
 const navItems = [
-  { label: 'Dashboard', icon: BarChart3, href: '/dashboard', badge: null },
+  { label: 'Overview', icon: BarChart3, href: '/dashboard', badge: null },
   // { label: 'Matters', icon: Briefcase, href: '/dashboard/matters', badge: '12' },
   { label: 'Documents', icon: FileText, href: '/dashboard/documents', badge: null },
   { label: 'Compliance', icon: CheckSquare, href: '/dashboard/compliance', badge: null },
   { label: 'Contracts', icon: FileCheck, href: '/dashboard/contracts', badge: '4' },
-  { label: 'Legal Health', icon: Heart, href: '/dashboard/legal-health', badge: null },
-  { label: 'Team', icon: Users, href: '/dashboard/team', badge: null },
+  // { label: 'Legal Health', icon: Heart, href: '/dashboard/legal-health', badge: null },
+  { label: 'Advisor', icon: Users, href: '/dashboard/team', badge: null },
   // { label: 'Support', icon: HelpCircle, href: '/dashboard/support', badge: '3' },
   // { label: 'Notifications', icon: Bell, href: '/dashboard/notifications', badge: '5' },
 ]
@@ -50,6 +53,7 @@ const bottomItems = [
 export function Sidebar() {
   const pathname = usePathname()
   const [user, setUser] = useState<User | null>(null)
+  const [isMobileOpen, setIsMobileOpen] = useState(false)
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user')
@@ -61,6 +65,11 @@ export function Sidebar() {
       }
     }
   }, [])
+
+  // Close mobile sidebar on route change
+  useEffect(() => {
+    setIsMobileOpen(false)
+  }, [pathname])
 
   const isActive = (href: string) => {
     if (href === '/dashboard') {
@@ -83,14 +92,9 @@ export function Sidebar() {
     return user.role.charAt(0).toUpperCase() + user.role.slice(1)
   }
 
-  return (
-    <motion.aside
-      initial={{ x: -250 }}
-      animate={{ x: 0 }}
-      transition={{ duration: 0.3 }}
-      className="w-64 bg-sidebar border-r border-sidebar-border flex flex-col h-screen overflow-hidden"
-    >
-      {/* Logo - Fixed */}
+  const SidebarContent = () => (
+    <>
+      {/* Logo */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -100,59 +104,7 @@ export function Sidebar() {
         <Link href="/dashboard" className="block">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl flex items-center justify-center shadow-lg shadow-amber-500/20">
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="text-white"
-              >
-                {/* Simplified Justice Scale */}
-                <line
-                  x1="12"
-                  y1="3"
-                  x2="12"
-                  y2="20"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-                <line
-                  x1="3"
-                  y1="9"
-                  x2="21"
-                  y2="9"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M3 9L1 14H5L3 9Z"
-                  fill="currentColor"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M21 9L19 14H23L21 9Z"
-                  fill="currentColor"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <line
-                  x1="10"
-                  y1="20"
-                  x2="14"
-                  y2="20"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
+              <Scale className="w-6 h-6 text-white" />
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight" style={{
@@ -169,7 +121,7 @@ export function Sidebar() {
                   fontFamily: 'Outfit',
                   letterSpacing: '0.05em'
                 }}>
-                  Legal Operations
+                  Business
                 </p>
               </div>
             </div>
@@ -177,7 +129,7 @@ export function Sidebar() {
         </Link>
       </motion.div>
 
-      {/* Navigation - Fixed height with overflow */}
+      {/* Navigation */}
       <motion.nav
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -224,7 +176,7 @@ export function Sidebar() {
         ))}
       </motion.nav>
 
-      {/* Bottom Items - Fixed */}
+      {/* Bottom Items */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -243,7 +195,7 @@ export function Sidebar() {
         ))}
       </motion.div>
 
-      {/* User Profile - Fixed */}
+      {/* User Profile */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -274,6 +226,59 @@ export function Sidebar() {
           </div>
         </div>
       </motion.div>
-    </motion.aside>
+    </>
+  )
+
+  return (
+    <>
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => setIsMobileOpen(!isMobileOpen)}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-sidebar text-sidebar-foreground hover:bg-sidebar-accent/20 transition-colors duration-200"
+        aria-label="Toggle menu"
+      >
+        {isMobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+      </button>
+
+      {/* Mobile Overlay */}
+      <AnimatePresence>
+        {isMobileOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.5 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsMobileOpen(false)}
+            className="lg:hidden fixed inset-0 bg-black/50 z-40"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Desktop Sidebar - Always visible on large screens */}
+      <motion.aside
+        initial={{ x: -250 }}
+        animate={{ x: 0 }}
+        transition={{ duration: 0.3 }}
+        className="hidden lg:flex w-64 bg-sidebar border-r border-sidebar-border flex-col h-screen overflow-hidden flex-shrink-0"
+      >
+        <SidebarContent />
+      </motion.aside>
+
+      {/* Mobile Sidebar - Slide in from left */}
+      <AnimatePresence>
+        {isMobileOpen && (
+          <motion.aside
+            initial={{ x: '-100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '-100%' }}
+            transition={{ type: 'tween', duration: 0.3 }}
+            className="lg:hidden fixed top-0 left-0 w-72 h-full bg-sidebar border-r border-sidebar-border flex flex-col overflow-hidden z-50 shadow-2xl"
+          >
+            <div className="pt-16 flex flex-col h-full">
+              <SidebarContent />
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
+    </>
   )
 }

@@ -2,15 +2,28 @@
 
 import { useEffect } from 'react'
 import { motion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 
 export default function LogoutPage() {
+  const router = useRouter()
+
   useEffect(() => {
-    // Clear auth token and redirect to login
-    localStorage.removeItem('auth_token')
-    setTimeout(() => {
-      window.location.href = '/'
+    // Clear ALL auth-related data from localStorage
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    localStorage.removeItem('userRole')
+    localStorage.removeItem('refreshToken')
+
+    // Clear session storage if used
+    sessionStorage.clear()
+
+    // Redirect to login after delay
+    const timer = setTimeout(() => {
+      router.push('/')
     }, 1500)
-  }, [])
+
+    return () => clearTimeout(timer)
+  }, [router])
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-background via-background to-card flex items-center justify-center p-4">

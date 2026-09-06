@@ -4,7 +4,8 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'NyayMitra - Enterprise Legal Operations',
-  description: 'Premium legal operations platform for enterprise law firms. Manage matters, documents, timesheets, and billing with advanced analytics.',
+  description:
+    'Premium legal operations platform for growing business. Manage matters, documents, timesheets, and billing with advanced analytics.',
   generator: 'v0.app',
   icons: {
     icon: '/icon.svg',
@@ -12,17 +13,21 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'NyayMitra - Enterprise Legal Operations',
-    description: 'Premium legal operations platform for enterprise law firms',
+    description: 'Premium legal operations platform for growing business',
     type: 'website',
   },
 }
 
 export const viewport: Viewport = {
   colorScheme: 'dark',
-  themeColor: [{ media: '(prefers-color-scheme: dark)', color: '#F59E0B' }],
+  themeColor: [
+    {
+      media: '(prefers-color-scheme: dark)',
+      color: '#F59E0B',
+    },
+  ],
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
 }
 
 export default function RootLayout({
@@ -34,6 +39,7 @@ export default function RootLayout({
     <html lang="en" className="dark bg-background scroll-smooth">
       <body className="bg-background text-foreground antialiased font-sans">
         {children}
+
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
