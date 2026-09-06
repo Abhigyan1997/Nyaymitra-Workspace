@@ -1,6 +1,6 @@
 // lib/services/contract.service.ts
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://nyaymitra-backend-production.up.railway.app:5000/api/v1/contracts'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://nyaymitra-backend-production.up.railway.app/api/v1/contracts'
 
 
 // Get auth token from localStorage - try multiple sources
