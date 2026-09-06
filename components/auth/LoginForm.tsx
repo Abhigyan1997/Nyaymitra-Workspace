@@ -38,7 +38,7 @@ export function LoginForm() {
 
     try {
       const response = await axios.post(
-        'http://localhost:5000/api/v1/auth/login',
+        'https://nyaymitra-backend-production.up.railway.app/api/v1/auth/login',
         {
           email: data.email.trim().toLowerCase(),
           password: data.password,
