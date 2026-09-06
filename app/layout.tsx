@@ -5,15 +5,17 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'NyayMitra - Enterprise Legal Operations',
   description:
-    'Premium legal operations platform for growing business. Manage matters, documents, timesheets, and billing with advanced analytics.',
-  generator: 'v0.app',
+    'Premium legal operations platform for growing businesses. Manage matters, documents, timesheets, and billing with advanced analytics.',
+
   icons: {
     icon: '/icon.svg',
     apple: '/apple-icon.png',
   },
+
   openGraph: {
     title: 'NyayMitra - Enterprise Legal Operations',
-    description: 'Premium legal operations platform for growing business',
+    description:
+      'Premium legal operations platform for growing businesses.',
     type: 'website',
   },
 }
