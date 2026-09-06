@@ -2,7 +2,6 @@
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://nyaymitra-backend-production.up.railway.app/api/v1/contracts'
 
-
 // Get auth token from localStorage - try multiple sources
 const getAuthToken = () => {
     if (typeof window !== 'undefined') {
@@ -19,6 +18,7 @@ const getAuthToken = () => {
                 if (user.accessToken) return user.accessToken;
             }
         } catch (e) {
+            // Ignore parse errors
         }
 
         return token || null;
@@ -35,12 +35,22 @@ const getHeaders = () => {
     }
 }
 
+// ===== Types matching backend schema =====
+
+export interface Counterparty {
+    name: string;
+    company: string;
+    email: string;
+    phone: string;
+    address: string;
+}
+
 export interface ContractFormData {
     title: string
     contractType: string
     purpose: string
     description: string
-    counterparty: string
+    counterparty: Counterparty  // Changed from string to object
     contractValue: number | string
     currency: string
     priority: string
@@ -48,25 +58,23 @@ export interface ContractFormData {
     specialInstructions?: string
 }
 
-export interface Contract extends ContractFormData {
-    _id: string
-    requestNumber: string
-    status: string
-    business: string
-    createdAt: string
-    updatedAt: string
-    comments: Comment[]
-    activities: Activity[]
-    completedAt?: string
-}
-
 export interface Comment {
     _id: string
-    sender: string
-    senderRole: string
+    sender: {
+        _id: string
+        name: string
+        email: string
+    }
+    senderRole: 'lawyer' | 'admin' | 'business'
     message: string
     isInternal: boolean
-    attachments: any[]
+    attachments: Array<{
+        fileName: string
+        fileUrl: string
+        storageKey: string
+        fileType: string
+        fileSize: number
+    }>
     isEdited: boolean
     createdAt: string
 }
@@ -74,8 +82,78 @@ export interface Comment {
 export interface Activity {
     action: string
     description: string
-    performedBy: string
+    performedBy: {
+        _id: string
+        name: string
+    }
     createdAt: string
+}
+
+export interface SupportingDocument {
+    originalName: string
+    fileName: string
+    fileUrl: string
+    storageKey: string
+    fileType: string
+    fileSize: number
+    uploadedBy: string
+    uploadedAt: string
+}
+
+export interface Version {
+    version: number
+    fileName: string
+    fileUrl: string
+    storageKey: string
+    fileType: 'pdf' | 'doc' | 'docx'
+    fileSize: number
+    uploadedBy: string
+    remarks: string
+    uploadedAt: string
+}
+
+export interface FinalFiles {
+    pdf?: {
+        fileName: string
+        fileUrl: string
+        storageKey: string
+        fileSize: number
+    }
+    docx?: {
+        fileName: string
+        fileUrl: string
+        storageKey: string
+        fileSize: number
+    }
+    signedPdf?: {
+        fileName: string
+        fileUrl: string
+        storageKey: string
+        fileSize: number
+    }
+}
+
+export interface Contract extends Omit<ContractFormData, 'counterparty'> {
+    _id: string
+    requestNumber: string
+    business: string
+    status: 'Pending' | 'Assigned' | 'Drafting' | 'Internal Review' | 'Client Review' | 'Revision Requested' | 'Approved' | 'Completed' | 'Cancelled'
+    counterparty: Counterparty  // Full counterparty object
+    assignedProfessional: string | null
+    expectedDeliveryDate: string
+    completedAt: string | null
+    specialInstructions?: string
+    supportingDocuments: SupportingDocument[]
+    versions: Version[]
+    currentVersion: number
+    finalFiles: FinalFiles
+    comments: Comment[]
+    activities: Activity[]
+    encrypted: boolean
+    isArchived: boolean
+    isDeleted: boolean
+    createdAt: string
+    updatedAt: string
 }
 
 export interface DashboardStats {
@@ -106,14 +184,22 @@ export interface ContractsListResponse {
     data: Contract[]
 }
 
+// ===== Service Class =====
+
 class ContractService {
     // Create new contract
     async createContract(data: ContractFormData): Promise<Contract> {
         try {
+            // Ensure contractValue is a number
+            const payload = {
+                ...data,
+                contractValue: Number(data.contractValue) || 0
+            }
+
             const response = await fetch(API_BASE_URL, {
                 method: 'POST',
                 headers: getHeaders(),
-                body: JSON.stringify(data),
+                body: JSON.stringify(payload),
             })
 
             if (!response.ok) {
@@ -122,7 +208,7 @@ class ContractService {
             }
 
             const result = await response.json()
-            return result.data
+            return result.data || result
         } catch (error: any) {
             throw new Error(error.message || 'Error creating contract')
         }
@@ -158,9 +244,24 @@ class ContractService {
             }
 
             const result = await response.json()
+
+            // Handle both response formats
+            if (result.pagination && result.data) {
+                return {
+                    pagination: result.pagination,
+                    data: result.data,
+                }
+            }
+
+            // If the API returns data directly
             return {
-                pagination: result.pagination,
-                data: result.data,
+                pagination: {
+                    page: params.page || 1,
+                    limit: params.limit || 10,
+                    total: result.data?.length || 0,
+                    pages: 1,
+                },
+                data: result.data || result || [],
             }
         } catch (error: any) {
             throw new Error(error.message || 'Error fetching contracts')
@@ -180,7 +281,7 @@ class ContractService {
             }
 
             const result = await response.json()
-            return result.data
+            return result.data || result
         } catch (error: any) {
             throw new Error(error.message || 'Error fetching contract')
         }
@@ -189,10 +290,15 @@ class ContractService {
     // Update contract
     async updateContract(id: string, data: Partial<ContractFormData>): Promise<Contract> {
         try {
+            const payload = {
+                ...data,
+                ...(data.contractValue !== undefined && { contractValue: Number(data.contractValue) || 0 })
+            }
+
             const response = await fetch(`${API_BASE_URL}/${id}`, {
                 method: 'PUT',
                 headers: getHeaders(),
-                body: JSON.stringify(data),
+                body: JSON.stringify(payload),
             })
 
             if (!response.ok) {
@@ -201,7 +307,7 @@ class ContractService {
             }
 
             const result = await response.json()
-            return result.data
+            return result.data || result
         } catch (error: any) {
             throw new Error(error.message || 'Error updating contract')
         }
@@ -222,9 +328,30 @@ class ContractService {
             }
 
             const result = await response.json()
-            return result.data
+            return result.data || result
         } catch (error: any) {
             throw new Error(error.message || 'Error updating status')
+        }
+    }
+
+    // Assign professional to contract
+    async assignProfessional(contractId: string, professionalId: string): Promise<Contract> {
+        try {
+            const response = await fetch(`${API_BASE_URL}/${contractId}/assign`, {
+                method: 'PATCH',
+                headers: getHeaders(),
+                body: JSON.stringify({ professionalId }),
+            })
+
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.message || 'Failed to assign professional')
+            }
+
+            const result = await response.json()
+            return result.data || result
+        } catch (error: any) {
+            throw new Error(error.message || 'Error assigning professional')
         }
     }
 
@@ -243,7 +370,7 @@ class ContractService {
             }
 
             const result = await response.json()
-            return result.data
+            return result.data || result
         } catch (error: any) {
             throw new Error(error.message || 'Error adding comment')
         }
@@ -262,7 +389,7 @@ class ContractService {
             }
 
             const result = await response.json()
-            return result.data
+            return result.data || result || []
         } catch (error: any) {
             throw new Error(error.message || 'Error fetching comments')
         }
@@ -281,9 +408,120 @@ class ContractService {
             }
 
             const result = await response.json()
-            return result.data
+            return result.data || result
         } catch (error: any) {
             throw new Error(error.message || 'Error fetching stats')
+        }
+    }
+
+    // Upload supporting document
+    async uploadDocument(contractId: string, file: File): Promise<SupportingDocument> {
+        try {
+            const formData = new FormData()
+            formData.append('document', file)
+
+            const token = getAuthToken()
+            const response = await fetch(`${API_BASE_URL}/${contractId}/documents`, {
+                method: 'POST',
+                headers: {
+                    ...(token && { 'Authorization': `Bearer ${token}` }),
+                },
+                body: formData,
+            })
+
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.message || 'Failed to upload document')
+            }
+
+            const result = await response.json()
+            return result.data || result
+        } catch (error: any) {
+            throw new Error(error.message || 'Error uploading document')
+        }
+    }
+
+    // Upload contract version
+    async uploadVersion(contractId: string, file: File, remarks?: string): Promise<Version> {
+        try {
+            const formData = new FormData()
+            formData.append('file', file)
+            if (remarks) formData.append('remarks', remarks)
+
+            const token = getAuthToken()
+            const response = await fetch(`${API_BASE_URL}/${contractId}/versions`, {
+                method: 'POST',
+                headers: {
+                    ...(token && { 'Authorization': `Bearer ${token}` }),
+                },
+                body: formData,
+            })
+
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.message || 'Failed to upload version')
+            }
+
+            const result = await response.json()
+            return result.data || result
+        } catch (error: any) {
+            throw new Error(error.message || 'Error uploading version')
+        }
+    }
+
+    // Archive contract
+    async archiveContract(id: string): Promise<Contract> {
+        try {
+            const response = await fetch(`${API_BASE_URL}/${id}/archive`, {
+                method: 'PATCH',
+                headers: getHeaders(),
+            })
+
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.message || 'Failed to archive contract')
+            }
+
+            const result = await response.json()
+            return result.data || result
+        } catch (error: any) {
+            throw new Error(error.message || 'Error archiving contract')
+        }
+    }
+
+    // Delete contract (soft delete)
+    async deleteContract(id: string): Promise<void> {
+        try {
+            const response = await fetch(`${API_BASE_URL}/${id}`, {
+                method: 'DELETE',
+                headers: getHeaders(),
+            })
+
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.message || 'Failed to delete contract')
+            }
+        } catch (error: any) {
+            throw new Error(error.message || 'Error deleting contract')
+        }
+    }
+
+    // Get contract activities
+    async getActivities(contractId: string): Promise<Activity[]> {
+        try {
+            const response = await fetch(`${API_BASE_URL}/${contractId}/activities`, {
+                headers: getHeaders(),
+            })
+
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.message || 'Failed to fetch activities')
+            }
+
+            const result = await response.json()
+            return result.data || result || []
+        } catch (error: any) {
+            throw new Error(error.message || 'Error fetching activities')
         }
     }
 }

@@ -36,7 +36,7 @@ export function ProfileSettings() {
           fullName: parsedUser.fullName || '',
           email: parsedUser.email || '',
           phone: parsedUser.phone || '',
-          role: parsedUser.role || '',
+          role: parsedUser.role || 'business',
         })
       } catch (error) {
         console.error('Failed to parse user:', error)
@@ -52,7 +52,33 @@ export function ProfileSettings() {
     return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase()
   }
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const getRoleBadgeColor = (role: string) => {
+    switch (role?.toLowerCase()) {
+      case 'admin':
+        return 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+      case 'lawyer':
+        return 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+      case 'business':
+        return 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+      default:
+        return 'bg-gray-500/10 text-gray-400 border-gray-500/20'
+    }
+  }
+
+  const getRoleDisplayName = (role: string) => {
+    switch (role?.toLowerCase()) {
+      case 'admin':
+        return 'Administrator'
+      case 'lawyer':
+        return 'Lawyer'
+      case 'business':
+        return 'Business'
+      default:
+        return role || 'User'
+    }
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({
       ...prev,
@@ -68,12 +94,14 @@ export function ProfileSettings() {
     setTimeout(() => {
       try {
         // Update user in localStorage
-        const updatedUser = {
-          ...user,
+        const updatedUser: User = {
+          id: user?.id || '',
           fullName: formData.fullName,
           email: formData.email,
           phone: formData.phone,
           role: formData.role,
+          userId: user?.userId || '',
+          profilePhoto: user?.profilePhoto,
         }
         localStorage.setItem('user', JSON.stringify(updatedUser))
         setUser(updatedUser)
@@ -100,7 +128,7 @@ export function ProfileSettings() {
         fullName: user.fullName || '',
         email: user.email || '',
         phone: user.phone || '',
-        role: user.role || '',
+        role: user.role || 'business',
       })
     }
   }
@@ -109,8 +137,8 @@ export function ProfileSettings() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading profile...</p>
+          <div className="w-12 h-12 border-4 border-amber-500/30 border-t-amber-500 rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-400">Loading profile...</p>
         </div>
       </div>
     )
@@ -128,9 +156,9 @@ export function ProfileSettings() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="bg-card border border-border rounded-xl p-6"
+        className="bg-slate-900/50 border border-white/10 rounded-xl p-6"
       >
-        <h3 className="font-semibold text-foreground mb-4">Profile Picture</h3>
+        <h3 className="font-semibold text-white mb-4">Profile Picture</h3>
         <div className="flex items-center gap-6">
           <div className="relative">
             {user?.profilePhoto ? (
@@ -161,66 +189,68 @@ export function ProfileSettings() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="bg-card border border-border rounded-xl p-6"
+        className="bg-slate-900/50 border border-white/10 rounded-xl p-6"
       >
-        <h3 className="font-semibold text-foreground mb-6">Personal Information</h3>
+        <h3 className="font-semibold text-white mb-6">Personal Information</h3>
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-2">Full Name</label>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Full Name</label>
               <input
                 type="text"
                 name="fullName"
                 value={formData.fullName}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all"
+                className="w-full px-4 py-2 bg-slate-900 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all placeholder-gray-500"
+                placeholder="Enter your full name"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-2">Email</label>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Email</label>
               <input
                 type="email"
                 name="email"
                 value={formData.email}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all"
+                className="w-full px-4 py-2 bg-slate-900 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all placeholder-gray-500"
+                placeholder="Enter your email"
               />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-2">Phone</label>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Phone</label>
               <input
                 type="tel"
                 name="phone"
                 value={formData.phone}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all"
+                className="w-full px-4 py-2 bg-slate-900 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all placeholder-gray-500"
+                placeholder="Enter your phone number"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-2">Role</label>
-              <select
-                name="role"
-                value={formData.role}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all"
-              >
-                <option value="Partner">Partner</option>
-                <option value="Legal Operations Manager">Legal Operations Manager</option>
-                <option value="Lawyer">Lawyer</option>
-                <option value="Chartered Accountant">Chartered Accountant</option>
-                <option value="Legal Assistant">Legal Assistant</option>
-              </select>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Role</label>
+              <div className="relative">
+                <div className={`px-4 py-2 rounded-lg border ${getRoleBadgeColor(formData.role)} bg-opacity-10 flex items-center gap-2`}>
+                  <span className="text-sm font-medium">
+                    {getRoleDisplayName(formData.role)}
+                  </span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-gray-400 uppercase">
+                    {formData.role}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Role is assigned by the system and cannot be changed</p>
+              </div>
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-muted-foreground mb-2">User ID</label>
+            <label className="block text-sm font-medium text-gray-400 mb-2">User ID</label>
             <input
               type="text"
-              value={user?.userId || ''}
+              value={user?.userId || user?.id || ''}
               disabled
-              className="w-full px-4 py-2 bg-background/50 border border-border rounded-lg text-muted-foreground cursor-not-allowed"
+              className="w-full px-4 py-2 bg-slate-900/50 border border-white/5 rounded-lg text-gray-500 cursor-not-allowed"
             />
           </div>
         </div>
@@ -231,7 +261,7 @@ export function ProfileSettings() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.3 }}
-        className="flex flex-wrap gap-3"
+        className="flex flex-wrap items-center gap-3"
       >
         <motion.button
           whileHover={{ scale: 1.02 }}
@@ -254,7 +284,7 @@ export function ProfileSettings() {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={handleCancel}
-          className="bg-card border border-border text-foreground px-6 py-2 rounded-lg font-medium hover:bg-background transition-colors"
+          className="bg-slate-800 border border-white/10 text-white px-6 py-2 rounded-lg font-medium hover:bg-slate-700 transition-colors"
         >
           Cancel
         </motion.button>
@@ -264,7 +294,7 @@ export function ProfileSettings() {
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-2 text-green-500 px-4 py-2 bg-green-500/10 rounded-lg border border-green-500/20"
+            className="flex items-center gap-2 text-green-400 px-4 py-2 bg-green-500/10 rounded-lg border border-green-500/20"
           >
             <span className="text-sm">✓ Profile updated successfully!</span>
           </motion.div>
@@ -274,7 +304,7 @@ export function ProfileSettings() {
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-2 text-red-500 px-4 py-2 bg-red-500/10 rounded-lg border border-red-500/20"
+            className="flex items-center gap-2 text-red-400 px-4 py-2 bg-red-500/10 rounded-lg border border-red-500/20"
           >
             <span className="text-sm">✗ Failed to update profile. Please try again.</span>
           </motion.div>
