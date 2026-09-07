@@ -147,9 +147,8 @@ export function DocumentsGrid({ searchQuery }: DocumentsGridProps) {
 
             {/* Actions */}
             <div
-              className={`flex gap-2 transition-all duration-200 ${
-                selectedDocId === doc.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
+              className={`flex gap-2 transition-all duration-200 ${selectedDocId === doc.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                }`}
             >
               <motion.button
                 whileHover={{ scale: 1.1 }}
