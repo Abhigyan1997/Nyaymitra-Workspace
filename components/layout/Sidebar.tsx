@@ -19,7 +19,8 @@ import {
   FileCheck,
   Scale,
   Menu,
-  X
+  X,
+  Lock
 } from 'lucide-react'
 
 interface User {
@@ -35,10 +36,10 @@ interface User {
 // Navigation items with dynamic badge support
 const navItems = [
   { label: 'Overview', icon: BarChart3, href: '/dashboard', badge: null },
-  { label: 'Documents', icon: FileText, href: '/dashboard/documents', badge: null },
+  { label: 'Vault', icon: Lock, href: '/dashboard/documents', badge: null },
   { label: 'Compliance', icon: CheckSquare, href: '/dashboard/compliance', badge: null },
   { label: 'Contracts', icon: FileCheck, href: '/dashboard/contracts', badge: 'dynamic' }, // 'dynamic' indicates we'll fetch the count
-  { label: 'Advisor', icon: Users, href: '/dashboard/team', badge: null },
+  { label: 'Team', icon: Users, href: '/dashboard/team', badge: null },
 ]
 
 const bottomItems = [
@@ -216,15 +217,15 @@ export function Sidebar() {
               <Link
                 href={item.href}
                 className={`flex items-center justify-between px-4 py-2.5 rounded-lg transition-all duration-200 group ${isActive(item.href)
-                    ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20'
-                    : 'text-sidebar-foreground hover:bg-sidebar-accent/20'
+                  ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20'
+                  : 'text-sidebar-foreground hover:bg-sidebar-accent/20'
                   }`}
               >
                 <div className="flex items-center gap-3">
                   <item.icon
                     className={`w-5 h-5 ${isActive(item.href)
-                        ? 'text-sidebar-primary-foreground'
-                        : 'text-muted-foreground group-hover:text-sidebar-foreground'
+                      ? 'text-sidebar-primary-foreground'
+                      : 'text-muted-foreground group-hover:text-sidebar-foreground'
                       }`}
                   />
                   <span className="font-semibold text-sm">{item.label}</span>
@@ -235,8 +236,8 @@ export function Sidebar() {
                     animate={{ scale: 1 }}
                     transition={{ type: 'spring', stiffness: 300, damping: 20 }}
                     className={`text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center ${isActive(item.href)
-                        ? 'bg-sidebar-primary-foreground text-sidebar-primary'
-                        : 'bg-sidebar-accent text-sidebar-accent-foreground'
+                      ? 'bg-sidebar-primary-foreground text-sidebar-primary'
+                      : 'bg-sidebar-accent text-sidebar-accent-foreground'
                       }`}
                   >
                     {badgeValue}
