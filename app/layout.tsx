@@ -7,10 +7,10 @@ export const metadata: Metadata = {
   description:
     'Premium legal operations platform for growing businesses. Manage matters, documents, timesheets, and billing with advanced analytics.',
 
-  icons: {
-    icon: '/icon.svg',
-    apple: '/apple-icon.png',
-  },
+  // icons: {
+  //   icon: '/icon.svg',
+  //   apple: '/apple-icon.png',
+  // },
 
   openGraph: {
     title: 'NyayMitra - Enterprise Legal Operations',

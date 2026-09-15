@@ -359,9 +359,9 @@ export function getContractVersionLabel(
             return String(currentVersion.versionNumber)
         }
 
-        if ("version" in currentVersion) {
-            return String(currentVersion.version)
-        }
+        // if ("version" in currentVersion) {
+        //     return String(currentVersion.version)
+        // }
 
         // Some populated version shapes may expose a name even though it is
         // not included in the ContractVersion type.
