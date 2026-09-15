@@ -35,6 +35,33 @@ interface User {
   profilePhoto?: string
 }
 
+interface Business {
+  _id: string
+  owner: string
+  companyName: string
+  legalName?: string
+  companyType?: string
+  industry?: string
+  website?: string
+  email?: string
+  phone?: string
+  registrationStatus?: string
+  businessNeeds?: string[]
+  legalHealthScore?: number
+  status?: string
+  onboardingCompleted?: boolean
+  workspaceStatus?: string
+  currentSetup?: {
+    hasCA: boolean
+    hasLawyer: boolean
+    hasCS: boolean
+  }
+  subscription?: {
+    plan: string
+    status: string
+  }
+}
+
 interface AttentionItem {
   id: string
   title: string
@@ -60,7 +87,11 @@ interface Matter {
 interface Contract {
   id: string
   name: string
-  status: 'awaiting-signature' | 'in-review' | 'approved' | 'executed'
+  status:
+  | 'awaiting-signature'
+  | 'in-review'
+  | 'approved'
+  | 'executed'
   nextAction: string
   dueDate: string
 }
@@ -113,7 +144,9 @@ const Card = ({
   hover?: boolean
 }) => (
   <div
-    className={`rounded-xl p-4 sm:p-6 border border-white/8 bg-black/40 backdrop-blur-sm transition-all duration-300 ${hover ? 'hover:border-amber-400/50 hover:bg-black/50' : ''
+    className={`rounded-xl p-4 sm:p-6 border border-white/8 bg-black/40 backdrop-blur-sm transition-all duration-300 ${hover
+      ? 'hover:border-amber-400/50 hover:bg-black/50'
+      : ''
       } ${className}`}
   >
     {children}
@@ -126,18 +159,28 @@ const Label = ({ children }: { children: React.ReactNode }) => (
   </p>
 )
 
-const SectionTitle = ({ children }: { children: React.ReactNode }) => (
+const SectionTitle = ({
+  children,
+}: {
+  children: React.ReactNode
+}) => (
   <h2 className="text-sm font-medium tracking-wide text-amber-400 mb-4 sm:mb-6 uppercase">
     {children}
   </h2>
 )
 
-const PriorityBadge = ({ priority }: { priority: 'high' | 'medium' | 'low' }) => {
+const PriorityBadge = ({
+  priority,
+}: {
+  priority: 'high' | 'medium' | 'low'
+}) => {
   const colors = {
     high: 'bg-red-500/10 text-red-400 border-red-500/20',
-    medium: 'bg-amber-400/10 text-amber-400 border-amber-400/20',
+    medium:
+      'bg-amber-400/10 text-amber-400 border-amber-400/20',
     low: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   }
+
   return (
     <span
       className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border ${colors[priority]}`}
@@ -153,17 +196,24 @@ const StatusBadge = ({
   status: 'under-review' | 'in-progress' | 'completed'
 }) => {
   const colors = {
-    'under-review': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-    'in-progress': 'bg-amber-400/10 text-amber-400 border-amber-400/20',
-    completed: 'bg-green-500/10 text-green-400 border-green-500/20',
+    'under-review':
+      'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    'in-progress':
+      'bg-amber-400/10 text-amber-400 border-amber-400/20',
+    completed:
+      'bg-green-500/10 text-green-400 border-green-400/20',
   }
+
   const labels = {
     'under-review': 'Under Review',
     'in-progress': 'In Progress',
     completed: 'Completed',
   }
+
   return (
-    <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border ${colors[status]}`}>
+    <span
+      className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border ${colors[status]}`}
+    >
       {labels[status]}
     </span>
   )
@@ -172,22 +222,34 @@ const StatusBadge = ({
 const ContractStatusBadge = ({
   status,
 }: {
-  status: 'awaiting-signature' | 'in-review' | 'approved' | 'executed'
+  status:
+  | 'awaiting-signature'
+  | 'in-review'
+  | 'approved'
+  | 'executed'
 }) => {
   const colors = {
-    'awaiting-signature': 'bg-red-500/10 text-red-400 border-red-500/20',
-    'in-review': 'bg-amber-400/10 text-amber-400 border-amber-400/20',
-    approved: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-    executed: 'bg-green-500/10 text-green-400 border-green-500/20',
+    'awaiting-signature':
+      'bg-red-500/10 text-red-400 border-red-500/20',
+    'in-review':
+      'bg-amber-400/10 text-amber-400 border-amber-400/20',
+    approved:
+      'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    executed:
+      'bg-green-500/10 text-green-400 border-green-400/20',
   }
+
   const labels = {
     'awaiting-signature': 'Awaiting Signature',
     'in-review': 'In Review',
     approved: 'Approved',
     executed: 'Executed',
   }
+
   return (
-    <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border ${colors[status]}`}>
+    <span
+      className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border ${colors[status]}`}
+    >
       {labels[status]}
     </span>
   )
@@ -199,21 +261,32 @@ const ComplianceStatus = ({
   status: 'upcoming' | 'completed' | 'delayed'
 }) => {
   const colors = {
-    upcoming: 'bg-amber-400/10 text-amber-400 border-amber-400/20',
-    completed: 'bg-green-500/10 text-green-400 border-green-500/20',
-    delayed: 'bg-red-500/10 text-red-400 border-red-500/20',
+    upcoming:
+      'bg-amber-400/10 text-amber-400 border-amber-400/20',
+    completed:
+      'bg-green-500/10 text-green-400 border-green-400/20',
+    delayed:
+      'bg-red-500/10 text-red-400 border-red-500/20',
   }
+
   const labels = {
     upcoming: 'Upcoming',
     completed: 'Completed',
     delayed: 'Delayed',
   }
+
   return (
-    <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border ${colors[status]}`}>
+    <span
+      className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border ${colors[status]}`}
+    >
       {labels[status]}
     </span>
   )
 }
+
+// ==========================================
+// DASHBOARD SKELETON
+// ==========================================
 
 const DashboardSkeleton = () => (
   <div className="min-h-screen bg-gradient-to-b from-black to-slate-950">
@@ -226,15 +299,20 @@ const DashboardSkeleton = () => (
         </div>
       </div>
     </div>
+
     <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
       <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 lg:space-y-12">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="animate-pulse">
             <div className="rounded-xl p-4 sm:p-6 border border-white/8 bg-black/40">
               <div className="h-6 w-32 bg-white/10 rounded mb-4" />
+
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {[1, 2, 3, 4].map((j) => (
-                  <div key={j} className="h-20 bg-white/5 rounded" />
+                  <div
+                    key={j}
+                    className="h-20 bg-white/5 rounded"
+                  />
                 ))}
               </div>
             </div>
@@ -246,7 +324,7 @@ const DashboardSkeleton = () => (
 )
 
 // ==========================================
-// DASHBOARD SECTIONS (EXTRACTED COMPONENTS)
+// DASHBOARD HEADER
 // ==========================================
 
 interface DashboardHeaderProps {
@@ -280,11 +358,13 @@ const DashboardHeader = ({
           <p className="text-xs sm:text-sm font-medium text-amber-400 mb-1 sm:mb-2">
             {greeting},
           </p>
+
           <h1 className="text-3xl sm:text-4xl lg:text-6xl font-light tracking-tight text-white mb-1">
             {firstName}
           </h1>
+
           <p className="text-xs sm:text-sm text-gray-400">
-            {companyName} — Legal Operations Workspace
+            {/* {companyName} — Legal Operations Workspace */}
           </p>
         </motion.div>
 
@@ -301,6 +381,7 @@ const DashboardHeader = ({
             <Plus className="w-4 h-4" />
             New Legal Request
           </button>
+
           <button
             onClick={onUploadDocument}
             className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg border border-amber-400/30 bg-amber-400/5 text-amber-400 font-medium text-sm hover:bg-amber-400/10 transition-colors"
@@ -314,11 +395,17 @@ const DashboardHeader = ({
   </motion.div>
 )
 
+// ==========================================
+// NEEDS YOUR ATTENTION
+// ==========================================
+
 interface AttentionPanelProps {
   items: AttentionItem[]
 }
 
-const AttentionPanel = ({ items }: AttentionPanelProps) => (
+const AttentionPanel = ({
+  items,
+}: AttentionPanelProps) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
@@ -326,48 +413,54 @@ const AttentionPanel = ({ items }: AttentionPanelProps) => (
   >
     <Card>
       <SectionTitle>Needs Your Attention</SectionTitle>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {items.map((item, idx) => (
           <motion.div
             key={item.id}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.22 + idx * 0.05 }}
+            transition={{
+              duration: 0.4,
+              delay: 0.22 + idx * 0.05,
+            }}
             className={`p-3 sm:p-4 rounded-lg border transition-colors ${item.severity === 'high'
-                ? 'bg-red-500/5 border-red-500/20 hover:border-red-500/30'
-                : item.severity === 'medium'
-                  ? 'bg-amber-400/5 border-amber-400/20 hover:border-amber-400/30'
-                  : 'bg-blue-500/5 border-blue-500/20 hover:border-blue-500/30'
+              ? 'bg-red-500/5 border-red-500/20 hover:border-red-500/30'
+              : item.severity === 'medium'
+                ? 'bg-amber-400/5 border-amber-400/20 hover:border-amber-400/30'
+                : 'bg-blue-500/5 border-blue-500/20 hover:border-blue-500/30'
               }`}
           >
             <div className="mb-2 sm:mb-3">
               <p className="text-xs sm:text-sm font-medium text-white mb-0.5">
                 {item.title}
               </p>
+
               <p className="text-[10px] sm:text-xs text-gray-400">
                 {item.description}
               </p>
             </div>
 
-            {item.daysUntil && (
+            {item.daysUntil !== undefined && (
               <p
                 className={`text-[10px] sm:text-xs font-medium mb-2 sm:mb-3 ${item.severity === 'high'
-                    ? 'text-red-400'
-                    : item.severity === 'medium'
-                      ? 'text-amber-400'
-                      : 'text-blue-400'
+                  ? 'text-red-400'
+                  : item.severity === 'medium'
+                    ? 'text-amber-400'
+                    : 'text-blue-400'
                   }`}
               >
-                {item.daysUntil} day{item.daysUntil !== 1 ? 's' : ''} left
+                {item.daysUntil} day
+                {item.daysUntil !== 1 ? 's' : ''} left
               </p>
             )}
 
             <button
               className={`w-full text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 sm:py-2 rounded font-medium transition-colors ${item.severity === 'high'
-                  ? 'bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20'
-                  : item.severity === 'medium'
-                    ? 'bg-amber-400/10 border border-amber-400/20 text-amber-400 hover:bg-amber-400/20'
-                    : 'bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20'
+                ? 'bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20'
+                : item.severity === 'medium'
+                  ? 'bg-amber-400/10 border border-amber-400/20 text-amber-400 hover:bg-amber-400/20'
+                  : 'bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20'
                 }`}
             >
               {item.actionLabel}
@@ -378,6 +471,10 @@ const AttentionPanel = ({ items }: AttentionPanelProps) => (
     </Card>
   </motion.div>
 )
+
+// ==========================================
+// OVERVIEW METRICS
+// ==========================================
 
 interface OverviewMetricsProps {
   activeMatters: number
@@ -393,28 +490,50 @@ const OverviewMetrics = ({
   complianceDue,
 }: OverviewMetricsProps) => {
   const metrics = [
-    { title: 'Active Matters', value: activeMatters, icon: Briefcase },
-    { title: 'Contracts', value: contracts, icon: FileText },
-    { title: 'Pending Actions', value: pendingActions, icon: Clock },
-    { title: 'Compliance Due', value: complianceDue, icon: Calendar },
+    {
+      title: 'Active Matters',
+      value: activeMatters,
+      icon: Briefcase,
+    },
+    {
+      title: 'Contracts',
+      value: contracts,
+      icon: FileText,
+    },
+    {
+      title: 'Pending Actions',
+      value: pendingActions,
+      icon: Clock,
+    },
+    {
+      title: 'Compliance Due',
+      value: complianceDue,
+      icon: Calendar,
+    },
   ]
 
   return (
     <motion.div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       {metrics.map((metric, idx) => {
         const Icon = metric.icon
+
         return (
           <motion.div
             key={idx}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.35 + idx * 0.05 }}
+            transition={{
+              duration: 0.4,
+              delay: 0.35 + idx * 0.05,
+            }}
           >
             <Card hover>
               <div className="flex items-start justify-between mb-2 sm:mb-3">
                 <Label>{metric.title}</Label>
+
                 <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 flex-shrink-0" />
               </div>
+
               <p className="text-2xl sm:text-3xl lg:text-4xl font-light text-white">
                 {metric.value}
               </p>
@@ -426,11 +545,17 @@ const OverviewMetrics = ({
   )
 }
 
+// ==========================================
+// WORK IN PROGRESS
+// ==========================================
+
 interface WorkInProgressProps {
   matters: Matter[]
 }
 
-const WorkInProgress = ({ matters }: WorkInProgressProps) => (
+const WorkInProgress = ({
+  matters,
+}: WorkInProgressProps) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
@@ -438,13 +563,17 @@ const WorkInProgress = ({ matters }: WorkInProgressProps) => (
   >
     <Card>
       <SectionTitle>Work in Progress</SectionTitle>
+
       <div className="space-y-4">
         {matters.map((matter, idx) => (
           <motion.div
             key={matter.id}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.3, delay: 0.52 + idx * 0.05 }}
+            transition={{
+              duration: 0.3,
+              delay: 0.52 + idx * 0.05,
+            }}
             className="pb-4 border-b border-white/5 last:border-0 last:pb-0"
           >
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-3 mb-2 sm:mb-3">
@@ -452,12 +581,17 @@ const WorkInProgress = ({ matters }: WorkInProgressProps) => (
                 <h4 className="text-sm font-medium text-white truncate">
                   {matter.title}
                 </h4>
+
                 <p className="text-xs text-gray-500 mt-0.5">
                   {matter.type} • {matter.professional}
                 </p>
               </div>
+
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 flex-shrink-0">
-                <PriorityBadge priority={matter.priority} />
+                <PriorityBadge
+                  priority={matter.priority}
+                />
+
                 <StatusBadge status={matter.status} />
               </div>
             </div>
@@ -467,16 +601,23 @@ const WorkInProgress = ({ matters }: WorkInProgressProps) => (
                 <span className="text-[10px] sm:text-xs text-gray-400">
                   {matter.stage}
                 </span>
+
                 <span className="text-[10px] sm:text-xs text-gray-400">
                   {matter.progress}%
                 </span>
               </div>
+
               <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
                 <motion.div
                   className="h-full bg-gradient-to-r from-amber-400 to-amber-500"
                   initial={{ width: 0 }}
-                  animate={{ width: `${matter.progress}%` }}
-                  transition={{ duration: 1, delay: 0.55 }}
+                  animate={{
+                    width: `${matter.progress}%`,
+                  }}
+                  transition={{
+                    duration: 1,
+                    delay: 0.55,
+                  }}
                 />
               </div>
             </div>
@@ -492,17 +633,24 @@ const WorkInProgress = ({ matters }: WorkInProgressProps) => (
         whileHover={{ x: 4 }}
         className="mt-4 sm:mt-6 flex items-center gap-2 text-xs sm:text-sm text-amber-400 hover:text-amber-300 transition-colors font-medium"
       >
-        View All Matters <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+        View All Matters
+        <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
       </motion.button>
     </Card>
   </motion.div>
 )
 
+// ==========================================
+// LEGAL HEALTH
+// ==========================================
+
 interface LegalHealthCardProps {
   data: LegalHealth
 }
 
-const LegalHealthCard = ({ data }: LegalHealthCardProps) => (
+const LegalHealthCard = ({
+  data,
+}: LegalHealthCardProps) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
@@ -533,6 +681,7 @@ const LegalHealthCard = ({ data }: LegalHealthCardProps) => (
                   strokeWidth="8"
                   className="text-white/10"
                 />
+
                 <motion.circle
                   cx="60"
                   cy="60"
@@ -541,75 +690,130 @@ const LegalHealthCard = ({ data }: LegalHealthCardProps) => (
                   stroke="currentColor"
                   strokeWidth="8"
                   strokeDasharray={`${2 * Math.PI * 54}`}
-                  strokeDashoffset={`${2 * Math.PI * 54 * (1 - data.score / 100)}`}
+                  strokeDashoffset={`${2 *
+                    Math.PI *
+                    54 *
+                    (1 - data.score / 100)
+                    }`}
                   strokeLinecap="round"
                   className="text-amber-400"
-                  initial={{ strokeDashoffset: 2 * Math.PI * 54 }}
-                  animate={{
-                    strokeDashoffset: 2 * Math.PI * 54 * (1 - data.score / 100),
+                  initial={{
+                    strokeDashoffset: 2 * Math.PI * 54,
                   }}
-                  transition={{ duration: 1, delay: 0.6, ease: 'easeOut' }}
+                  animate={{
+                    strokeDashoffset:
+                      2 *
+                      Math.PI *
+                      54 *
+                      (1 - data.score / 100),
+                  }}
+                  transition={{
+                    duration: 1,
+                    delay: 0.6,
+                    ease: 'easeOut',
+                  }}
                 />
               </svg>
+
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-lg sm:text-xl font-light text-white">
                   {data.score}
                 </span>
-                <span className="text-[10px] text-gray-400">/100</span>
+
+                <span className="text-[10px] text-gray-400">
+                  /100
+                </span>
               </div>
             </div>
           </div>
 
           <div>
             <p className="text-xs sm:text-sm font-medium text-amber-400 mb-1">
-              {data.status.charAt(0).toUpperCase() + data.status.slice(1)}
+              {data.status.charAt(0).toUpperCase() +
+                data.status.slice(1)}
             </p>
-            <p className="text-[10px] sm:text-xs text-gray-400">Legal Operations</p>
+
+            <p className="text-[10px] sm:text-xs text-gray-400">
+              Legal Operations
+            </p>
           </div>
         </div>
       </motion.div>
 
       <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
         <div className="flex items-center justify-between text-xs sm:text-sm">
-          <span className="text-gray-300">Contracts</span>
-          <span className="text-white font-medium">{data.contracts}%</span>
+          <span className="text-gray-300">
+            Contracts
+          </span>
+
+          <span className="text-white font-medium">
+            {data.contracts}%
+          </span>
         </div>
+
         <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
           <motion.div
             className="h-full bg-gradient-to-r from-amber-400 to-amber-500"
             initial={{ width: 0 }}
-            animate={{ width: `${data.contracts}%` }}
-            transition={{ duration: 0.8, delay: 0.65 }}
+            animate={{
+              width: `${data.contracts}%`,
+            }}
+            transition={{
+              duration: 0.8,
+              delay: 0.65,
+            }}
           />
         </div>
       </div>
 
       <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
         <div className="flex items-center justify-between text-xs sm:text-sm">
-          <span className="text-gray-300">Compliance</span>
-          <span className="text-white font-medium">{data.compliance}%</span>
+          <span className="text-gray-300">
+            Compliance
+          </span>
+
+          <span className="text-white font-medium">
+            {data.compliance}%
+          </span>
         </div>
+
         <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
           <motion.div
             className="h-full bg-gradient-to-r from-green-400 to-green-500"
             initial={{ width: 0 }}
-            animate={{ width: `${data.compliance}%` }}
-            transition={{ duration: 0.8, delay: 0.7 }}
+            animate={{
+              width: `${data.compliance}%`,
+            }}
+            transition={{
+              duration: 0.8,
+              delay: 0.7,
+            }}
           />
         </div>
       </div>
 
       <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
         <div className="flex items-center justify-between text-xs sm:text-sm">
-          <span className="text-gray-300">Documentation</span>
-          <span className="text-white font-medium">{data.documentation}%</span>
+          <span className="text-gray-300">
+            Documentation
+          </span>
+
+          <span className="text-white font-medium">
+            {data.documentation}%
+          </span>
         </div>
+
         <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
           <motion.div
             className="h-full bg-gradient-to-r from-blue-400 to-blue-500"
             initial={{ width: 0 }}
-            animate={{ width: `${data.documentation}%` }}
-            transition={{ duration: 0.8, delay: 0.75 }}
+            animate={{
+              width: `${data.documentation}%`,
+            }}
+            transition={{
+              duration: 0.8,
+              delay: 0.75,
+            }}
           />
         </div>
       </div>
@@ -617,7 +821,10 @@ const LegalHealthCard = ({ data }: LegalHealthCardProps) => (
       {data.attentionCount > 0 && (
         <div className="p-3 sm:p-4 rounded-lg bg-amber-400/5 border border-amber-400/20 mb-4 sm:mb-6">
           <p className="text-xs sm:text-sm text-amber-400 font-medium">
-            {data.attentionCount} area{data.attentionCount !== 1 ? 's' : ''} need{data.attentionCount !== 1 ? '' : 's'}{' '}
+            {data.attentionCount} area
+            {data.attentionCount !== 1 ? 's' : ''}{' '}
+            need
+            {data.attentionCount !== 1 ? '' : 's'}{' '}
             attention
           </p>
         </div>
@@ -627,31 +834,44 @@ const LegalHealthCard = ({ data }: LegalHealthCardProps) => (
         whileHover={{ x: 4 }}
         className="w-full flex items-center justify-center gap-2 text-xs sm:text-sm text-amber-400 hover:text-amber-300 transition-colors font-medium py-2 rounded-lg hover:bg-amber-400/5"
       >
-        View Full Assessment <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+        View Full Assessment
+        <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
       </motion.button>
     </Card>
   </motion.div>
 )
 
+// ==========================================
+// CONTRACTS ATTENTION
+// ==========================================
+
 interface ContractsAttentionProps {
   contracts: Contract[]
 }
 
-const ContractsAttention = ({ contracts }: ContractsAttentionProps) => (
+const ContractsAttention = ({
+  contracts,
+}: ContractsAttentionProps) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.4, delay: 0.6 }}
   >
     <Card>
-      <SectionTitle>Contracts Requiring Attention</SectionTitle>
+      <SectionTitle>
+        Contracts Requiring Attention
+      </SectionTitle>
+
       <div className="space-y-3 sm:space-y-4">
         {contracts.map((contract, idx) => (
           <motion.div
             key={contract.id}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.3, delay: 0.62 + idx * 0.05 }}
+            transition={{
+              duration: 0.3,
+              delay: 0.62 + idx * 0.05,
+            }}
             className="p-3 sm:p-4 rounded-lg bg-white/5 border border-white/5 hover:border-amber-400/30 transition-colors cursor-pointer"
           >
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
@@ -659,14 +879,19 @@ const ContractsAttention = ({ contracts }: ContractsAttentionProps) => (
                 <h4 className="text-xs sm:text-sm font-medium text-white truncate mb-1">
                   {contract.name}
                 </h4>
+
                 <p className="text-[10px] sm:text-xs text-gray-400">
                   {contract.nextAction}
                 </p>
               </div>
+
               <div className="flex items-center gap-2 flex-shrink-0">
-                <ContractStatusBadge status={contract.status} />
+                <ContractStatusBadge
+                  status={contract.status}
+                />
               </div>
             </div>
+
             <p className="text-[10px] sm:text-xs text-gray-500 mt-2">
               Due: {contract.dueDate}
             </p>
@@ -678,43 +903,61 @@ const ContractsAttention = ({ contracts }: ContractsAttentionProps) => (
         whileHover={{ x: 4 }}
         className="mt-4 sm:mt-6 flex items-center gap-2 text-xs sm:text-sm text-amber-400 hover:text-amber-300 transition-colors font-medium"
       >
-        View All Contracts <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+        View All Contracts
+        <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
       </motion.button>
     </Card>
   </motion.div>
 )
 
+// ==========================================
+// COMPLIANCE PREVIEW
+// ==========================================
+
 interface CompliancePreviewProps {
   items: ComplianceItem[]
 }
 
-const CompliancePreview = ({ items }: CompliancePreviewProps) => (
+const CompliancePreview = ({
+  items,
+}: CompliancePreviewProps) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.4, delay: 0.7 }}
   >
     <Card>
-      <SectionTitle>Upcoming Compliance</SectionTitle>
+      <SectionTitle>
+        Upcoming Compliance
+      </SectionTitle>
+
       <div className="space-y-3 sm:space-y-4">
         {items.map((item, idx) => (
           <motion.div
             key={item.id}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.3, delay: 0.72 + idx * 0.05 }}
+            transition={{
+              duration: 0.3,
+              delay: 0.72 + idx * 0.05,
+            }}
             className="flex items-start justify-between gap-3 pb-3 sm:pb-4 border-b border-white/5 last:border-0 last:pb-0"
           >
             <div className="flex-1 min-w-0">
               <p className="text-xs sm:text-sm font-medium text-white mb-1">
                 {item.name}
               </p>
-              <p className="text-[10px] sm:text-xs text-gray-500">{item.frequency}</p>
+
+              <p className="text-[10px] sm:text-xs text-gray-500">
+                {item.frequency}
+              </p>
             </div>
+
             <div className="flex flex-col items-end gap-1 flex-shrink-0">
               <p className="text-[10px] sm:text-xs font-medium text-amber-400">
                 {item.dueDate}
               </p>
+
               <ComplianceStatus status={item.status} />
             </div>
           </motion.div>
@@ -725,27 +968,38 @@ const CompliancePreview = ({ items }: CompliancePreviewProps) => (
         whileHover={{ x: 4 }}
         className="mt-4 sm:mt-6 flex items-center gap-2 text-xs sm:text-sm text-amber-400 hover:text-amber-300 transition-colors font-medium"
       >
-        View Compliance Calendar <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+        View Compliance Calendar
+        <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
       </motion.button>
     </Card>
   </motion.div>
 )
 
+// ==========================================
+// RECENT ACTIVITY
+// ==========================================
+
 interface RecentActivityProps {
   events: ActivityEvent[]
 }
 
-const RecentActivity = ({ events }: RecentActivityProps) => (
+const RecentActivity = ({
+  events,
+}: RecentActivityProps) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.4, delay: 0.7 }}
   >
     <Card>
-      <SectionTitle>Recent Activity</SectionTitle>
+      <SectionTitle>
+        Recent Activity
+      </SectionTitle>
+
       <div className="space-y-3 sm:space-y-4">
         {events.map((event) => {
           const Icon = event.icon
+
           return (
             <motion.div
               key={event.id}
@@ -757,13 +1011,16 @@ const RecentActivity = ({ events }: RecentActivityProps) => (
               <div className="mt-0.5 p-1.5 sm:p-2 rounded-lg bg-amber-400/10 border border-amber-400/20 flex-shrink-0">
                 <Icon className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400" />
               </div>
+
               <div className="flex-1 min-w-0">
                 <p className="text-xs sm:text-sm text-white">
                   {event.action}
+
                   <span className="text-gray-400 ml-1 sm:ml-2 text-[10px] sm:text-xs">
                     by {event.actor}
                   </span>
                 </p>
+
                 <p className="text-[10px] sm:text-xs text-gray-600 mt-0.5">
                   {event.timestamp}
                 </p>
@@ -777,62 +1034,82 @@ const RecentActivity = ({ events }: RecentActivityProps) => (
         whileHover={{ x: 4 }}
         className="mt-4 sm:mt-6 flex items-center gap-2 text-xs sm:text-sm text-amber-400 hover:text-amber-300 transition-colors font-medium"
       >
-        View All Activity <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+        View All Activity
+        <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
       </motion.button>
     </Card>
   </motion.div>
 )
+
+// ==========================================
+// MONTHLY SUMMARY
+// ==========================================
 
 interface MonthlySummaryProps {
   data: MonthlyOperations
   month: string
 }
 
-const MonthlySummary = ({ data, month }: MonthlySummaryProps) => (
+const MonthlySummary = ({
+  data,
+  month,
+}: MonthlySummaryProps) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.4, delay: 0.85 }}
   >
     <Card>
-      <SectionTitle>{month} Legal Operations</SectionTitle>
+      <SectionTitle>
+        {month} Legal Operations
+      </SectionTitle>
+
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6">
         <div>
           <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">
             Requests Received
           </p>
+
           <p className="text-xl sm:text-2xl font-light text-white">
             {data.requestsReceived}
           </p>
         </div>
+
         <div>
           <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">
             Completed
           </p>
+
           <p className="text-xl sm:text-2xl font-light text-green-400">
             {data.requestsCompleted}
           </p>
         </div>
+
         <div>
           <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">
             Contracts Reviewed
           </p>
+
           <p className="text-xl sm:text-2xl font-light text-white">
             {data.contractsReviewed}
           </p>
         </div>
+
         <div>
           <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">
             Contracts Drafted
           </p>
+
           <p className="text-xl sm:text-2xl font-light text-white">
             {data.contractsDrafted}
           </p>
         </div>
+
         <div className="sm:col-span-1">
           <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">
             Pending Actions
           </p>
+
           <p className="text-xl sm:text-2xl font-light text-amber-400">
             {data.pendingActions}
           </p>
@@ -843,7 +1120,8 @@ const MonthlySummary = ({ data, month }: MonthlySummaryProps) => (
         whileHover={{ x: 4 }}
         className="mt-6 sm:mt-8 flex items-center gap-2 text-xs sm:text-sm text-amber-400 hover:text-amber-300 transition-colors font-medium"
       >
-        View Monthly Report <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+        View Monthly Report
+        <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
       </motion.button>
     </Card>
   </motion.div>
@@ -855,55 +1133,159 @@ const MonthlySummary = ({ data, month }: MonthlySummaryProps) => (
 
 export default function DashboardPage() {
   const router = useRouter()
+
   const [user, setUser] = useState<User | null>(null)
+
+  // NEW: Business state
+  const [business, setBusiness] =
+    useState<Business | null>(null)
+
   const [greeting, setGreeting] = useState('')
   const [isLoading, setIsLoading] = useState(true)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] =
+    useState(false)
+
+  // ==========================================
+  // INITIALIZE DASHBOARD
+  // ==========================================
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user')
+    const initializeDashboard = async () => {
+      const storedUser = localStorage.getItem('user')
+      const token = localStorage.getItem('token')
 
-    if (!storedUser) {
-      setIsLoading(false)
-      setIsAuthenticated(false)
-      router.push('/')
-      return
-    }
+      // ------------------------------------------
+      // Check authentication
+      // ------------------------------------------
 
-    try {
-      const parsedUser = JSON.parse(storedUser)
-      setUser(parsedUser)
-      setIsAuthenticated(true)
-
-      const hour = new Date().getHours()
-      if (hour >= 5 && hour < 12) {
-        setGreeting('Good morning')
-      } else if (hour >= 12 && hour < 17) {
-        setGreeting('Good afternoon')
-      } else if (hour >= 17 && hour < 21) {
-        setGreeting('Good evening')
-      } else {
-        setGreeting('Good night')
+      if (!storedUser || !token) {
+        setIsLoading(false)
+        setIsAuthenticated(false)
+        router.push('/login')
+        return
       }
-    } catch (error) {
-      console.error('Failed to parse user:', error)
-      localStorage.removeItem('user')
-      router.push('/login')
-    } finally {
-      setIsLoading(false)
+
+      try {
+        // ------------------------------------------
+        // Parse logged-in user
+        // ------------------------------------------
+
+        const parsedUser: User = JSON.parse(storedUser)
+
+        setUser(parsedUser)
+        setIsAuthenticated(true)
+
+        // ------------------------------------------
+        // Greeting
+        // ------------------------------------------
+
+        const hour = new Date().getHours()
+
+        if (hour >= 5 && hour < 12) {
+          setGreeting('Good morning')
+        } else if (hour >= 12 && hour < 17) {
+          setGreeting('Good afternoon')
+        } else if (hour >= 17 && hour < 21) {
+          setGreeting('Good evening')
+        } else {
+          setGreeting('Good night')
+        }
+
+        // ------------------------------------------
+        // Fetch Business Profile
+        // ------------------------------------------
+
+        const BUSINESS_PROFILE_API =
+          'https://nyaymitra-backend-production.up.railway.app/api/v1/business/me'
+
+        console.log(
+          'Fetching business profile...'
+        )
+
+        const response = await fetch(
+          BUSINESS_PROFILE_API,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        )
+
+        const result = await response.json()
+
+        console.log(
+          'Business profile response:',
+          result
+        )
+
+        // ------------------------------------------
+        // Handle API error
+        // ------------------------------------------
+
+        if (!response.ok || !result.success) {
+          throw new Error(
+            result.message ||
+            'Failed to fetch business profile'
+          )
+        }
+
+        // ------------------------------------------
+        // Store business
+        // ------------------------------------------
+
+        setBusiness(result.data)
+
+        console.log(
+          'Business loaded:',
+          result.data.companyName
+        )
+      } catch (error) {
+        console.error(
+          'Dashboard initialization error:',
+          error
+        )
+
+        // Don't remove the logged-in user simply
+        // because the business API failed.
+      } finally {
+        setIsLoading(false)
+      }
     }
+
+    initializeDashboard()
   }, [router])
+
+  // ==========================================
+  // LOADING
+  // ==========================================
 
   if (isLoading) {
     return <DashboardSkeleton />
   }
 
+  // ==========================================
+  // NOT AUTHENTICATED
+  // ==========================================
+
   if (!isAuthenticated) {
     return null
   }
 
-  const firstName = user?.fullName?.split(' ')[0] || 'User'
-  const companyName = 'FreshFlow AI Pvt Ltd'
+  // ==========================================
+  // USER INFORMATION
+  // ==========================================
+
+  const firstName =
+    user?.fullName?.split(' ')[0] || 'User'
+
+  // ==========================================
+  // DYNAMIC COMPANY NAME
+  // ==========================================
+
+  const companyName =
+    business?.companyName || 'Your Company'
 
   // ==========================================
   // MOCK DATA STRUCTURE
@@ -950,7 +1332,8 @@ export default function DashboardPage() {
   const matters: Matter[] = [
     {
       id: '1',
-      title: 'Contract Review - Vendor Agreement',
+      title:
+        'Contract Review - Vendor Agreement',
       type: 'Contracts',
       priority: 'high',
       professional: 'Sharma & Associates',
@@ -961,7 +1344,8 @@ export default function DashboardPage() {
     },
     {
       id: '2',
-      title: 'IP Registration - Trademark Filing',
+      title:
+        'IP Registration - Trademark Filing',
       type: 'IP',
       priority: 'medium',
       professional: 'IP Professional',
@@ -972,7 +1356,8 @@ export default function DashboardPage() {
     },
     {
       id: '3',
-      title: 'Employment Agreement Review',
+      title:
+        'Employment Agreement Review',
       type: 'Employment',
       priority: 'medium',
       professional: 'Medha Banerjee',
@@ -1080,7 +1465,10 @@ export default function DashboardPage() {
     pendingActions: 3,
   }
 
-  // Handlers (placeholder for now)
+  // ==========================================
+  // HANDLERS
+  // ==========================================
+
   const handleNewRequest = () => {
     console.log('New Legal Request clicked')
     // TODO: Open modal or navigate to request form
@@ -1091,8 +1479,17 @@ export default function DashboardPage() {
     // TODO: Open upload dialog
   }
 
+  // ==========================================
+  // RENDER
+  // ==========================================
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-black to-slate-950">
+
+      {/* ======================================
+          HEADER
+      ====================================== */}
+
       <DashboardHeader
         greeting={greeting}
         firstName={firstName}
@@ -1101,12 +1498,21 @@ export default function DashboardPage() {
         onUploadDocument={handleUploadDocument}
       />
 
+      {/* ======================================
+          DASHBOARD CONTENT
+      ====================================== */}
+
       <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
         <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 lg:space-y-12">
+
           {/* NEEDS YOUR ATTENTION */}
-          <AttentionPanel items={attentionItems} />
+
+          <AttentionPanel
+            items={attentionItems}
+          />
 
           {/* OVERVIEW METRICS */}
+
           <OverviewMetrics
             activeMatters={12}
             contracts={47}
@@ -1115,29 +1521,46 @@ export default function DashboardPage() {
           />
 
           {/* WORK IN PROGRESS + LEGAL HEALTH */}
+
           <motion.div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
             <div className="lg:col-span-2">
-              <WorkInProgress matters={matters} />
+              <WorkInProgress
+                matters={matters}
+              />
             </div>
+
             <div>
-              <LegalHealthCard data={legalHealth} />
+              <LegalHealthCard
+                data={legalHealth}
+              />
             </div>
           </motion.div>
 
           {/* CONTRACTS REQUIRING ATTENTION */}
-          <ContractsAttention contracts={contracts} />
+
+          <ContractsAttention
+            contracts={contracts}
+          />
 
           {/* COMPLIANCE + ACTIVITY */}
+
           <motion.div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-            <CompliancePreview items={complianceItems} />
-            <RecentActivity events={activityFeed} />
+            <CompliancePreview
+              items={complianceItems}
+            />
+
+            <RecentActivity
+              events={activityFeed}
+            />
           </motion.div>
 
           {/* MONTHLY OPERATIONS SUMMARY */}
+
           <MonthlySummary
             data={monthlyOperations}
             month="August Legal Operations"
           />
+
         </div>
       </div>
     </div>
