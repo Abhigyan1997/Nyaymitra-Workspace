@@ -348,50 +348,100 @@ const DashboardHeader = ({
     transition={{ duration: 0.5 }}
     className="px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 lg:pt-12 pb-6 sm:pb-8 border-b border-white/5"
   >
+
     <div className="max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+
+        {/* Left — Workspace / Greeting */}
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
+          className="min-w-0"
         >
-          <p className="text-xs sm:text-sm font-medium text-amber-400 mb-1 sm:mb-2">
+          {/* Workspace Label */}
+          <div className="flex items-center gap-2 mb-3">
+            <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border border-white/10 bg-white/[0.04] text-[11px] font-medium text-gray-400 uppercase tracking-wider">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              Legal Operations Workspace
+            </span>
+          </div>
+
+          {/* Greeting */}
+          <p className="text-sm font-medium text-amber-400 mb-1">
             {greeting},
           </p>
 
-          <h1 className="text-3xl sm:text-4xl lg:text-6xl font-light tracking-tight text-white mb-1">
+          {/* Name */}
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-light tracking-tight text-white leading-tight">
             {firstName}
           </h1>
 
-          <p className="text-xs sm:text-sm text-gray-400">
-            {/* {companyName} — Legal Operations Workspace */}
-          </p>
+          {/* Company */}
+          <div className="flex items-center gap-2 mt-2">
+            <Briefcase className="w-4 h-4 text-gray-500" />
+            <p className="text-sm text-gray-400 truncate">
+              {companyName}
+            </p>
+          </div>
         </motion.div>
 
+        {/* Right — Actions */}
         <motion.div
           initial={{ opacity: 0, x: 10 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, delay: 0.15 }}
-          className="flex flex-col sm:flex-row gap-2 sm:gap-3"
+          className="flex flex-col sm:flex-row gap-3"
         >
+          {/* Primary Action */}
           <button
             onClick={onNewRequest}
-            className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg bg-amber-400 text-black font-medium text-sm hover:bg-amber-300 transition-colors"
+            className="
+          group
+          flex items-center justify-center gap-2
+          px-5 sm:px-6 py-3
+          rounded-xl
+          bg-amber-400
+          text-black
+          font-medium
+          text-sm
+          shadow-lg shadow-amber-400/10
+          hover:bg-amber-300
+          hover:shadow-amber-400/20
+          transition-all duration-200
+        "
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 transition-transform group-hover:rotate-90" />
             New Legal Request
           </button>
 
+          {/* Secondary Action */}
           <button
             onClick={onUploadDocument}
-            className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg border border-amber-400/30 bg-amber-400/5 text-amber-400 font-medium text-sm hover:bg-amber-400/10 transition-colors"
+            className="
+          flex items-center justify-center gap-2
+          px-5 sm:px-6 py-3
+          rounded-xl
+          border border-white/10
+          bg-white/[0.03]
+          text-gray-200
+          font-medium
+          text-sm
+          hover:bg-white/[0.06]
+          hover:border-amber-400/30
+          hover:text-amber-400
+          transition-all duration-200
+        "
           >
             <Upload className="w-4 h-4" />
-            Upload
+            Upload Document
           </button>
         </motion.div>
+
       </div>
     </div>
+
+
   </motion.div>
 )
 
