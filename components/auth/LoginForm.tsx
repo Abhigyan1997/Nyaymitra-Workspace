@@ -4,9 +4,9 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { motion } from 'framer-motion'
+import { motion, type Variants } from 'framer-motion'
 import Link from 'next/link'
-import { Mail, Lock, Loader2, Eye, EyeOff, Scale } from 'lucide-react'
+import { Mail, Lock, Loader2, Eye, EyeOff, Scale, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import axios from 'axios'
@@ -115,181 +115,176 @@ export function LoginForm() {
     }
   }
 
+  const containerVariants: Variants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { staggerChildren: 0.08, delayChildren: 0.1 },
+    },
+  }
+
+  const itemVariants: Variants = {
+    hidden: { opacity: 0, y: 8 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
+  }
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
       className="w-full max-w-md"
     >
-      <div className="bg-white border border-[rgba(0,0,0,0.09)] rounded-2xl p-8 shadow-xl">
-        {/* Header with Logo */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 }}
-          className="text-center mb-8"
-        >
-          <div className="w-14 h-14 bg-gradient-to-br from-[#8b6914] to-[#c9a84c] rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <Scale size={28} color="#ffffff" />
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="space-y-8"
+      >
+        {/* Header Section */}
+        <motion.div variants={itemVariants} className="text-center space-y-4">
+          <div className="flex justify-center">
+            <div className="w-16 h-16 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg flex items-center justify-center shadow-2xl shadow-yellow-500/20">
+              <Scale size={32} color="#000000" strokeWidth={1.5} />
+            </div>
           </div>
-          <h1 className="font-serif text-3xl font-bold text-[#0a0a0a] mb-1 tracking-tight">NyayMitra</h1>
-          <p className="font-mono text-xs text-[#6b6b6b] tracking-[0.12em] uppercase">
-            Enterprise Legal Operations
-          </p>
+          <div className="space-y-2">
+            <h1 className="text-5xl font-serif font-bold text-white tracking-tight">
+              NyayMitra
+            </h1>
+            <p className="text-sm font-light text-gray-400 tracking-wide">
+              Legal Operations Platform
+            </p>
+          </div>
         </motion.div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-          {/* Email Field */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.15 }}
-            className="relative"
-          >
-            <label htmlFor="email" className="block font-mono text-[10px] font-semibold text-[#6b6b6b] uppercase tracking-[0.1em] mb-2">
-              Email Address
-            </label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9a9a9a]" />
-              <input
-                id="email"
-                {...register('email')}
-                type="email"
-                placeholder="you@example.com"
-                className="w-full pl-10 pr-4 py-3 bg-[#fafaf9] border border-[rgba(0,0,0,0.09)] rounded-xl text-[#0a0a0a] placeholder-[#b8b4ae] focus:outline-none focus:border-[rgba(201,168,76,0.6)] focus:ring-2 focus:ring-[rgba(201,168,76,0.1)] focus:bg-white transition-all duration-200"
-                disabled={isLoading}
-              />
-            </div>
-            {errors.email && (
-              <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.email.message}</p>
-            )}
-          </motion.div>
-
-          {/* Password Field */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="relative"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <label htmlFor="password" className="block font-mono text-[10px] font-semibold text-[#6b6b6b] uppercase tracking-[0.1em]">
-                Password
+        {/* Form Card */}
+        <motion.div
+          variants={itemVariants}
+          className="bg-gradient-to-b from-zinc-900 to-zinc-950 border border-zinc-800 rounded-xl p-8 shadow-2xl backdrop-blur-sm"
+        >
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            {/* Email Field */}
+            <motion.div variants={itemVariants} className="space-y-2">
+              <label htmlFor="email" className="block text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                Email
               </label>
-              <Link
-                href="/forgot-password"
-                className="text-xs font-medium text-[#8b6914] hover:text-[#c9a84c] transition-colors"
-              >
-                Forgot?
-              </Link>
-            </div>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9a9a9a]" />
-              <input
-                id="password"
-                {...register('password')}
-                type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••"
-                className="w-full pl-10 pr-12 py-3 bg-[#fafaf9] border border-[rgba(0,0,0,0.09)] rounded-xl text-[#0a0a0a] placeholder-[#b8b4ae] focus:outline-none focus:border-[rgba(201,168,76,0.6)] focus:ring-2 focus:ring-[rgba(201,168,76,0.1)] focus:bg-white transition-all duration-200"
-                disabled={isLoading}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9a9a9a] hover:text-[#8b6914] transition-colors"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            {errors.password && (
-              <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.password.message}</p>
-            )}
-          </motion.div>
-
-          {/* Error Message */}
-          {error && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="p-3 bg-red-50 border border-red-200 rounded-xl"
-            >
-              <p className="text-xs text-red-600 font-medium">{error}</p>
+              <div className="relative group">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 group-focus-within:text-yellow-500 transition-colors" />
+                <input
+                  id="email"
+                  {...register('email')}
+                  type="email"
+                  placeholder="your@company.com"
+                  className="w-full pl-10 pr-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-yellow-500/50 focus:ring-2 focus:ring-yellow-500/20 transition-all duration-200 disabled:opacity-50"
+                  disabled={isLoading}
+                />
+              </div>
+              {errors.email && (
+                <p className="text-xs text-red-400 font-medium">{errors.email.message}</p>
+              )}
             </motion.div>
-          )}
 
-          {/* Submit Button */}
-          <motion.button
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.25 }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-gradient-to-br from-[#8b6914] to-[#c9a84c] text-white font-semibold py-3.5 rounded-xl hover:shadow-lg hover:shadow-[rgba(201,168,76,0.3)] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2 relative overflow-hidden"
-          >
-            <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Signing in...
-              </>
-            ) : (
-              'Access Workspace'
+            {/* Password Field */}
+            <motion.div variants={itemVariants} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label htmlFor="password" className="block text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                  Password
+                </label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-medium text-yellow-500 hover:text-yellow-400 transition-colors"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+              <div className="relative group">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 group-focus-within:text-yellow-500 transition-colors" />
+                <input
+                  id="password"
+                  {...register('password')}
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  className="w-full pl-10 pr-11 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-yellow-500/50 focus:ring-2 focus:ring-yellow-500/20 transition-all duration-200 disabled:opacity-50"
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              {errors.password && (
+                <p className="text-xs text-red-400 font-medium">{errors.password.message}</p>
+              )}
+            </motion.div>
+
+            {/* Error Message */}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="p-3 bg-red-950/50 border border-red-900/50 rounded-lg"
+              >
+                <p className="text-xs text-red-300 font-medium">{error}</p>
+              </motion.div>
             )}
-          </motion.button>
-        </form>
 
-        {/* Divider */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="flex items-center gap-4 my-6"
-        >
-          <div className="flex-1 h-px bg-[rgba(0,0,0,0.08)]" />
-          <span className="font-mono text-[11px] text-[#9a9a9a]">new to nyaymitra?</span>
-          <div className="flex-1 h-px bg-[rgba(0,0,0,0.08)]" />
-        </motion.div>
+            {/* Submit Button */}
+            <motion.button
+              variants={itemVariants}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              type="submit"
+              disabled={isLoading}
+              className="w-full relative overflow-hidden bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black font-semibold py-2.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-yellow-500/30 hover:shadow-yellow-500/50"
+            >
+              <div className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Signing in</span>
+                </>
+              ) : (
+                <>
+                  <span>Access Workspace</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </motion.button>
+          </form>
 
-        {/* Sign Up Link */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.35 }}
-          className="text-center"
-        >
+          {/* Divider */}
+          <div className="my-6 flex items-center gap-3">
+            <div className="flex-1 h-px bg-zinc-700" />
+            <span className="text-xs text-gray-500 font-light">New to NyayMitra?</span>
+            <div className="flex-1 h-px bg-zinc-700" />
+          </div>
+
+          {/* Sign Up CTA */}
           <Link
             href="/auth/signup"
-            className="text-sm font-medium text-[#8b6914] hover:text-[#c9a84c] transition-colors"
+            className="block text-center text-sm font-medium text-yellow-500 hover:text-yellow-400 transition-colors"
           >
-            Create Business Account →
+            Request business account
           </Link>
         </motion.div>
 
         {/* Trust Badges */}
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.45 }}
-          className="mt-6 flex items-center justify-center gap-3 flex-wrap"
+          variants={itemVariants}
+          className="flex items-center justify-center gap-3 flex-wrap px-4"
         >
-          <span className="font-mono text-[9px] text-[#b0aba4] uppercase tracking-[0.05em]">
-            256-bit encrypted
-          </span>
-          <span className="w-1 h-1 rounded-full bg-[#d0cbc4]" />
-          <span className="font-mono text-[9px] text-[#b0aba4] uppercase tracking-[0.05em]">
-            Enterprise grade
-          </span>
-          <span className="w-1 h-1 rounded-full bg-[#d0cbc4]" />
-          <span className="font-mono text-[9px] text-[#b0aba4] uppercase tracking-[0.05em]">
-            DPDP Act 2023
-          </span>
+          <span className="text-xs text-gray-500 font-light">256-bit encrypted</span>
+          <span className="w-1 h-1 rounded-full bg-yellow-500/30" />
+          <span className="text-xs text-gray-500 font-light">Enterprise secure</span>
+          <span className="w-1 h-1 rounded-full bg-yellow-500/30" />
+          <span className="text-xs text-gray-500 font-light">DPDP compliant</span>
         </motion.div>
-      </div>
+      </motion.div>
     </motion.div>
   )
 }

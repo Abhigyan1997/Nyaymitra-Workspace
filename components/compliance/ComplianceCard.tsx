@@ -1,128 +1,326 @@
 'use client'
 
-import { useMemo } from 'react'
-import { motion } from 'framer-motion'
-import { ChevronRight, Clock, AlertCircle, CheckCircle2, FileText, User } from 'lucide-react'
-import Link from 'next/link'
+import { useMemo, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  ChevronRight,
+  Clock,
+  AlertCircle,
+  CheckCircle2,
+  FileText,
+  User,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  Eye,
+  CalendarDays,
+} from 'lucide-react'
 
 interface ComplianceCardProps {
   item: {
-    id: string
+    _id?: string
+    id?: string
     name: string
-    organization: string
-    linkedMatter?: string
-    assignedProfessional: string
+    organization?: string
+    category?: string
+    assignedProfessional?: string
     dueDate: string
     status: 'pending' | 'in-progress' | 'completed' | 'overdue'
     priority: 'low' | 'medium' | 'high'
-    description: string
+    description?: string
     relatedDocuments: number
+    recurring?: boolean
+    recurrence?: string | null
   }
+  onView: (id: string) => void
+  onEdit: (id: string) => void
+  onDelete: (id: string) => void
 }
 
-export function ComplianceCard({ item }: ComplianceCardProps) {
-  const statusIcons = {
-    pending: Clock,
-    'in-progress': AlertCircle,
-    completed: CheckCircle2,
-    overdue: AlertCircle,
+export function ComplianceCard({
+  item,
+  onView,
+  onEdit,
+  onDelete,
+}: ComplianceCardProps) {
+  const [showMenu, setShowMenu] = useState(false)
+
+  const statusConfig = {
+    pending: {
+      icon: Clock,
+      label: 'Pending',
+      color: 'text-gray-300 bg-gray-800/50',
+      dot: 'bg-gray-500',
+    },
+    'in-progress': {
+      icon: AlertCircle,
+      label: 'In Progress',
+      color: 'text-blue-300 bg-blue-900/30',
+      dot: 'bg-blue-500',
+    },
+    completed: {
+      icon: CheckCircle2,
+      label: 'Completed',
+      color: 'text-emerald-300 bg-emerald-900/30',
+      dot: 'bg-emerald-500',
+    },
+    overdue: {
+      icon: AlertCircle,
+      label: 'Overdue',
+      color: 'text-red-300 bg-red-900/30',
+      dot: 'bg-red-500',
+    },
   }
 
-  const statusColors = {
-    pending: 'text-yellow-500 bg-yellow-500/10',
-    'in-progress': 'text-blue-500 bg-blue-500/10',
-    completed: 'text-accent bg-accent/10',
-    overdue: 'text-red-500 bg-red-500/10',
+  const priorityConfig = {
+    low: {
+      label: 'Low',
+      color: 'text-gray-300 bg-gray-800/50',
+    },
+    medium: {
+      label: 'Medium',
+      color: 'text-amber-300 bg-amber-900/30',
+    },
+    high: {
+      label: 'High',
+      color: 'text-red-300 bg-red-900/30',
+    },
   }
 
-  const priorityColors = {
-    low: 'text-blue-500',
-    medium: 'text-yellow-500',
-    high: 'text-red-500',
-  }
+  const complianceId = item._id || item.id
 
   const daysUntilDue = useMemo(() => {
-    return Math.ceil((new Date(item.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    const due = new Date(item.dueDate).getTime()
+    const now = new Date().getTime()
+    return Math.ceil((due - now) / (1000 * 60 * 60 * 24))
   }, [item.dueDate])
-  
-  const StatusIcon = statusIcons[item.status]
+
+  const actualStatus =
+    item.status !== 'completed' && daysUntilDue < 0
+      ? 'overdue'
+      : item.status
+
+  const statusData = statusConfig[actualStatus]
+  const priorityData = priorityConfig[item.priority]
+  const StatusIcon = statusData.icon
+
+  const formattedDueDate = new Date(item.dueDate).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+
+  const handleView = () => {
+    if (!complianceId) return
+    setShowMenu(false)
+    onView(complianceId)
+  }
+
+  const handleEdit = () => {
+    if (!complianceId) return
+    setShowMenu(false)
+    onEdit(complianceId)
+  }
+
+  const handleDelete = () => {
+    if (!complianceId) return
+    setShowMenu(false)
+    onDelete(complianceId)
+  }
 
   return (
     <motion.div
-      whileHover={{ scale: 1.02 }}
-      className="group bg-card border border-border rounded-xl p-8 hover:border-primary/50 transition-all duration-200"
+      whileHover={{ y: -2 }}
+      className="group relative bg-black border border-amber-500/20 rounded-lg shadow-sm hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-200 overflow-hidden flex flex-col h-full"
     >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-5">
-        <div className="flex-1 min-w-0">
-          <h3 className="text-heading-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-            {item.name}
-          </h3>
-          <p className="text-body-sm mt-2">{item.organization}</p>
-        </div>
-        <motion.div
-          initial={{ opacity: 0, x: -10 }}
-          whileHover={{ opacity: 1, x: 0 }}
-          className="text-primary flex-shrink-0 ml-2"
-        >
-          <ChevronRight className="w-5 h-5" />
-        </motion.div>
-      </div>
+      {/* Status indicator bar */}
+      <div className={`h-1.5 w-full ${statusData.dot}`} />
 
-      {/* Description */}
-      <p className="text-body-sm mb-5">{item.description}</p>
+      <div className="p-6">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <button
+            type="button"
+            onClick={handleView}
+            className="flex-1 min-w-0 text-left"
+          >
+            <h3 className="text-sm font-semibold text-white group-hover:text-amber-400 transition-colors truncate">
+              {item.name}
+            </h3>
+            {item.organization && (
+              <p className="text-xs text-gray-400 mt-1 truncate">
+                {item.organization}
+              </p>
+            )}
+          </button>
 
-      {/* Status and Priority */}
-      <div className="flex items-center gap-2 mb-5 flex-wrap">
-        <span className={`text-xs font-semibold uppercase tracking-wide px-3 py-1.5 rounded-full flex items-center gap-1 ${statusColors[item.status]}`}>
-          <StatusIcon className="w-3 h-3" />
-          {item.status.charAt(0).toUpperCase() + item.status.slice(1).replace('-', ' ')}
-        </span>
-        <span className={`text-xs font-semibold uppercase tracking-wide px-3 py-1.5 rounded-full bg-background text-foreground`}>
-          {item.priority.charAt(0).toUpperCase() + item.priority.slice(1)}
-        </span>
-      </div>
+          {/* Action Menu */}
+          <div className="relative flex-shrink-0">
+            <motion.button
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.95 }}
+              type="button"
+              onClick={() => setShowMenu((current) => !current)}
+              className="p-1.5 rounded-md text-gray-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+              aria-label="Compliance actions"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </motion.button>
 
-      {/* Linked Matter Badge */}
-      {item.linkedMatter && (
-        <div className="mb-5 flex items-center gap-2 text-xs font-semibold bg-primary/10 text-primary px-3 py-1.5 rounded-full w-fit uppercase tracking-wide">
-          <FileText className="w-3 h-3" />
-          {item.linkedMatter}
-        </div>
-      )}
+            <AnimatePresence>
+              {showMenu && (
+                <>
+                  <motion.button
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    type="button"
+                    aria-label="Close actions"
+                    className="fixed inset-0 z-10 cursor-default"
+                    onClick={() => setShowMenu(false)}
+                  />
 
-      {/* Meta Information */}
-      <div className="grid grid-cols-2 gap-4 pb-5 border-b border-border mb-5">
-        <div>
-          <p className="text-label-md mb-2">Assigned To</p>
-          <div className="flex items-center gap-2">
-            <User className="w-3 h-3 text-muted-foreground" />
-            <p className="text-body-md font-semibold text-foreground truncate">{item.assignedProfessional}</p>
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 top-8 z-20 w-40 rounded-lg border border-amber-500/30 bg-gray-950 shadow-lg overflow-hidden"
+                  >
+                    <button
+                      type="button"
+                      onClick={handleView}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-amber-500/10 hover:text-amber-300 transition-colors"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      View
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleEdit}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-amber-500/10 hover:text-amber-300 transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Edit
+                    </button>
+
+                    <div className="h-px bg-gray-800" />
+
+                    <button
+                      type="button"
+                      onClick={handleDelete}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Delete
+                    </button>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
         </div>
-        <div>
-          <p className="text-label-md mb-2">Due Date</p>
-          <div className="flex items-center gap-2">
-            <Clock className="w-3 h-3 text-muted-foreground" />
-            <p className={`text-body-md font-semibold ${daysUntilDue < 0 ? 'text-red-500' : 'text-foreground'}`}>
-              {daysUntilDue < 0 ? `${Math.abs(daysUntilDue)}d ago` : `${daysUntilDue}d`}
+
+        {/* Description */}
+        {item.description && (
+          <p className="text-xs text-gray-400 line-clamp-2 mb-4">
+            {item.description}
+          </p>
+        )}
+
+        {/* Category Badge */}
+        {item.category && (
+          <div className="mb-4">
+            <span className="inline-flex items-center px-2 py-1 rounded-md bg-amber-500/10 text-amber-300 text-xs font-medium border border-amber-500/20">
+              {item.category}
+            </span>
+          </div>
+        )}
+
+        {/* Status + Priority Pills */}
+        <div className="flex items-center gap-2 mb-5 flex-wrap">
+          <span
+            className={`text-xs font-medium px-2.5 py-1.5 rounded-full flex items-center gap-1.5 ${statusData.color}`}
+          >
+            <div className={`w-1.5 h-1.5 rounded-full ${statusData.dot}`} />
+            {statusData.label}
+          </span>
+
+          <span
+            className={`text-xs font-medium px-2.5 py-1.5 rounded-full ${priorityData.color}`}
+          >
+            {priorityData.label} Priority
+          </span>
+
+          {item.recurring && (
+            <span className="text-xs font-medium px-2.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+              {item.recurrence ? `Recurs ${item.recurrence}` : 'Recurring'}
+            </span>
+          )}
+        </div>
+
+        {/* Metadata Grid */}
+        <div className="grid grid-cols-2 gap-6 pb-5 border-b border-gray-800 mb-4">
+          {/* Assigned */}
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              Assigned To
             </p>
+            <div className="flex items-center gap-2">
+              <User className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" />
+              <p className="text-sm font-medium text-white truncate">
+                {item.assignedProfessional || 'Unassigned'}
+              </p>
+            </div>
+          </div>
+
+          {/* Due Date */}
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              Due Date
+            </p>
+            <div className="flex items-center gap-2">
+              <CalendarDays className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" />
+              <div className="min-w-0">
+                <p
+                  className={`text-sm font-medium truncate ${actualStatus === 'overdue'
+                      ? 'text-red-400'
+                      : 'text-white'
+                    }`}
+                >
+                  {actualStatus === 'overdue'
+                    ? `${Math.abs(daysUntilDue)}d overdue`
+                    : `${daysUntilDue}d left`}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {formattedDueDate}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Related Documents */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-body-sm text-muted-foreground font-medium">
-          <FileText className="w-4 h-4" />
-          <span>{item.relatedDocuments} documents</span>
+        {/* Footer */}
+        <div className="flex items-center justify-between mt-auto">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-gray-400">
+            <FileText className="w-3.5 h-3.5" />
+            <span>
+              {item.relatedDocuments}{' '}
+              {item.relatedDocuments === 1 ? 'doc' : 'docs'}
+            </span>
+          </div>
+
+          <motion.button
+            whileHover={{ x: 2 }}
+            type="button"
+            onClick={handleView}
+            className="flex items-center gap-1 text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors"
+          >
+            View
+            <ChevronRight className="w-3 h-3" />
+          </motion.button>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.1 }}
-          className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
-        >
-          View Details
-        </motion.button>
       </div>
     </motion.div>
   )
