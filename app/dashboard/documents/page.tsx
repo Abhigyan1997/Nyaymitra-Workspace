@@ -379,7 +379,7 @@ export default function DocumentsPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-white">Vault</h1>
+            <h1 className="text-2xl font-bold text-white">FileHub</h1>
             <p className="text-sm text-white/40">Secure document storage</p>
           </div>
           <button

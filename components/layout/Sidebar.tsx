@@ -36,7 +36,7 @@ interface User {
 // Navigation items with dynamic badge support
 const navItems = [
   { label: 'Overview', icon: BarChart3, href: '/dashboard', badge: null },
-  { label: 'Vault', icon: Lock, href: '/dashboard/documents', badge: null },
+  { label: 'LegalBox', icon: Lock, href: '/dashboard/documents', badge: null },
   { label: 'Compliance', icon: CheckSquare, href: '/dashboard/compliance', badge: null },
   { label: 'Contracts', icon: FileCheck, href: '/dashboard/contracts', badge: 'dynamic' }, // 'dynamic' indicates we'll fetch the count
   { label: 'Team', icon: Users, href: '/dashboard/team', badge: null },
