@@ -1,933 +1,1253 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
-    Briefcase,
-    FileText,
-    Clock,
-    Calendar,
-    CheckCircle2,
     AlertCircle,
-    Users,
-    Activity,
-    Zap,
-    Shield,
+    AlertTriangle,
     ArrowRight,
-    Star,
-    MessageCircle,
-    Eye,
-    Filter,
-    Search,
-    TrendingUp,
-    DollarSign,
-    BarChart3,
-    FolderOpen,
-    Timer,
-    UserCheck,
-    Mail,
-    Phone,
-    Building,
-    Award,
-    BookOpen,
-    PieChart,
+    Briefcase,
+    CheckCircle2,
     ChevronRight,
+    FileText,
+    MessageCircle,
+    RefreshCw,
+    Shield,
+    Upload,
+    Users,
+    Building2,
 } from 'lucide-react'
 
-interface User {
-    id: string
-    fullName: string
-    email: string
-    role: string
-    userId: string
-    phone: string
-    profilePhoto?: string
-    specialization?: string[]
-    practiceAreas?: string[]
-    barNumber?: string
+const API_BASE =
+    process.env.NEXT_PUBLIC_API_URL ||
+    'https://nyaymitra-backend-production.up.railway.app/api/v1'
+
+async function apiFetch<T>(path: string, token: string): Promise<T> {
+    const response = await fetch(`${API_BASE}${path}`, {
+        method: 'GET',
+        headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+    })
+
+    if (!response.ok) {
+        if (response.status === 401) {
+            throw new Error('NO_TOKEN')
+        }
+
+        let message = `Request failed (${response.status})`
+
+        try {
+            const body = await response.json()
+            message = body?.message || body?.error || message
+        } catch {
+            // Ignore non-JSON responses.
+        }
+
+        throw new Error(message)
+    }
+
+    return response.json()
 }
 
-interface AssignedMatter {
+function getArray<T>(result: any): T[] {
+    if (Array.isArray(result?.data)) return result.data
+    if (Array.isArray(result?.clients)) return result.clients
+    if (Array.isArray(result?.contracts)) return result.contracts
+    if (Array.isArray(result?.compliance)) return result.compliance
+    if (Array.isArray(result?.documents)) return result.documents
+    if (Array.isArray(result?.work)) return result.work
+    return []
+}
+
+function getId(item: any) {
+    return String(item?._id || item?.id || '')
+}
+
+function getBusinessName(item: any) {
+    return (
+        item?.business?.companyName ||
+        item?.client?.companyName ||
+        item?.business?.legalName ||
+        item?.client?.legalName ||
+        item?.companyName ||
+        item?.client ||
+        'Client'
+    )
+}
+
+function formatDate(value?: string) {
+    if (!value) return ''
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return ''
+    return date.toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+    })
+}
+
+function getGreeting(hour: number) {
+    if (hour < 12) return 'Good morning'
+    if (hour < 17) return 'Good afternoon'
+    return 'Good evening'
+}
+
+type Client = {
+    id: string
+    name: string
+    openWork: number
+    contracts: number
+    status: string
+}
+
+type WorkItem = {
     id: string
     title: string
     type: string
     client: string
-    clientCompany: string
-    priority: 'high' | 'medium' | 'low'
-    stage: string
-    progress: number
-    dueDate: string
-    status: 'under-review' | 'in-progress' | 'completed' | 'pending-client'
-    assignedDate: string
-    description: string
-    documents: number
-    tasks: Task[]
+    dueDate?: string
+    status?: string
+    priority?: string
+    description?: string
 }
 
-interface Task {
+type Contract = {
     id: string
     title: string
-    description: string
-    dueDate: string
-    priority: 'high' | 'medium' | 'low'
-    status: 'pending' | 'in-progress' | 'completed'
-    assignedTo: string
-    matterId: string
-}
-
-interface RecentActivity {
-    id: string
-    action: string
-    matter: string
-    timestamp: string
-    icon: React.ComponentType<{ className?: string }>
-}
-
-interface PerformanceMetric {
-    label: string
-    value: string
-    trend: number
-    icon: React.ComponentType<{ className?: string }>
-}
-
-interface ClientInteraction {
-    id: string
     client: string
-    type: 'meeting' | 'call' | 'email' | 'document'
-    date: string
-    summary: string
-    status: 'scheduled' | 'completed' | 'pending'
+    status?: string
+    dueDate?: string
 }
 
-// ==========================================
-// REUSABLE COMPONENTS
-// ==========================================
+type ComplianceItem = {
+    id: string
+    name: string
+    client: string
+    status?: string
+    dueDate?: string
+    priority?: string
+    description?: string
+}
+
+type Document = {
+    id: string
+    name: string
+    client: string
+    createdAt?: string
+    category?: string
+}
+
+type Lawyer = {
+    id: string
+    fullName: string
+    email: string
+    profilePhoto?: string
+    specialization?: string[]
+    practiceAreas?: string[]
+}
+
+type DashboardData = {
+    lawyer: Lawyer
+    clients: Client[]
+    work: WorkItem[]
+    contracts: Contract[]
+    compliance: ComplianceItem[]
+    documents: Document[]
+}
 
 const Card = ({
     children,
     className = '',
-    hover = false,
+    clickable = false,
+    onClick,
 }: {
     children: React.ReactNode
     className?: string
-    hover?: boolean
-}) => (
-    <div
-        className={`rounded-xl p-4 sm:p-6 border border-white/8 bg-black/40 backdrop-blur-sm transition-all duration-300 ${hover ? 'hover:border-blue-400/50 hover:bg-black/50' : ''
-            } ${className}`}
-    >
-        {children}
-    </div>
-)
+    clickable?: boolean
+    onClick?: () => void
+}) => {
+    const content = (
+        <div
+            className={`rounded-2xl border border-white/[0.08] bg-gradient-to-br from-black/40 to-black/20 p-6 backdrop-blur-sm transition-all duration-300 ${clickable
+                ? 'cursor-pointer hover:border-blue-400/40 hover:bg-black/50'
+                : ''
+                } ${className}`}
+        >
+            {children}
+        </div>
+    )
 
-const SectionTitle = ({ children }: { children: React.ReactNode }) => (
-    <h2 className="text-xs sm:text-sm font-medium tracking-wide text-blue-400 mb-4 sm:mb-6 uppercase">
-        {children}
-    </h2>
-)
+    if (!clickable) return content
 
-const PriorityBadge = ({ priority }: { priority: 'high' | 'medium' | 'low' }) => {
-    const colors = {
-        high: 'bg-red-500/10 text-red-400 border-red-500/20',
-        medium: 'bg-blue-400/10 text-blue-400 border-blue-400/20',
+    return (
+        <button type="button" onClick={onClick} className="w-full text-left">
+            {content}
+        </button>
+    )
+}
+
+function StatusBadge({ status }: { status?: string }) {
+    if (!status) return null
+
+    const key = status.toLowerCase()
+    const colors: Record<string, string> = {
+        completed: 'bg-green-500/10 text-green-400 border-green-500/20',
+        'in-progress':
+            'bg-blue-500/10 text-blue-400 border-blue-500/20',
+        pending: 'bg-gray-500/10 text-gray-400 border-gray-500/20',
+        overdue: 'bg-red-500/10 text-red-400 border-red-500/20',
+        cancelled: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20',
+        approved: 'bg-green-500/10 text-green-400 border-green-500/20',
+        executed: 'bg-green-500/10 text-green-400 border-green-500/20',
+        active: 'bg-green-500/10 text-green-400 border-green-500/20',
+    }
+
+    const className =
+        colors[key] ||
+        'bg-blue-500/10 text-blue-400 border-blue-500/20'
+
+    return (
+        <span
+            className={`inline-flex rounded-lg border px-2 py-1 text-xs font-medium ${className}`}
+        >
+            {status.replace(/-/g, ' ')}
+        </span>
+    )
+}
+
+function PriorityBadge({ priority }: { priority?: string }) {
+    if (!priority) return null
+
+    const key = priority.toLowerCase()
+
+    const colors: Record<string, string> = {
+        urgent: 'bg-red-500/10 text-red-400 border-red-500/20',
+        high: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
+        medium: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
         low: 'bg-green-500/10 text-green-400 border-green-500/20',
     }
+
     return (
-        <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border ${colors[priority]}`}>
-            {priority.charAt(0).toUpperCase() + priority.slice(1)}
+        <span
+            className={`inline-flex rounded-lg border px-2 py-1 text-xs font-medium ${colors[key] || colors.low
+                }`}
+        >
+            {priority}
         </span>
     )
 }
 
-const StatusBadge = ({
-    status,
+function EmptyState({
+    title,
+    description,
+    icon: Icon,
 }: {
-    status: 'under-review' | 'in-progress' | 'completed' | 'pending-client'
-}) => {
-    const colors = {
-        'under-review': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-        'in-progress': 'bg-blue-400/10 text-blue-400 border-blue-400/20',
-        completed: 'bg-green-500/10 text-green-400 border-green-500/20',
-        'pending-client': 'bg-amber-400/10 text-amber-400 border-amber-400/20',
-    }
-    const labels = {
-        'under-review': 'Under Review',
-        'in-progress': 'In Progress',
-        completed: 'Completed',
-        'pending-client': 'Pending Client',
-    }
+    title: string
+    description: string
+    icon: React.ComponentType<{ className?: string }>
+}) {
     return (
-        <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border ${colors[status]}`}>
-            {labels[status]}
-        </span>
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Icon className="mb-4 h-10 w-10 text-gray-700" />
+            <h3 className="text-sm font-medium text-gray-300">{title}</h3>
+            <p className="mt-1 text-xs text-gray-600">{description}</p>
+        </div>
     )
 }
 
-const TaskStatusBadge = ({
-    status,
+function Skeleton({ rows = 3 }: { rows?: number }) {
+    return (
+        <div className="space-y-3">
+            {Array.from({ length: rows }).map((_, index) => (
+                <div
+                    key={index}
+                    className="h-12 animate-pulse rounded-xl bg-white/[0.04]"
+                />
+            ))}
+        </div>
+    )
+}
+
+function ErrorState({
+    message,
+    onRetry,
 }: {
-    status: 'pending' | 'in-progress' | 'completed'
-}) => {
-    const colors = {
-        pending: 'bg-gray-500/10 text-gray-400 border-gray-500/20',
-        'in-progress': 'bg-blue-400/10 text-blue-400 border-blue-400/20',
-        completed: 'bg-green-500/10 text-green-400 border-green-500/20',
-    }
-    const labels = {
-        pending: 'Pending',
-        'in-progress': 'In Progress',
-        completed: 'Completed',
-    }
+    message: string
+    onRetry: () => void
+}) {
     return (
-        <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border ${colors[status]}`}>
-            {labels[status]}
-        </span>
+        <div className="min-h-screen bg-gradient-to-b from-black to-slate-950 px-6 py-12">
+            <Card className="mx-auto mt-20 max-w-md">
+                <div className="text-center">
+                    <AlertTriangle className="mx-auto mb-4 h-12 w-12 text-red-400" />
+                    <h2 className="text-lg font-semibold text-white">
+                        Unable to load dashboard
+                    </h2>
+                    <p className="mt-2 text-sm text-gray-500">{message}</p>
+                    <button
+                        onClick={onRetry}
+                        className="mt-6 rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
+                    >
+                        Try Again
+                    </button>
+                </div>
+            </Card>
+        </div>
     )
 }
-
-// ==========================================
-// MAIN LAWYER DASHBOARD
-// ==========================================
 
 export default function LawyerDashboardPage() {
-    const [user, setUser] = useState<User | null>(null)
-    const [greeting, setGreeting] = useState('')
-    const [filter, setFilter] = useState('all')
-    const [searchTerm, setSearchTerm] = useState('')
-    const [mounted, setMounted] = useState(false)
+    const router = useRouter()
 
-    useEffect(() => {
-        setMounted(true)
+    const [data, setData] = useState<DashboardData | null>(null)
+    const [loading, setLoading] = useState(true)
+    const [refreshing, setRefreshing] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [greeting, setGreeting] = useState('Hello')
 
-        const storedUser = localStorage.getItem('user')
-        if (storedUser) {
-            try {
-                setUser(JSON.parse(storedUser))
-            } catch (error) {
-                console.error('Failed to parse user:', error)
+    const fetchDashboard = useCallback(async () => {
+        try {
+            setLoading(true)
+            setError(null)
+
+            const token = localStorage.getItem('token')
+
+            if (!token) {
+                setError('NO_TOKEN')
+                return
             }
-        }
 
-        const hour = new Date().getHours()
-        if (hour >= 5 && hour < 12) {
-            setGreeting('Good morning')
-        } else if (hour >= 12 && hour < 17) {
-            setGreeting('Good afternoon')
-        } else if (hour >= 17 && hour < 21) {
-            setGreeting('Good evening')
-        } else {
-            setGreeting('Good night')
+            const [
+                clientsResponse,
+                // workResponse,
+                contractsResponse,
+                complianceResponse,
+                documentsResponse,
+            ] = await Promise.all([
+                apiFetch<any>('/lawyer/clients', token),
+                // apiFetch<any>('/lawyer/work?page=1&limit=20', token),
+                apiFetch<any>('/lawyer/contracts?page=1&limit=20', token),
+                apiFetch<any>('/lawyer/compliance?page=1&limit=20', token),
+                apiFetch<any>('/lawyer/documents?page=1&limit=20', token),
+            ])
+
+            const rawClients = getArray<any>(clientsResponse)
+            // const rawWork = getArray<any>(workResponse)
+            const rawContracts = getArray<any>(contractsResponse)
+            const rawCompliance = getArray<any>(complianceResponse)
+            const rawDocuments = getArray<any>(documentsResponse)
+
+            let storedUser: any = {}
+
+            try {
+                storedUser = JSON.parse(
+                    localStorage.getItem('user') || '{}'
+                )
+            } catch {
+                storedUser = {}
+            }
+
+            const clients: Client[] = rawClients.map((item: any) => {
+                const client = item?.client || item?.business || item
+
+                return {
+                    id: String(
+                        client?._id ||
+                        item?._id ||
+                        item?.id ||
+                        item?.assignmentId ||
+                        ''
+                    ),
+                    name:
+                        client?.companyName ||
+                        item?.companyName ||
+                        client?.legalName ||
+                        'Client',
+                    openWork:
+                        Number(
+                            item?.openWork ??
+                            item?.stats?.openWork ??
+                            0
+                        ) || 0,
+                    contracts:
+                        Number(
+                            item?.contracts ??
+                            item?.stats?.contracts ??
+                            0
+                        ) || 0,
+                    status:
+                        client?.status ||
+                        item?.status ||
+                        item?.assignmentStatus ||
+                        'Active',
+                }
+            })
+
+            // const work: WorkItem[] = rawWork.map((item: any) => ({
+            //     id: getId(item),
+            //     title: item?.title || 'Work item',
+            //     type:
+            //         item?.workType ||
+            //         item?.sourceType ||
+            //         'Task',
+            //     client: getBusinessName(item),
+            //     dueDate: item?.dueDate,
+            //     status: item?.status,
+            //     priority: item?.priority,
+            //     description: item?.description,
+            // }))
+
+            const contracts: Contract[] = rawContracts.map(
+                (item: any) => ({
+                    id: getId(item),
+                    title: item?.title || 'Contract',
+                    client: getBusinessName(item),
+                    status: item?.status,
+                    dueDate:
+                        item?.expiryDate ||
+                        item?.renewalDate ||
+                        item?.effectiveDate,
+                })
+            )
+
+            const compliance: ComplianceItem[] =
+                rawCompliance.map((item: any) => ({
+                    id: getId(item),
+                    name: item?.name || 'Compliance item',
+                    client: getBusinessName(item),
+                    status: item?.status,
+                    dueDate: item?.dueDate,
+                    priority: item?.priority,
+                    description: item?.description,
+                }))
+
+            const documents: Document[] = rawDocuments.map(
+                (item: any) => ({
+                    id: getId(item),
+                    name:
+                        item?.name ||
+                        item?.originalName ||
+                        'Document',
+                    client: getBusinessName(item),
+                    createdAt:
+                        item?.createdAt ||
+                        item?.uploadedAt ||
+                        item?.updatedAt,
+                    category: item?.category,
+                })
+            )
+
+            setGreeting(getGreeting(new Date().getHours()))
+
+            setData({
+                lawyer: {
+                    id: String(
+                        storedUser?._id ||
+                        storedUser?.id ||
+                        ''
+                    ),
+                    fullName:
+                        storedUser?.fullName ||
+                        'Legal Professional',
+                    email: storedUser?.email || '',
+                    profilePhoto:
+                        storedUser?.profilePhoto,
+                    specialization:
+                        storedUser?.specialization,
+                    practiceAreas:
+                        storedUser?.practiceAreas,
+                },
+                clients,
+                work,
+                contracts,
+                compliance,
+                documents,
+            })
+        } catch (err) {
+            const message =
+                err instanceof Error
+                    ? err.message
+                    : 'Something went wrong while loading your legal workspace.'
+
+            if (message === 'NO_TOKEN') {
+                setError('NO_TOKEN')
+            } else {
+                setError(message)
+            }
+        } finally {
+            setLoading(false)
+            setRefreshing(false)
         }
     }, [])
 
-    const firstName = user?.fullName?.split(' ')[0] || 'Lawyer'
-    const lawFirm = 'FreshFlow Legal Partners'
+    useEffect(() => {
+        setGreeting(getGreeting(new Date().getHours()))
+        fetchDashboard()
 
-    // Mock data - In real app, fetch from API based on lawyer's ID
-    const performanceMetrics: PerformanceMetric[] = [
-        {
-            label: 'Active Matters',
-            value: '14',
-            trend: 12,
-            icon: Briefcase,
-        },
-        {
-            label: 'Billable Hours',
-            value: '47.5',
-            trend: 8,
-            icon: Timer,
-        },
-        {
-            label: 'Client Satisfaction',
-            value: '4.8',
-            trend: 5,
-            icon: Star,
-        },
-        {
-            label: 'Revenue Generated',
-            value: '$82,400',
-            trend: 15,
-            icon: DollarSign,
-        },
-        {
-            label: 'Documents Drafted',
-            value: '89',
-            trend: 3,
-            icon: FileText,
-        },
-        {
-            label: 'Success Rate',
-            value: '92%',
-            trend: 7,
-            icon: TrendingUp,
-        },
-    ]
+        const interval = window.setInterval(() => {
+            setGreeting(getGreeting(new Date().getHours()))
+        }, 60_000)
 
-    const assignedMatters: AssignedMatter[] = [
-        {
-            id: '1',
-            title: 'Merger & Acquisition Deal',
-            type: 'Corporate',
-            client: 'TechCorp Inc.',
-            clientCompany: 'TechCorp Inc.',
-            priority: 'high',
-            stage: 'Due Diligence',
-            progress: 45,
-            dueDate: '2024-09-15',
-            status: 'in-progress',
-            assignedDate: '2024-07-01',
-            description: 'Leading the legal due diligence for the acquisition of AI startup.',
-            documents: 23,
-            tasks: [
-                {
-                    id: 't1',
-                    title: 'Review financial statements',
-                    description: 'Analyze last 3 years financial records',
-                    dueDate: '2024-08-10',
-                    priority: 'high',
-                    status: 'in-progress',
-                    assignedTo: 'Self',
-                    matterId: '1',
-                },
-                {
-                    id: 't2',
-                    title: 'Prepare legal opinion',
-                    description: 'Draft legal opinion on acquisition risks',
-                    dueDate: '2024-08-20',
-                    priority: 'medium',
-                    status: 'pending',
-                    assignedTo: 'Self',
-                    matterId: '1',
-                },
-            ],
-        },
-        {
-            id: '2',
-            title: 'Patent Infringement Defense',
-            type: 'IP',
-            client: 'BioMed Solutions',
-            clientCompany: 'BioMed Solutions',
-            priority: 'high',
-            stage: 'Legal Strategy',
-            progress: 30,
-            dueDate: '2024-10-30',
-            status: 'under-review',
-            assignedDate: '2024-07-15',
-            description: 'Defending against patent infringement claims in medical device industry.',
-            documents: 15,
-            tasks: [
-                {
-                    id: 't3',
-                    title: 'Analyze patent claims',
-                    description: 'Review the plaintiff\'s patent claims',
-                    dueDate: '2024-08-15',
-                    priority: 'high',
-                    status: 'in-progress',
-                    assignedTo: 'Self',
-                    matterId: '2',
-                },
-            ],
-        },
-        {
-            id: '3',
-            title: 'Commercial Lease Agreement',
-            type: 'Real Estate',
-            client: 'Retail Ventures',
-            clientCompany: 'Retail Ventures',
-            priority: 'medium',
-            stage: 'Negotiation',
-            progress: 75,
-            dueDate: '2024-08-25',
-            status: 'in-progress',
-            assignedDate: '2024-06-20',
-            description: 'Negotiating commercial lease terms for 5 new retail locations.',
-            documents: 8,
-            tasks: [
-                {
-                    id: 't4',
-                    title: 'Review lease terms',
-                    description: 'Analyze landlord\'s lease proposal',
-                    dueDate: '2024-08-05',
-                    priority: 'medium',
-                    status: 'completed',
-                    assignedTo: 'Self',
-                    matterId: '3',
-                },
-                {
-                    id: 't5',
-                    title: 'Prepare counter-proposal',
-                    description: 'Draft counter-proposal for lease terms',
-                    dueDate: '2024-08-12',
-                    priority: 'medium',
-                    status: 'pending',
-                    assignedTo: 'Self',
-                    matterId: '3',
-                },
-            ],
-        },
-        {
-            id: '4',
-            title: 'Employment Dispute Resolution',
-            type: 'Employment',
-            client: 'Global Services Ltd.',
-            clientCompany: 'Global Services Ltd.',
-            priority: 'medium',
-            stage: 'Mediation',
-            progress: 60,
-            dueDate: '2024-09-05',
-            status: 'pending-client',
-            assignedDate: '2024-07-10',
-            description: 'Mediating employment dispute with former executive.',
-            documents: 12,
-            tasks: [
-                {
-                    id: 't6',
-                    title: 'Prepare mediation brief',
-                    description: 'Draft brief for mediation session',
-                    dueDate: '2024-08-30',
-                    priority: 'medium',
-                    status: 'in-progress',
-                    assignedTo: 'Self',
-                    matterId: '4',
-                },
-            ],
-        },
-        {
-            id: '5',
-            title: 'Regulatory Compliance Audit',
-            type: 'Compliance',
-            client: 'FinTech Innovations',
-            clientCompany: 'FinTech Innovations',
-            priority: 'low',
-            stage: 'Initial Review',
-            progress: 20,
-            dueDate: '2024-11-15',
-            status: 'in-progress',
-            assignedDate: '2024-08-01',
-            description: 'Comprehensive compliance audit for financial technology company.',
-            documents: 5,
-            tasks: [
-                {
-                    id: 't7',
-                    title: 'Review compliance policies',
-                    description: 'Analyze existing compliance framework',
-                    dueDate: '2024-08-25',
-                    priority: 'low',
-                    status: 'pending',
-                    assignedTo: 'Self',
-                    matterId: '5',
-                },
-            ],
-        },
-    ]
+        return () => window.clearInterval(interval)
+    }, [fetchDashboard])
 
-    const recentActivities: RecentActivity[] = [
-        {
-            id: '1',
-            action: 'Submitted due diligence report for M&A deal',
-            matter: 'TechCorp Inc.',
-            timestamp: '2 hours ago',
-            icon: FileText,
-        },
-        {
-            id: '2',
-            action: 'Client meeting scheduled',
-            matter: 'BioMed Solutions',
-            timestamp: '4 hours ago',
-            icon: Calendar,
-        },
-        {
-            id: '3',
-            action: 'Drafted legal opinion for patent case',
-            matter: 'Patent Infringement Defense',
-            timestamp: '1 day ago',
-            icon: Briefcase,
-        },
-        {
-            id: '4',
-            action: 'Reviewed lease agreement',
-            matter: 'Retail Ventures',
-            timestamp: '2 days ago',
-            icon: CheckCircle2,
-        },
-    ]
+    const totals = useMemo(() => {
+        const clients = data?.clients || []
+        const work = data?.work || []
 
-    // Calculate upcoming deadlines only on client side
-    const getUpcomingDeadlines = () => {
-        if (!mounted) return []
+        return {
+            clients: clients.length,
+            openWork: work.filter(
+                (item) =>
+                    item.status !== 'completed' &&
+                    item.status !== 'cancelled'
+            ).length,
+            pendingActions:
+                work.filter(
+                    (item) =>
+                        item.status === 'pending' ||
+                        item.status === 'overdue'
+                ).length +
+                (data?.compliance || []).filter(
+                    (item) =>
+                        item.status === 'pending' ||
+                        item.status === 'overdue'
+                ).length,
+            contracts: data?.contracts?.length || 0,
+        }
+    }, [data])
 
-        return assignedMatters
-            .flatMap(m => m.tasks)
-            .filter(t => t.status !== 'completed')
-            .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-            .slice(0, 5)
-    }
+    const firstName =
+        data?.lawyer?.fullName?.split(' ')[0] ||
+        'Legal Professional'
 
-    const clientInteractions: ClientInteraction[] = [
-        {
-            id: '1',
-            client: 'TechCorp Inc.',
-            type: 'meeting',
-            date: '2024-08-15 10:00 AM',
-            summary: 'M&A deal update and next steps',
-            status: 'scheduled',
-        },
-        {
-            id: '2',
-            client: 'BioMed Solutions',
-            type: 'call',
-            date: '2024-08-12 2:30 PM',
-            summary: 'Patent strategy discussion',
-            status: 'completed',
-        },
-        {
-            id: '3',
-            client: 'Retail Ventures',
-            type: 'email',
-            date: '2024-08-10',
-            summary: 'Sent lease counter-proposal',
-            status: 'completed',
-        },
-    ]
+    const openWork = (id: string) =>
+        id
+            ? router.push(`/lawyer/work/${encodeURIComponent(id)}`)
+            : router.push('/lawyer/work')
 
-    const filteredMatters = assignedMatters.filter(matter => {
-        if (filter === 'all') return true
-        if (filter === 'high' && matter.priority === 'high') return true
-        if (filter === 'in-progress' && matter.status === 'in-progress') return true
-        if (filter === 'completed' && matter.status === 'completed') return true
-        if (filter === 'pending' && matter.status === 'pending-client') return true
-        return false
-    }).filter(matter =>
-        matter.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        matter.client.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    const openContract = (id: string) =>
+        id
+            ? router.push(
+                `/lawyer/contracts/${encodeURIComponent(id)}`
+            )
+            : router.push('/lawyer/contracts')
 
-    const totalTasks = assignedMatters.reduce((acc, m) => acc + m.tasks.length, 0)
-    const completedTasks = assignedMatters.reduce(
-        (acc, m) => acc + m.tasks.filter(t => t.status === 'completed').length,
-        0
-    )
-    const taskCompletionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+    const openCompliance = (id: string) =>
+        id
+            ? router.push(
+                `/lawyer/compliance/${encodeURIComponent(id)}`
+            )
+            : router.push('/lawyer/compliance')
 
-    // Calculate days until deadline - only on client side
-    const getDaysUntil = (dueDate: string) => {
-        if (!mounted) return 0
-        return Math.ceil(
-            (new Date(dueDate).getTime() - new Date().getTime()) /
-            (1000 * 60 * 60 * 24)
+    const openDocument = (id: string) =>
+        id
+            ? router.push(
+                `/lawyer/documents/${encodeURIComponent(id)}`
+            )
+            : router.push('/lawyer/documents')
+
+    const openClient = (id: string) => {
+        router.push(
+            `/lawyer/clients?clientId=${encodeURIComponent(id)}`
         )
     }
 
-    const upcomingDeadlines = getUpcomingDeadlines()
+    if (error === 'NO_TOKEN') {
+        return (
+            <div className="min-h-screen bg-gradient-to-b from-black to-slate-950 px-6 py-12">
+                <Card className="mx-auto mt-20 max-w-md">
+                    <div className="text-center">
+                        <AlertCircle className="mx-auto mb-4 h-12 w-12 text-amber-400" />
+                        <h2 className="text-lg font-semibold text-white">
+                            Authentication Required
+                        </h2>
+                        <p className="mt-2 text-sm text-gray-500">
+                            Please sign in again to access your dashboard.
+                        </p>
+                        <button
+                            onClick={() => router.push('/signin')}
+                            className="mt-6 rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-500"
+                        >
+                            Sign In
+                        </button>
+                    </div>
+                </Card>
+            </div>
+        )
+    }
+
+    if (error && !loading) {
+        return (
+            <ErrorState
+                message={error}
+                onRetry={fetchDashboard}
+            />
+        )
+    }
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-black to-slate-950">
-            {/* HEADER SECTION */}
-            <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-                className="px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 lg:pt-12 pb-6 sm:pb-8 border-b border-white/5"
-            >
-                <div className="max-w-7xl mx-auto">
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.5, delay: 0.1 }}
-                    >
-                        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 lg:gap-6">
-                            <div className="flex-1 min-w-0">
-                                <p className="text-xs sm:text-sm font-medium text-blue-400 mb-1 sm:mb-2">
-                                    {greeting},
-                                </p>
-                                <h1 className="text-3xl sm:text-4xl lg:text-6xl font-light tracking-tight text-white mb-1 truncate">
-                                    {firstName}
-                                </h1>
-                                <p className="text-xs sm:text-sm text-gray-400 truncate">
-                                    {lawFirm} — Legal Professional Dashboard
-                                </p>
-                                {user?.specialization && (
-                                    <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2 sm:mt-3">
-                                        {user.specialization.slice(0, 3).map((spec, idx) => (
+        <div className="min-h-screen bg-gradient-to-b from-black to-slate-950 text-white">
+            <div className="border-b border-white/[0.05] bg-black/80 backdrop-blur-md">
+                <div className="mx-auto max-w-7xl px-6 py-6 lg:px-8">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <p className="mb-1 text-sm font-medium text-blue-400">
+                                {greeting},
+                            </p>
+
+                            <h1 className="text-4xl font-light tracking-tight text-white lg:text-5xl">
+                                {loading ? 'Loading...' : firstName}
+                            </h1>
+
+                            <p className="mt-2 text-sm text-gray-500">
+                                Your legal workspace at a glance.
+                            </p>
+
+                            {data?.lawyer?.specialization?.length ? (
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    {data.lawyer.specialization
+                                        .slice(0, 3)
+                                        .map((item) => (
                                             <span
-                                                key={idx}
-                                                className="text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-blue-400/10 border border-blue-400/20 text-blue-400"
+                                                key={item}
+                                                className="rounded-full border border-blue-400/20 bg-blue-400/10 px-3 py-1 text-xs text-blue-400"
                                             >
-                                                {spec}
+                                                {item}
                                             </span>
                                         ))}
-                                        {user.specialization.length > 3 && (
-                                            <span className="text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-blue-400/10 border border-blue-400/20 text-blue-400">
-                                                +{user.specialization.length - 3}
-                                            </span>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Quick Stats - Responsive Grid */}
-                            <div className="grid grid-cols-3 gap-3 sm:gap-4 bg-black/30 rounded-xl p-3 sm:p-4 border border-white/5 flex-shrink-0">
-                                <div className="text-center">
-                                    <p className="text-lg sm:text-2xl font-light text-white">
-                                        {assignedMatters.length}
-                                    </p>
-                                    <p className="text-[10px] sm:text-xs text-gray-500 leading-tight">Active Matters</p>
                                 </div>
-                                <div className="w-px bg-white/10" />
-                                <div className="text-center">
-                                    <p className="text-lg sm:text-2xl font-light text-white">
-                                        {totalTasks}
-                                    </p>
-                                    <p className="text-[10px] sm:text-xs text-gray-500 leading-tight">Total Tasks</p>
-                                </div>
-                                <div className="w-px bg-white/10" />
-                                <div className="text-center">
-                                    <p className="text-lg sm:text-2xl font-light text-green-400">
-                                        {taskCompletionRate}%
-                                    </p>
-                                    <p className="text-[10px] sm:text-xs text-gray-500 leading-tight">Completion</p>
-                                </div>
-                            </div>
+                            ) : null}
                         </div>
-                    </motion.div>
+
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                setRefreshing(true)
+                                await fetchDashboard()
+                            }}
+                            disabled={refreshing}
+                            className="rounded-lg border border-white/10 bg-white/[0.04] p-2 transition hover:bg-white/[0.08] disabled:opacity-50"
+                        >
+                            <RefreshCw
+                                className={`h-5 w-5 text-gray-400 ${refreshing ? 'animate-spin' : ''
+                                    }`}
+                            />
+                        </button>
+                    </div>
                 </div>
-            </motion.div>
+            </div>
 
-            <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
-                <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 lg:space-y-12">
-                    {/* PERFORMANCE METRICS */}
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.4, delay: 0.2 }}
-                        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4"
-                    >
-                        {performanceMetrics.map((metric, idx) => {
-                            const Icon = metric.icon
-                            return (
-                                <motion.div
-                                    key={idx}
-                                    initial={{ opacity: 0, scale: 0.95 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    transition={{ duration: 0.3, delay: 0.25 + idx * 0.05 }}
+            <main className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
+                <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    {[
+                        {
+                            label: 'Active Clients',
+                            value: totals.clients,
+                            icon: Building2,
+                            href: '/lawyer/clients',
+                        },
+                        {
+                            label: 'Open Work',
+                            value: totals.openWork,
+                            icon: Briefcase,
+                            href: '/lawyer/work',
+                        },
+                        {
+                            label: 'Pending Actions',
+                            value: totals.pendingActions,
+                            icon: AlertCircle,
+                            href: '/lawyer/compliance',
+                        },
+                        {
+                            label: 'Contracts',
+                            value: totals.contracts,
+                            icon: FileText,
+                            href: '/lawyer/contracts',
+                        },
+                    ].map((item, index) => {
+                        const Icon = item.icon
+
+                        return (
+                            <motion.div
+                                key={item.label}
+                                initial={{
+                                    opacity: 0,
+                                    y: 15,
+                                }}
+                                animate={{
+                                    opacity: 1,
+                                    y: 0,
+                                }}
+                                transition={{
+                                    delay: index * 0.05,
+                                }}
+                            >
+                                <Card
+                                    clickable
+                                    onClick={() =>
+                                        router.push(item.href)
+                                    }
                                 >
-                                    <Card hover className="h-full">
-                                        <div className="flex items-center justify-between mb-2 sm:mb-3">
-                                            <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400 flex-shrink-0" />
-                                            <span className="text-[10px] sm:text-xs text-green-400">+{metric.trend}%</span>
-                                        </div>
-                                        <p className="text-lg sm:text-2xl font-light text-white mb-0.5 sm:mb-1">
-                                            {metric.value}
-                                        </p>
-                                        <p className="text-[10px] sm:text-xs text-gray-500 truncate">{metric.label}</p>
-                                    </Card>
-                                </motion.div>
-                            )
-                        })}
-                    </motion.div>
-
-                    {/* UPCOMING DEADLINES */}
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.4, delay: 0.3 }}
-                    >
-                        <Card>
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
-                                <SectionTitle>Upcoming Deadlines</SectionTitle>
-                                <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs text-gray-400">
-                                    <div className="flex items-center gap-1">
-                                        <span className="inline-block w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-red-400" />
-                                        <span>High</span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <span className="inline-block w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-blue-400" />
-                                        <span>Medium</span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <span className="inline-block w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-green-400" />
-                                        <span>Low</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
-                                {upcomingDeadlines.map((task, idx) => {
-                                    const daysUntil = getDaysUntil(task.dueDate)
-                                    const isUrgent = daysUntil <= 3
-                                    return (
-                                        <motion.div
-                                            key={task.id}
-                                            initial={{ opacity: 0, x: -10 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            transition={{ duration: 0.3, delay: 0.35 + idx * 0.05 }}
-                                            className={`p-3 sm:p-4 rounded-lg border ${isUrgent
-                                                ? 'bg-red-500/5 border-red-500/20'
-                                                : 'bg-white/5 border-white/5'
-                                                }`}
-                                            suppressHydrationWarning
-                                        >
-                                            <div className="flex flex-wrap items-start justify-between gap-1 sm:gap-2 mb-1.5 sm:mb-2">
-                                                <p className="text-xs sm:text-sm font-medium text-white line-clamp-2 flex-1">
-                                                    {task.title}
-                                                </p>
-                                                <PriorityBadge priority={task.priority} />
-                                            </div>
-                                            <p className="text-[10px] sm:text-xs text-gray-400 mb-1.5 sm:mb-2">
-                                                {task.matterId && assignedMatters.find(m => m.id === task.matterId)?.client}
+                                    <div className="flex items-start justify-between">
+                                        <div>
+                                            <p className="text-sm text-gray-500">
+                                                {item.label}
                                             </p>
-                                            <div className="flex flex-wrap items-center justify-between gap-1">
-                                                <span className={`text-[10px] sm:text-xs ${isUrgent ? 'text-red-400' : 'text-gray-500'}`} suppressHydrationWarning>
-                                                    {mounted ? (
-                                                        isUrgent ? `${daysUntil} day${daysUntil !== 1 ? 's' : ''} left` : `Due ${new Date(task.dueDate).toLocaleDateString()}`
-                                                    ) : (
-                                                        'Loading...'
-                                                    )}
-                                                </span>
-                                                <TaskStatusBadge status={task.status} />
-                                            </div>
-                                        </motion.div>
-                                    )
-                                })}
-                            </div>
-                        </Card>
-                    </motion.div>
+                                            {loading ? (
+                                                <div className="mt-3 h-10 w-16 animate-pulse rounded bg-white/[0.05]" />
+                                            ) : (
+                                                <p className="mt-2 text-4xl font-light">
+                                                    {item.value}
+                                                </p>
+                                            )}
+                                        </div>
 
-                    {/* ASSIGNED MATTERS */}
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.4, delay: 0.4 }}
-                    >
-                        <Card>
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
-                                <SectionTitle>Assigned Matters</SectionTitle>
-                                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-                                    <div className="relative w-full sm:w-auto">
-                                        <Search className="absolute left-2.5 sm:left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
-                                        <input
-                                            type="text"
-                                            placeholder="Search matters..."
-                                            value={searchTerm}
-                                            onChange={(e) => setSearchTerm(e.target.value)}
-                                            className="w-full sm:w-48 lg:w-56 pl-8 sm:pl-9 pr-3 sm:pr-4 py-1.5 sm:py-2 bg-black/30 border border-white/10 rounded-lg text-xs sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-400/50 transition-colors"
-                                        />
+                                        <Icon className="h-5 w-5 text-blue-400/70" />
                                     </div>
-                                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                                        {['all', 'high', 'in-progress', 'pending', 'completed'].map((f) => (
+
+                                    <div className="mt-4 flex items-center gap-1 text-xs text-blue-400">
+                                        Open
+                                        <ArrowRight className="h-3 w-3" />
+                                    </div>
+                                </Card>
+                            </motion.div>
+                        )
+                    })}
+                </div>
+
+                <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    <Card>
+                        <div className="mb-6 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-semibold">
+                                    Needs Your Attention
+                                </h2>
+                                <p className="mt-1 text-sm text-gray-600">
+                                    Urgent and high-priority items
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    router.push('/lawyer/work')
+                                }
+                                className="text-xs text-blue-400 hover:text-blue-300"
+                            >
+                                View all
+                            </button>
+                        </div>
+
+                        {loading ? (
+                            <Skeleton rows={4} />
+                        ) : (
+                            (() => {
+                                const attention = [
+                                    ...(data?.work || [])
+                                        .filter(
+                                            (item) =>
+                                                item.status === 'overdue' ||
+                                                item.priority === 'urgent' ||
+                                                item.priority === 'high'
+                                        )
+                                        .slice(0, 5)
+                                        .map((item) => ({
+                                            kind: 'work',
+                                            id: item.id,
+                                            title: item.title,
+                                            client: item.client,
+                                            dueDate: item.dueDate,
+                                            priority: item.priority,
+                                        })),
+                                    ...(data?.compliance || [])
+                                        .filter(
+                                            (item) =>
+                                                item.status === 'overdue' ||
+                                                item.priority === 'high'
+                                        )
+                                        .slice(0, 5)
+                                        .map((item) => ({
+                                            kind: 'compliance',
+                                            id: item.id,
+                                            title: item.name,
+                                            client: item.client,
+                                            dueDate: item.dueDate,
+                                            priority: item.priority,
+                                        })),
+                                ].slice(0, 6)
+
+                                return attention.length === 0 ? (
+                                    <EmptyState
+                                        title="You're all caught up"
+                                        description="No urgent work requires your attention."
+                                        icon={CheckCircle2}
+                                    />
+                                ) : (
+                                    <div className="space-y-2">
+                                        {attention.map((item) => (
                                             <button
-                                                key={f}
-                                                onClick={() => setFilter(f)}
-                                                className={`px-2 sm:px-3 py-1 text-[10px] sm:text-xs rounded-lg transition-colors whitespace-nowrap ${filter === f
-                                                        ? 'bg-blue-400/20 text-blue-400 border border-blue-400/30'
-                                                        : 'bg-white/5 text-gray-400 border border-white/5 hover:bg-white/10'
-                                                    }`}
+                                                key={`${item.kind}-${item.id}`}
+                                                type="button"
+                                                onClick={() =>
+                                                    item.kind === 'work'
+                                                        ? openWork(item.id)
+                                                        : openCompliance(
+                                                            item.id
+                                                        )
+                                                }
+                                                className="flex w-full items-center gap-3 rounded-xl border border-white/[0.05] bg-white/[0.03] p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.05]"
                                             >
-                                                {f.charAt(0).toUpperCase() + f.slice(1)}
+                                                <AlertTriangle className="h-4 w-4 shrink-0 text-red-400" />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-sm font-medium">
+                                                        {item.title}
+                                                    </p>
+                                                    <p className="mt-1 text-xs text-gray-600">
+                                                        {item.client}
+                                                        {item.dueDate
+                                                            ? ` • Due ${formatDate(
+                                                                item.dueDate
+                                                            )}`
+                                                            : ''}
+                                                    </p>
+                                                </div>
+                                                <PriorityBadge
+                                                    priority={item.priority}
+                                                />
+                                                <ChevronRight className="h-4 w-4 text-gray-600" />
                                             </button>
                                         ))}
                                     </div>
-                                </div>
+                                )
+                            })()
+                        )}
+                    </Card>
+
+                    <Card>
+                        <div className="mb-6 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-semibold">
+                                    My Work
+                                </h2>
+                                <p className="mt-1 text-sm text-gray-600">
+                                    Current assigned work items
+                                </p>
                             </div>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    router.push('/lawyer/work')
+                                }
+                                className="text-xs text-blue-400 hover:text-blue-300"
+                            >
+                                View all
+                            </button>
+                        </div>
 
-                            <div className="space-y-4 sm:space-y-6">
-                                {filteredMatters.map((matter, idx) => (
-                                    <motion.div
-                                        key={matter.id}
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ duration: 0.3, delay: 0.45 + idx * 0.05 }}
-                                        className="p-3 sm:p-4 rounded-lg bg-white/5 border border-white/5 hover:border-blue-400/30 transition-colors"
+                        {loading ? (
+                            <Skeleton rows={4} />
+                        ) : data?.work?.length ? (
+                            <div className="space-y-2">
+                                {data.work.slice(0, 6).map((item) => (
+                                    <button
+                                        key={item.id}
+                                        type="button"
+                                        onClick={() =>
+                                            openWork(item.id)
+                                        }
+                                        className="flex w-full items-center gap-3 rounded-xl border border-white/[0.05] bg-white/[0.03] p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.05]"
                                     >
-                                        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 lg:gap-4">
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
-                                                    <div className="flex-1 min-w-0">
-                                                        <h3 className="text-sm sm:text-base font-medium text-white mb-0.5 sm:mb-1 truncate">
-                                                            {matter.title}
-                                                        </h3>
-                                                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-3 text-[10px] sm:text-xs text-gray-400">
-                                                            <span>{matter.type}</span>
-                                                            <span className="hidden sm:inline">•</span>
-                                                            <span className="text-white truncate max-w-[120px] sm:max-w-none">{matter.client}</span>
-                                                            <span className="hidden sm:inline">•</span>
-                                                            <span className="truncate max-w-[100px] sm:max-w-none">Due: {new Date(matter.dueDate).toLocaleDateString()}</span>
-                                                        </div>
-                                                        <p className="text-[10px] sm:text-xs text-gray-500 mt-1.5 sm:mt-2 line-clamp-2">
-                                                            {matter.description}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                        <Briefcase className="h-4 w-4 shrink-0 text-blue-400" />
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-medium">
+                                                {item.title}
+                                            </p>
+                                            <p className="mt-1 truncate text-xs text-gray-600">
+                                                {item.type} •{' '}
+                                                {item.client}
+                                            </p>
+                                        </div>
+                                        <StatusBadge status={item.status} />
+                                        <ChevronRight className="h-4 w-4 text-gray-600" />
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <EmptyState
+                                title="No work assigned"
+                                description="New assigned work will appear here."
+                                icon={Briefcase}
+                            />
+                        )}
+                    </Card>
+                </div>
 
-                                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 flex-shrink-0">
-                                                <PriorityBadge priority={matter.priority} />
-                                                <StatusBadge status={matter.status} />
-                                                <div className="hidden sm:flex items-center gap-2">
-                                                    <span className="text-[10px] sm:text-xs text-gray-400">{matter.progress}%</span>
-                                                    <div className="w-16 sm:w-20 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                                                        <div
-                                                            className="h-full bg-gradient-to-r from-blue-400 to-blue-500 rounded-full transition-all duration-500"
-                                                            style={{ width: `${matter.progress}%` }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <button className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-blue-400/10 border border-blue-400/20 text-blue-400 text-[10px] sm:text-xs hover:bg-blue-400/20 transition-colors whitespace-nowrap">
-                                                    View Details
-                                                </button>
-                                            </div>
+                <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    <Card>
+                        <div className="mb-6 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-semibold">
+                                    Clients
+                                </h2>
+                                <p className="mt-1 text-sm text-gray-600">
+                                    Assigned businesses
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    router.push('/lawyer/clients')
+                                }
+                                className="flex items-center gap-1 text-sm font-medium text-blue-400 hover:text-blue-300"
+                            >
+                                View all
+                                <ChevronRight className="h-4 w-4" />
+                            </button>
+                        </div>
+
+                        {loading ? (
+                            <Skeleton rows={5} />
+                        ) : data?.clients?.length ? (
+                            <div className="space-y-2">
+                                {data.clients.slice(0, 8).map((client) => (
+                                    <button
+                                        key={client.id}
+                                        type="button"
+                                        onClick={() =>
+                                            openClient(client.id)
+                                        }
+                                        className="grid w-full grid-cols-[minmax(0,1fr)_70px_80px_90px_20px] items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 text-left transition hover:border-blue-400/30 hover:bg-white/[0.05]"
+                                    >
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-medium text-white">
+                                                {client.name}
+                                            </p>
+                                            <p className="mt-1 text-xs text-gray-600">
+                                                Assigned client
+                                            </p>
                                         </div>
 
-                                        {/* Tasks Summary - Responsive */}
-                                        {matter.tasks.length > 0 && (
-                                            <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-white/5">
-                                                <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-                                                    <p className="text-[10px] sm:text-xs font-medium text-gray-400">Tasks:</p>
-                                                    {matter.tasks.map((task, tIdx) => (
-                                                        <div key={task.id} className="flex items-center gap-1.5 sm:gap-2">
-                                                            <span className={`text-[10px] sm:text-xs ${task.status === 'completed' ? 'text-gray-500 line-through' : 'text-white'} truncate max-w-[80px] sm:max-w-none`}>
-                                                                {task.title}
-                                                            </span>
-                                                            <TaskStatusBadge status={task.status} />
-                                                            {tIdx < matter.tasks.length - 1 && (
-                                                                <span className="text-gray-600 hidden sm:inline">•</span>
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </motion.div>
+                                        <div className="text-center">
+                                            <p className="text-sm text-gray-300">
+                                                {client.openWork}
+                                            </p>
+                                            <p className="text-[10px] text-gray-700">
+                                                Work
+                                            </p>
+                                        </div>
+
+                                        <div className="text-center">
+                                            <p className="text-sm text-gray-300">
+                                                {client.contracts}
+                                            </p>
+                                            <p className="text-[10px] text-gray-700">
+                                                Contracts
+                                            </p>
+                                        </div>
+
+                                        <div className="text-center text-xs capitalize text-gray-500">
+                                            {client.status}
+                                        </div>
+
+                                        <ChevronRight className="h-4 w-4 text-gray-600" />
+                                    </button>
                                 ))}
-
-                                {filteredMatters.length === 0 && (
-                                    <div className="text-center py-8 sm:py-12">
-                                        <Briefcase className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 text-gray-600" />
-                                        <p className="text-xs sm:text-sm text-gray-500">No matters found matching your filters</p>
-                                    </div>
-                                )}
                             </div>
-                        </Card>
-                    </motion.div>
+                        ) : (
+                            <EmptyState
+                                title="No clients yet"
+                                description="Assigned clients will appear here."
+                                icon={Users}
+                            />
+                        )}
+                    </Card>
 
-                    {/* TWO COLUMN LAYOUT */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-                        {/* RECENT ACTIVITY */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.4, delay: 0.5 }}
-                        >
-                            <Card>
-                                <SectionTitle>Recent Activity</SectionTitle>
-                                <div className="space-y-3 sm:space-y-4">
-                                    {recentActivities.map((activity, idx) => {
-                                        const Icon = activity.icon
-                                        return (
-                                            <motion.div
-                                                key={activity.id}
-                                                initial={{ opacity: 0, x: -10 }}
-                                                animate={{ opacity: 1, x: 0 }}
-                                                transition={{ duration: 0.3, delay: 0.55 + idx * 0.05 }}
-                                                className="flex items-start gap-2 sm:gap-3 p-2 sm:p-3 rounded-lg bg-white/5 border border-white/5 hover:border-blue-400/30 transition-colors"
-                                            >
-                                                <div className="mt-0.5 p-1.5 sm:p-2 rounded-lg bg-blue-400/10 border border-blue-400/20 flex-shrink-0">
-                                                    <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400" />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-xs sm:text-sm text-white truncate">
-                                                        {activity.action}
-                                                    </p>
-                                                    <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 truncate">
-                                                        {activity.matter} • {activity.timestamp}
-                                                    </p>
-                                                </div>
-                                            </motion.div>
-                                        )
-                                    })}
-                                </div>
-                            </Card>
-                        </motion.div>
+                    <Card>
+                        <div className="mb-6 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-semibold">
+                                    Contract Activity
+                                </h2>
+                                <p className="mt-1 text-sm text-gray-600">
+                                    Latest assigned contracts
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    router.push('/lawyer/contracts')
+                                }
+                                className="text-xs text-blue-400 hover:text-blue-300"
+                            >
+                                View all
+                            </button>
+                        </div>
 
-                        {/* CLIENT INTERACTIONS */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.4, delay: 0.55 }}
-                        >
-                            <Card>
-                                <SectionTitle>Client Interactions</SectionTitle>
-                                <div className="space-y-3 sm:space-y-4">
-                                    {clientInteractions.map((interaction, idx) => (
-                                        <motion.div
-                                            key={interaction.id}
-                                            initial={{ opacity: 0, x: -10 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            transition={{ duration: 0.3, delay: 0.6 + idx * 0.05 }}
-                                            className="p-2 sm:p-3 rounded-lg bg-white/5 border border-white/5 hover:border-blue-400/30 transition-colors"
+                        {loading ? (
+                            <Skeleton rows={5} />
+                        ) : data?.contracts?.length ? (
+                            <div className="space-y-2">
+                                {data.contracts
+                                    .slice(0, 6)
+                                    .map((contract) => (
+                                        <button
+                                            key={contract.id}
+                                            type="button"
+                                            onClick={() =>
+                                                openContract(
+                                                    contract.id
+                                                )
+                                            }
+                                            className="flex w-full items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.05]"
                                         >
-                                            <div className="flex flex-wrap items-start justify-between gap-1 sm:gap-2 mb-1.5 sm:mb-2">
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="text-xs sm:text-sm font-medium text-white truncate">
-                                                        {interaction.client}
-                                                    </p>
-                                                    <p className="text-[10px] sm:text-xs text-gray-500">
-                                                        {interaction.type.charAt(0).toUpperCase() + interaction.type.slice(1)}
-                                                    </p>
-                                                </div>
-                                                <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded whitespace-nowrap ${interaction.status === 'scheduled'
-                                                        ? 'bg-blue-400/10 text-blue-400 border border-blue-400/20'
-                                                        : 'bg-green-500/10 text-green-400 border border-green-400/20'
-                                                    }`}>
-                                                    {interaction.status}
-                                                </span>
+                                            <FileText className="h-4 w-4 shrink-0 text-blue-400" />
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-sm font-medium">
+                                                    {contract.title}
+                                                </p>
+                                                <p className="mt-1 truncate text-xs text-gray-600">
+                                                    {contract.client}
+                                                </p>
                                             </div>
-                                            <p className="text-[10px] sm:text-xs text-gray-400 truncate">{interaction.summary}</p>
-                                            <p className="text-[10px] sm:text-xs text-gray-600 mt-1 sm:mt-2">{interaction.date}</p>
-                                        </motion.div>
+                                            <StatusBadge
+                                                status={
+                                                    contract.status
+                                                }
+                                            />
+                                            <ChevronRight className="h-4 w-4 text-gray-600" />
+                                        </button>
                                     ))}
-                                </div>
-                            </Card>
-                        </motion.div>
+                            </div>
+                        ) : (
+                            <EmptyState
+                                title="No contracts"
+                                description="Your contract list will appear here."
+                                icon={FileText}
+                            />
+                        )}
+                    </Card>
+                </div>
+
+                <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    <Card>
+                        <div className="mb-6 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-semibold">
+                                    Compliance Deadlines
+                                </h2>
+                                <p className="mt-1 text-sm text-gray-600">
+                                    Assigned compliance items
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    router.push('/lawyer/compliance')
+                                }
+                                className="text-xs text-blue-400 hover:text-blue-300"
+                            >
+                                View all
+                            </button>
+                        </div>
+
+                        {loading ? (
+                            <Skeleton rows={5} />
+                        ) : data?.compliance?.length ? (
+                            <div className="space-y-2">
+                                {data.compliance
+                                    .slice(0, 6)
+                                    .map((item) => (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            onClick={() =>
+                                                openCompliance(
+                                                    item.id
+                                                )
+                                            }
+                                            className="flex w-full items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.05]"
+                                        >
+                                            <Shield className="h-4 w-4 shrink-0 text-amber-400" />
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-sm font-medium">
+                                                    {item.name}
+                                                </p>
+                                                <p className="mt-1 text-xs text-gray-600">
+                                                    {item.client}
+                                                    {item.dueDate
+                                                        ? ` • Due ${formatDate(
+                                                            item.dueDate
+                                                        )}`
+                                                        : ''}
+                                                </p>
+                                            </div>
+                                            <PriorityBadge
+                                                priority={item.priority}
+                                            />
+                                            <StatusBadge
+                                                status={item.status}
+                                            />
+                                            <ChevronRight className="h-4 w-4 text-gray-600" />
+                                        </button>
+                                    ))}
+                            </div>
+                        ) : (
+                            <EmptyState
+                                title="No compliance items"
+                                description="No compliance items are assigned."
+                                icon={Shield}
+                            />
+                        )}
+                    </Card>
+
+                    <Card>
+                        <div className="mb-6 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-semibold">
+                                    Recent Documents
+                                </h2>
+                                <p className="mt-1 text-sm text-gray-600">
+                                    Latest client documents
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    router.push('/lawyer/documents')
+                                }
+                                className="text-xs text-blue-400 hover:text-blue-300"
+                            >
+                                View all
+                            </button>
+                        </div>
+
+                        {loading ? (
+                            <Skeleton rows={5} />
+                        ) : data?.documents?.length ? (
+                            <div className="space-y-2">
+                                {data.documents
+                                    .slice(0, 6)
+                                    .map((document) => (
+                                        <button
+                                            key={document.id}
+                                            type="button"
+                                            onClick={() =>
+                                                openDocument(
+                                                    document.id
+                                                )
+                                            }
+                                            className="flex w-full items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.05]"
+                                        >
+                                            <FileText className="h-4 w-4 shrink-0 text-blue-400" />
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-sm font-medium">
+                                                    {document.name}
+                                                </p>
+                                                <p className="mt-1 truncate text-xs text-gray-600">
+                                                    {document.client}
+                                                    {document.createdAt
+                                                        ? ` • ${formatDate(
+                                                            document.createdAt
+                                                        )}`
+                                                        : ''}
+                                                </p>
+                                            </div>
+                                            <span className="text-[10px] capitalize text-gray-600">
+                                                {document.category ||
+                                                    'document'}
+                                            </span>
+                                            <ChevronRight className="h-4 w-4 text-gray-600" />
+                                        </button>
+                                    ))}
+                            </div>
+                        ) : (
+                            <EmptyState
+                                title="No documents"
+                                description="Your recent documents will appear here."
+                                icon={FileText}
+                            />
+                        )}
+                    </Card>
+                </div>
+
+                <Card>
+                    <div className="mb-6 flex items-center justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold">
+                                Quick Actions
+                            </h2>
+                            <p className="mt-1 text-sm text-gray-600">
+                                Jump directly into your workspace
+                            </p>
+                        </div>
                     </div>
 
-                    {/* QUICK ACTIONS */}
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.4, delay: 0.65 }}
-                    >
-                        <SectionTitle>Quick Actions</SectionTitle>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
-                            {[
-                                { label: 'New Case', icon: Briefcase },
-                                { label: 'Draft Document', icon: FileText },
-                                { label: 'Schedule Meeting', icon: Calendar },
-                                { label: 'Add Note', icon: MessageCircle },
-                                { label: 'Review Case', icon: Eye },
-                                { label: 'Generate Report', icon: PieChart },
-                            ].map((action, idx) => {
-                                const Icon = action.icon
-                                return (
-                                    <motion.button
-                                        key={idx}
-                                        whileHover={{ scale: 1.05, borderColor: 'rgba(59, 130, 246, 0.5)' }}
-                                        whileTap={{ scale: 0.95 }}
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ duration: 0.3, delay: 0.67 + idx * 0.02 }}
-                                        className="p-3 sm:p-4 rounded-xl border border-white/8 bg-black/40 backdrop-blur-sm hover:bg-black/50 transition-all duration-300 group"
-                                    >
-                                        <Icon className="w-4 h-4 sm:w-5 sm:h-5 mx-auto mb-1.5 sm:mb-2 text-blue-400 group-hover:scale-110 transition-transform" />
-                                        <p className="text-[10px] sm:text-xs font-medium text-center text-white line-clamp-2">
-                                            {action.label}
-                                        </p>
-                                    </motion.button>
-                                )
-                            })}
-                        </div>
-                    </motion.div>
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+                        {[
+                            {
+                                label: 'Clients',
+                                icon: Users,
+                                href: '/lawyer/clients',
+                            },
+                            {
+                                label: 'Contracts',
+                                icon: FileText,
+                                href: '/lawyer/contracts',
+                            },
+                            {
+                                label: 'Documents',
+                                icon: Upload,
+                                href: '/lawyer/documents',
+                            },
+                            {
+                                label: 'My Work',
+                                icon: CheckCircle2,
+                                href: '/lawyer/work',
+                            },
+                            {
+                                label: 'Compliance',
+                                icon: Shield,
+                                href: '/lawyer/compliance',
+                            },
+                            {
+                                label: 'Messages',
+                                icon: MessageCircle,
+                                href: '/lawyer/messages',
+                            },
+                        ].map((action) => {
+                            const Icon = action.icon
+
+                            return (
+                                <motion.button
+                                    key={action.label}
+                                    type="button"
+                                    whileHover={{ scale: 1.03 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() =>
+                                        router.push(
+                                            action.href
+                                        )
+                                    }
+                                    className="rounded-xl border border-white/[0.06] bg-black/40 p-4 transition hover:border-blue-400/30 hover:bg-white/[0.04]"
+                                >
+                                    <Icon className="mx-auto mb-2 h-5 w-5 text-blue-400" />
+                                    <p className="text-center text-xs font-medium text-white">
+                                        {action.label}
+                                    </p>
+                                </motion.button>
+                            )
+                        })}
+                    </div>
+                </Card>
+
+                <div className="mt-6 text-center text-xs text-gray-700">
+                    Live data source: {API_BASE}
                 </div>
-            </div>
+            </main>
         </div>
     )
 }

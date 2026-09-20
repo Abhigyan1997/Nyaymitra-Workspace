@@ -44,52 +44,59 @@ interface User {
 
 const navItems = [
     {
-        label: 'Dashboard',
+        label: 'Overview',
         icon: BarChart3,
         href: '/lawyer-dashboard',
         badge: null,
-        description: 'Overview'
+        // description: 'Overview'
     },
     {
-        label: 'My Matters',
+        label: 'My Work',
         icon: Briefcase,
-        href: '/lawyer-dashboard/matters',
-        badge: '14',
-        description: 'Active cases'
+        href: '/lawyer-dashboard/work ',
+        // badge: '14',
+        // description: 'Active cases'
     },
     {
         label: 'Documents',
         icon: FileText,
         href: '/lawyer-dashboard/documents',
         badge: null,
-        description: 'Case files'
+        // description: 'Case files'
     },
     {
         label: 'Clients',
         icon: Users,
         href: '/lawyer-dashboard/clients',
         badge: null,
-        description: 'Client management'
+        //description: 'Client management'
     },
     {
         label: 'Contracts',
         icon: FileCheck,
         href: '/lawyer-dashboard/contracts',
-        badge: '4',
-        description: 'Legal agreements'
+        // badge: '4',
+        //description: 'Legal agreements'
     },
     {
-        label: 'Communications',
-        icon: MessageCircle,
-        href: '/lawyer-dashboard/communications',
-        badge: '6',
-        description: 'Messages & updates'
+        label: 'Compliance',
+        icon: FileCheck,
+        href: '/lawyer-dashboard/compliance',
+        // badge: '4',
+        //description: 'Legal compliance'
+    },
+    {
+        label: 'Support',
+        icon: HelpCircle,
+        href: '/lawyer-dashboard/support',
+        badge: null,
+        //description: 'Help & support'
     },
 ]
 
 const bottomItems = [
     { label: 'Settings', icon: Settings, href: '/lawyer-dashboard/settings' },
-    { label: 'Profile', icon: User, href: '/lawyer-dashboard/settings?tab=profile' },
+    // { label: 'Profile', icon: User, href: '/lawyer-dashboard/settings?tab=profile' },
     { label: 'Logout', icon: LogOut, href: '/logout' },
 ]
 
@@ -201,26 +208,21 @@ export function LawyerSidebar({ onMenuClick, isMobileOpen, onClose }: LawyerSide
                         <Link
                             href={item.href}
                             className={`flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg transition-all duration-200 group ${isActive(item.href)
-                                    ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20'
-                                    : 'text-sidebar-foreground hover:bg-sidebar-accent/20'
+                                ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20'
+                                : 'text-sidebar-foreground hover:bg-sidebar-accent/20'
                                 }`}
                         >
                             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                                 <item.icon
                                     className={`w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 ${isActive(item.href)
-                                            ? 'text-sidebar-primary-foreground'
-                                            : 'text-muted-foreground group-hover:text-sidebar-foreground'
+                                        ? 'text-sidebar-primary-foreground'
+                                        : 'text-muted-foreground group-hover:text-sidebar-foreground'
                                         }`}
                                 />
                                 <div className="min-w-0 flex-1">
                                     <span className="font-semibold text-xs sm:text-sm block truncate">
                                         {item.label}
                                     </span>
-                                    {item.description && (
-                                        <span className="text-[8px] sm:text-[10px] text-muted-foreground block truncate">
-                                            {item.description}
-                                        </span>
-                                    )}
                                 </div>
                             </div>
                             {item.badge && (
@@ -228,11 +230,11 @@ export function LawyerSidebar({ onMenuClick, isMobileOpen, onClose }: LawyerSide
                                     initial={{ scale: 0 }}
                                     animate={{ scale: 1 }}
                                     className={`text-[10px] sm:text-xs font-bold px-1.5 sm:px-2 py-0.5 rounded-full flex-shrink-0 ${isActive(item.href)
-                                            ? 'bg-sidebar-primary-foreground text-sidebar-primary'
-                                            : 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                        ? 'bg-sidebar-primary-foreground text-sidebar-primary'
+                                        : 'bg-sidebar-accent text-sidebar-accent-foreground'
                                         }`}
                                 >
-                                    {item.badge}
+                                    {/* {item.badge} */}
                                 </motion.span>
                             )}
                         </Link>
