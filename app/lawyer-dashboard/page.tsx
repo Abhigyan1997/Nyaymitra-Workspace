@@ -21,7 +21,7 @@ import {
 
 const API_BASE =
     process.env.NEXT_PUBLIC_API_URL ||
-    'https://nyaymitra-backend-production.up.railway.app/api/v1'
+    'http://localhost:5000/api/v1'
 
 async function apiFetch<T>(path: string, token: string): Promise<T> {
     const response = await fetch(`${API_BASE}${path}`, {
@@ -323,7 +323,7 @@ export default function LawyerDashboardPage() {
 
             const [
                 clientsResponse,
-                // workResponse,
+                workResponse,
                 contractsResponse,
                 complianceResponse,
                 documentsResponse,
@@ -336,7 +336,7 @@ export default function LawyerDashboardPage() {
             ])
 
             const rawClients = getArray<any>(clientsResponse)
-            // const rawWork = getArray<any>(workResponse)
+            const rawWork = getArray<any>(workResponse)
             const rawContracts = getArray<any>(contractsResponse)
             const rawCompliance = getArray<any>(complianceResponse)
             const rawDocuments = getArray<any>(documentsResponse)
@@ -387,19 +387,19 @@ export default function LawyerDashboardPage() {
                 }
             })
 
-            // const work: WorkItem[] = rawWork.map((item: any) => ({
-            //     id: getId(item),
-            //     title: item?.title || 'Work item',
-            //     type:
-            //         item?.workType ||
-            //         item?.sourceType ||
-            //         'Task',
-            //     client: getBusinessName(item),
-            //     dueDate: item?.dueDate,
-            //     status: item?.status,
-            //     priority: item?.priority,
-            //     description: item?.description,
-            // }))
+            const work: WorkItem[] = rawWork.map((item: any) => ({
+                id: getId(item),
+                title: item?.title || 'Work item',
+                type:
+                    item?.workType ||
+                    item?.sourceType ||
+                    'Task',
+                client: getBusinessName(item),
+                dueDate: item?.dueDate,
+                status: item?.status,
+                priority: item?.priority,
+                description: item?.description,
+            }))
 
             const contracts: Contract[] = rawContracts.map(
                 (item: any) => ({

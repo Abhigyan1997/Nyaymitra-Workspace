@@ -229,10 +229,10 @@ export function LawyerSidebar({ onMenuClick, isMobileOpen, onClose }: LawyerSide
                                 <motion.span
                                     initial={{ scale: 0 }}
                                     animate={{ scale: 1 }}
-                                    className={`text-[10px] sm:text-xs font-bold px-1.5 sm:px-2 py-0.5 rounded-full flex-shrink-0 ${isActive(item.href)
-                                        ? 'bg-sidebar-primary-foreground text-sidebar-primary'
-                                        : 'bg-sidebar-accent text-sidebar-accent-foreground'
-                                        }`}
+                                // className={`text-[10px] sm:text-xs font-bold px-1.5 sm:px-2 py-0.5 rounded-full flex-shrink-0 ${isActive(item.href)
+                                //     ? 'bg-sidebar-primary-foreground text-sidebar-primary'
+                                //     : 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                //     }`}
                                 >
                                     {/* {item.badge} */}
                                 </motion.span>
