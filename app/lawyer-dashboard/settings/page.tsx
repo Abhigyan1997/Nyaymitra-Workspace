@@ -94,7 +94,7 @@ const INITIAL_PROFILE: LawyerProfile = {
         'Technology Law',
     ],
     profilePhoto:
-        'https://res.cloudinary.com/dgkefbwq4/image/upload/v1770397720/nyaymitra-profiles/mayon2hnkdnynsq89d37.png',
+        'https://res.cloudinary.com/dgkefbwq4/image/upload/v1770397720/nyaymitra-profiles/mayon2hnkdnynsq89d377.png',
     verificationStatus: 'Verified',
 }
 
