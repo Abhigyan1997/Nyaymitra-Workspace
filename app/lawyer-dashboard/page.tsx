@@ -21,7 +21,7 @@ import {
 
 const API_BASE =
     process.env.NEXT_PUBLIC_API_URL ||
-    'http://localhost:5000/api/v1'
+    'https://nyaymitra-backend-production.up.railway.app/api/v1'
 
 async function apiFetch<T>(path: string, token: string): Promise<T> {
     const response = await fetch(`${API_BASE}${path}`, {
@@ -329,7 +329,7 @@ export default function LawyerDashboardPage() {
                 documentsResponse,
             ] = await Promise.all([
                 apiFetch<any>('/lawyer/clients', token),
-                // apiFetch<any>('/lawyer/work?page=1&limit=20', token),
+                apiFetch<any>('/lawyer-works/work?page=1&limit=20', token),
                 apiFetch<any>('/lawyer/contracts?page=1&limit=20', token),
                 apiFetch<any>('/lawyer/compliance?page=1&limit=20', token),
                 apiFetch<any>('/lawyer/documents?page=1&limit=20', token),
