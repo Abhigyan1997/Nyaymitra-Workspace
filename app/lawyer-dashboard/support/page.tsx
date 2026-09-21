@@ -1,18 +1,15 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
     AlertCircle,
     ArrowLeft,
-    ArrowRight,
     CheckCircle2,
     ChevronRight,
     Clock3,
     FileText,
     HelpCircle,
-    History,
-    Mail,
     MessageCircle,
     MoreHorizontal,
     Plus,
@@ -21,25 +18,30 @@ import {
     ShieldCheck,
     UserRound,
     X,
+    type LucideIcon,
 } from 'lucide-react'
 
 type TicketStatus =
     | 'Open'
     | 'In Progress'
-    | 'Waiting for Response'
     | 'Resolved'
+    | 'Closed'
 
 type TicketPriority =
     | 'High'
     | 'Medium'
     | 'Low'
+    | 'Urgent'
 
 type TicketCategory =
     | 'Technical'
+    | 'Account'
+    | 'Billing'
+    | 'Payment'
     | 'Client Access'
     | 'Contract'
     | 'Document'
-    | 'Billing'
+    | 'Compliance'
     | 'Other'
 
 interface Message {
@@ -63,120 +65,287 @@ interface SupportTicket {
     messages: Message[]
 }
 
-const SUPPORT_TICKETS: SupportTicket[] = [
-    {
-        id: 'ticket-001',
-        ticketNumber: 'NM-1042',
-        subject: 'Unable to access client document',
-        category: 'Document',
-        priority: 'High',
-        status: 'In Progress',
-        createdAt: '18 Sep 2026',
-        updatedAt: 'Today, 10:12 AM',
-        description:
-            'The latest contract document shared by the client is visible in the workspace, but the preview is not loading.',
-        messages: [
-            {
-                id: 'm1',
-                sender: 'Bharat Rajak',
-                role: 'Lawyer',
-                message:
-                    'The latest contract document is visible but the preview does not load.',
-                timestamp: 'Today, 09:42 AM',
-            },
-            {
-                id: 'm2',
-                sender: 'NyayMitra Support',
-                role: 'Support',
-                message:
-                    'Thanks. We are checking the document access and preview service.',
-                timestamp: 'Today, 10:12 AM',
-            },
-        ],
-    },
-    {
-        id: 'ticket-002',
-        ticketNumber: 'NM-1037',
-        subject: 'Client workspace access',
-        category: 'Client Access',
-        priority: 'Medium',
-        status: 'Waiting for Response',
-        createdAt: '17 Sep 2026',
-        updatedAt: '17 Sep 2026',
-        description:
-            'Request regarding access permissions for a newly assigned client workspace.',
-        messages: [
-            {
-                id: 'm3',
-                sender: 'Bharat Rajak',
-                role: 'Lawyer',
-                message:
-                    'I have been assigned to the client but cannot see the shared workspace.',
-                timestamp: '17 Sep 2026, 03:05 PM',
-            },
-            {
-                id: 'm4',
-                sender: 'NyayMitra Support',
-                role: 'Support',
-                message:
-                    'Please confirm the client company name so we can verify the assignment.',
-                timestamp: '17 Sep 2026, 03:24 PM',
-            },
-        ],
-    },
-    {
-        id: 'ticket-003',
-        ticketNumber: 'NM-1028',
-        subject: 'Contract status not updating',
-        category: 'Contract',
-        priority: 'Medium',
-        status: 'Open',
-        createdAt: '16 Sep 2026',
-        updatedAt: '16 Sep 2026',
-        description:
-            'A contract remains in review even after the latest review action was submitted.',
-        messages: [
-            {
-                id: 'm5',
-                sender: 'Bharat Rajak',
-                role: 'Lawyer',
-                message:
-                    'The contract status appears unchanged after submitting my review.',
-                timestamp: '16 Sep 2026, 05:15 PM',
-            },
-        ],
-    },
-    {
-        id: 'ticket-004',
-        ticketNumber: 'NM-1019',
-        subject: 'How to share a document with client',
-        category: 'Document',
-        priority: 'Low',
-        status: 'Resolved',
-        createdAt: '14 Sep 2026',
-        updatedAt: '15 Sep 2026',
-        description:
-            'Question about sharing a reviewed document back with the client workspace.',
-        messages: [
-            {
-                id: 'm6',
-                sender: 'Bharat Rajak',
-                role: 'Lawyer',
-                message:
-                    'How can I share a reviewed copy with the client?',
-                timestamp: '14 Sep 2026, 11:10 AM',
-            },
-            {
-                id: 'm7',
-                sender: 'NyayMitra Support',
-                role: 'Support',
-                message:
-                    'Open the document and use the Share action from the document toolbar.',
-                timestamp: '14 Sep 2026, 11:28 AM',
-            },
-        ],
-    },
-]
+interface ApiTicket {
+    _id?: string
+    id?: string
+    ticketNumber?: string
+    subject?: string
+    category?: string
+    priority?: string
+    status?: string
+    createdAt?: string
+    updatedAt?: string
+    lastMessageAt?: string
+    description?: string
+}
+
+interface ApiMessage {
+    _id?: string
+    id?: string
+    sender?: {
+        _id?: string
+        fullName?: string
+        email?: string
+        role?: string | string[]
+    } | string
+    senderRole?: string
+    message?: string
+    createdAt?: string
+}
+
+interface ApiResponse<T = unknown> {
+    success?: boolean
+    message?: string
+    ticket?: ApiTicket
+    tickets?: ApiTicket[]
+    messages?: ApiMessage[]
+    supportMessage?: ApiMessage
+    pagination?: {
+        page: number
+        limit: number
+        total: number
+        totalPages: number
+    }
+}
+
+const API_BASE_URL =
+    'https://nyaymitra-backend-production.up.railway.app/api/v1/lawyer-works/support'
+
+const CATEGORY_OPTIONS = [
+    { value: 'technical', label: 'Technical' },
+    { value: 'account', label: 'Account' },
+    { value: 'billing', label: 'Billing' },
+    { value: 'payment', label: 'Payment' },
+    { value: 'client', label: 'Client Access' },
+    { value: 'contract', label: 'Contract' },
+    { value: 'document', label: 'Document' },
+    { value: 'compliance', label: 'Compliance' },
+    { value: 'other', label: 'Other' },
+] as const
+
+const STATUS_OPTIONS = [
+    { value: 'open', label: 'Open' },
+    { value: 'in-progress', label: 'In Progress' },
+    { value: 'resolved', label: 'Resolved' },
+    { value: 'closed', label: 'Closed' },
+] as const
+
+const PRIORITY_OPTIONS = [
+    { value: 'low', label: 'Low' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'high', label: 'High' },
+    { value: 'urgent', label: 'Urgent' },
+] as const
+
+function getToken() {
+    if (typeof window === 'undefined') return ''
+
+    return localStorage.getItem('token') || ''
+}
+
+async function apiRequest<T>(
+    url: string,
+    options: RequestInit = {}
+): Promise<T> {
+    const token = getToken()
+
+    const headers = new Headers(options.headers)
+
+    if (!headers.has('Accept')) {
+        headers.set('Accept', 'application/json')
+    }
+
+    if (options.body && !headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json')
+    }
+
+    if (token) {
+        headers.set('Authorization', `Bearer ${token}`)
+    }
+
+    const response = await fetch(url, {
+        ...options,
+        headers,
+        cache: 'no-store',
+    })
+
+    const text = await response.text()
+
+    let data: any = {}
+
+    try {
+        data = text ? JSON.parse(text) : {}
+    } catch {
+        throw new Error(
+            `Server returned an invalid response (${response.status}).`
+        )
+    }
+
+    if (!response.ok) {
+        throw new Error(
+            data?.message ||
+            `Request failed with status ${response.status}`
+        )
+    }
+
+    return data as T
+}
+
+function formatDate(value?: string) {
+    if (!value) return '—'
+
+    const date = new Date(value)
+
+    if (Number.isNaN(date.getTime())) {
+        return value
+    }
+
+    return new Intl.DateTimeFormat('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+    }).format(date)
+}
+
+function formatDateTime(value?: string) {
+    if (!value) return '—'
+
+    const date = new Date(value)
+
+    if (Number.isNaN(date.getTime())) {
+        return value
+    }
+
+    return new Intl.DateTimeFormat('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    }).format(date)
+}
+
+
+function normalizeStatus(value?: string): TicketStatus {
+    switch (value) {
+        case 'in-progress':
+            return 'In Progress'
+        case 'resolved':
+            return 'Resolved'
+        case 'closed':
+            return 'Closed'
+        case 'open':
+        default:
+            return 'Open'
+    }
+}
+
+function normalizePriority(value?: string): TicketPriority {
+    switch (value) {
+        case 'urgent':
+            return 'Urgent'
+        case 'high':
+            return 'High'
+        case 'low':
+            return 'Low'
+        case 'medium':
+        default:
+            return 'Medium'
+    }
+}
+
+function normalizeCategory(value?: string): TicketCategory {
+    switch (value) {
+        case 'technical':
+            return 'Technical'
+        case 'account':
+            return 'Account'
+        case 'billing':
+            return 'Billing'
+        case 'payment':
+            return 'Payment'
+        case 'client':
+            return 'Client Access'
+        case 'contract':
+            return 'Contract'
+        case 'document':
+            return 'Document'
+        case 'compliance':
+            return 'Compliance'
+        case 'other':
+        default:
+            return 'Other'
+    }
+}
+
+function normalizeMessage(message: ApiMessage): Message {
+    const senderObject =
+        message.sender &&
+            typeof message.sender === 'object'
+            ? message.sender
+            : null
+
+    const sender =
+        senderObject?.fullName ||
+        senderObject?.email ||
+        (typeof message.sender === 'string'
+            ? message.sender
+            : 'NyayMitra Support')
+
+    const role =
+        message.senderRole === 'lawyer'
+            ? 'Lawyer'
+            : 'Support'
+
+    return {
+        id:
+            message._id ||
+            message.id ||
+            `${Date.now()}-${Math.random()}`,
+        sender,
+        role,
+        message: message.message || '',
+        timestamp: formatDateTime(message.createdAt),
+    }
+}
+
+function normalizeTicket(
+    ticket: ApiTicket,
+    messages: ApiMessage[] = []
+): SupportTicket {
+    return {
+        id: ticket._id || ticket.id || '',
+        ticketNumber:
+            ticket.ticketNumber ||
+            (ticket._id
+                ? `NM-${ticket._id.slice(-6).toUpperCase()}`
+                : 'N/A'),
+        subject: ticket.subject || 'Untitled support request',
+        category: normalizeCategory(ticket.category),
+        priority: normalizePriority(ticket.priority),
+        status: normalizeStatus(ticket.status),
+        createdAt: formatDate(ticket.createdAt),
+        updatedAt: formatDateTime(
+            ticket.lastMessageAt || ticket.updatedAt
+        ),
+        description: ticket.description || '',
+        messages: messages.map(normalizeMessage),
+    }
+}
+
+function statusToApi(status: TicketStatus) {
+    switch (status) {
+        case 'In Progress':
+            return 'in-progress'
+        case 'Resolved':
+            return 'resolved'
+        case 'Closed':
+            return 'closed'
+        case 'Open':
+        default:
+            return 'open'
+    }
+}
 
 function StatusBadge({
     status,
@@ -188,10 +357,10 @@ function StatusBadge({
             'border-blue-500/20 bg-blue-500/10 text-blue-400',
         'In Progress':
             'border-violet-500/20 bg-violet-500/10 text-violet-400',
-        'Waiting for Response':
-            'border-amber-500/20 bg-amber-500/10 text-amber-400',
         Resolved:
             'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
+        Closed:
+            'border-zinc-500/20 bg-zinc-500/10 text-zinc-400',
     }
 
     return (
@@ -211,6 +380,8 @@ function PriorityBadge({
     const styles: Record<TicketPriority, string> = {
         High:
             'border-red-500/20 bg-red-500/10 text-red-400',
+        Urgent:
+            'border-red-500/30 bg-red-500/15 text-red-300',
         Medium:
             'border-amber-500/20 bg-amber-500/10 text-amber-400',
         Low:
@@ -231,7 +402,7 @@ function SummaryCard({
     value,
     label,
 }: {
-    icon: React.ComponentType<{ className?: string }>
+    icon: LucideIcon
     value: number
     label: string
 }) {
@@ -256,29 +427,133 @@ function SummaryCard({
 }
 
 export default function LawyerSupportPage() {
-    const [tickets] =
-        useState<SupportTicket[]>(
-            SUPPORT_TICKETS
-        )
-
+    const [tickets, setTickets] = useState<SupportTicket[]>([])
     const [selectedTicketId, setSelectedTicketId] =
-        useState(
-            SUPPORT_TICKETS[0]?.id || ''
-        )
-
-    const [search, setSearch] =
         useState('')
 
+    const [search, setSearch] = useState('')
+
     const [statusFilter, setStatusFilter] =
-        useState<
-            'All' | TicketStatus
-        >('All')
+        useState<'All' | TicketStatus>('All')
 
     const [mobileDetailOpen, setMobileDetailOpen] =
         useState(false)
 
     const [newTicketOpen, setNewTicketOpen] =
         useState(false)
+
+    const [loading, setLoading] = useState(true)
+    const [detailLoading, setDetailLoading] =
+        useState(false)
+    const [submittingTicket, setSubmittingTicket] =
+        useState(false)
+    const [replyLoading, setReplyLoading] =
+        useState(false)
+    const [statusLoading, setStatusLoading] =
+        useState(false)
+    const [error, setError] = useState('')
+    const [actionError, setActionError] = useState('')
+
+    const [subject, setSubject] = useState('')
+    const [description, setDescription] =
+        useState('')
+    const [category, setCategory] =
+        useState('technical')
+    const [priority, setPriority] =
+        useState('medium')
+
+    const loadTickets = async () => {
+        try {
+            setLoading(true)
+            setError('')
+
+            const data = await apiRequest<ApiResponse>(
+                `${API_BASE_URL}?page=1&limit=100`
+            )
+
+            const normalizedTickets =
+                (data.tickets || []).map((ticket) =>
+                    normalizeTicket(ticket)
+                )
+
+            setTickets(normalizedTickets)
+
+            setSelectedTicketId((current) => {
+                if (
+                    current &&
+                    normalizedTickets.some(
+                        (ticket) => ticket.id === current
+                    )
+                ) {
+                    return current
+                }
+
+                return normalizedTickets[0]?.id || ''
+            })
+        } catch (err: any) {
+            console.error('Support tickets load error:', err)
+            setError(
+                err?.message ||
+                'Failed to load support requests.'
+            )
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const loadTicketDetails = async (
+        ticketId: string
+    ) => {
+        if (!ticketId) return
+
+        try {
+            setDetailLoading(true)
+            setActionError('')
+
+            const data =
+                await apiRequest<ApiResponse>(
+                    `${API_BASE_URL}/${ticketId}`
+                )
+
+            if (!data.ticket) return
+
+            const normalized =
+                normalizeTicket(
+                    data.ticket,
+                    data.messages || []
+                )
+
+            setTickets((current) =>
+                current.map((ticket) =>
+                    ticket.id === normalized.id
+                        ? normalized
+                        : ticket
+                )
+            )
+        } catch (err: any) {
+            console.error(
+                'Support ticket detail error:',
+                err
+            )
+
+            setActionError(
+                err?.message ||
+                'Failed to load ticket details.'
+            )
+        } finally {
+            setDetailLoading(false)
+        }
+    }
+
+    useEffect(() => {
+        loadTickets()
+    }, [])
+
+    useEffect(() => {
+        if (selectedTicketId) {
+            loadTicketDetails(selectedTicketId)
+        }
+    }, [selectedTicketId])
 
     const filteredTickets = useMemo(() => {
         const term =
@@ -315,8 +590,7 @@ export default function LawyerSupportPage() {
     const selectedTicket =
         tickets.find(
             (ticket) =>
-                ticket.id ===
-                selectedTicketId
+                ticket.id === selectedTicketId
         ) || null
 
     const summary = useMemo(
@@ -328,8 +602,7 @@ export default function LawyerSupportPage() {
             ).length,
             inProgress: tickets.filter(
                 (ticket) =>
-                    ticket.status ===
-                    'In Progress'
+                    ticket.status === 'In Progress'
             ).length,
             resolved: tickets.filter(
                 (ticket) =>
@@ -338,6 +611,147 @@ export default function LawyerSupportPage() {
         }),
         [tickets]
     )
+
+    const handleCreateTicket = async () => {
+        if (!subject.trim()) {
+            setActionError('Subject is required.')
+            return
+        }
+
+        if (!description.trim()) {
+            setActionError(
+                'Please describe the issue.'
+            )
+            return
+        }
+
+        try {
+            setSubmittingTicket(true)
+            setActionError('')
+
+            const data =
+                await apiRequest<ApiResponse>(
+                    API_BASE_URL,
+                    {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            subject: subject.trim(),
+                            description:
+                                description.trim(),
+                            category,
+                            priority,
+                        }),
+                    }
+                )
+
+            const createdId =
+                data.ticket?._id ||
+                data.ticket?.id ||
+                ''
+
+            setSubject('')
+            setDescription('')
+            setCategory('technical')
+            setPriority('medium')
+            setNewTicketOpen(false)
+
+            await loadTickets()
+
+            if (createdId) {
+                setSelectedTicketId(createdId)
+                setMobileDetailOpen(true)
+                await loadTicketDetails(createdId)
+            }
+        } catch (err: any) {
+            console.error(
+                'Create support ticket error:',
+                err
+            )
+
+            setActionError(
+                err?.message ||
+                'Failed to create support request.'
+            )
+        } finally {
+            setSubmittingTicket(false)
+        }
+    }
+
+    const handleReply = async (message: string) => {
+        if (!selectedTicketId || !message.trim()) {
+            return
+        }
+
+        try {
+            setReplyLoading(true)
+            setActionError('')
+
+            await apiRequest<ApiResponse>(
+                `${API_BASE_URL}/${selectedTicketId}/reply`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        message: message.trim(),
+                    }),
+                }
+            )
+
+            await loadTickets()
+            await loadTicketDetails(
+                selectedTicketId
+            )
+        } catch (err: any) {
+            console.error(
+                'Support reply error:',
+                err
+            )
+
+            setActionError(
+                err?.message ||
+                'Failed to send reply.'
+            )
+        } finally {
+            setReplyLoading(false)
+        }
+    }
+
+    const handleStatusChange = async (
+        status: TicketStatus
+    ) => {
+        if (!selectedTicketId) return
+
+        try {
+            setStatusLoading(true)
+            setActionError('')
+
+            await apiRequest<ApiResponse>(
+                `${API_BASE_URL}/${selectedTicketId}/status`,
+                {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                        status: statusToApi(status),
+                    }),
+                }
+            )
+
+            await loadTickets()
+            await loadTicketDetails(
+                selectedTicketId
+            )
+        } catch (err: any) {
+            console.error(
+                'Support status update error:',
+                err
+            )
+
+            setActionError(
+                err?.message ||
+                'Failed to update ticket status.'
+            )
+        } finally {
+            setStatusLoading(false)
+        }
+    }
 
     return (
         <div className="min-h-screen bg-[#06080b] text-white">
@@ -373,9 +787,10 @@ export default function LawyerSupportPage() {
                         </div>
 
                         <button
-                            onClick={() =>
+                            onClick={() => {
+                                setActionError('')
                                 setNewTicketOpen(true)
-                            }
+                            }}
                             className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-500/10 px-4 py-2.5 text-sm font-medium text-blue-300 ring-1 ring-blue-400/20 transition hover:bg-blue-500/15"
                         >
                             <Plus className="h-4 w-4" />
@@ -384,6 +799,41 @@ export default function LawyerSupportPage() {
                     </div>
                 </div>
 
+                {/* Error */}
+                {error && (
+                    <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">
+                        <div className="flex items-center gap-2 text-xs text-red-300">
+                            <AlertCircle className="h-4 w-4 shrink-0" />
+                            {error}
+                        </div>
+
+                        <button
+                            onClick={loadTickets}
+                            className="rounded-lg border border-red-500/20 px-3 py-1.5 text-[10px] text-red-300 hover:bg-red-500/10"
+                        >
+                            Retry
+                        </button>
+                    </div>
+                )}
+
+                {actionError && !newTicketOpen && (
+                    <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+                        <div className="flex items-center gap-2 text-xs text-amber-300">
+                            <AlertCircle className="h-4 w-4 shrink-0" />
+                            {actionError}
+                        </div>
+
+                        <button
+                            onClick={() =>
+                                setActionError('')
+                            }
+                            className="rounded-lg px-2 py-1 text-zinc-500 hover:text-white"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+                )}
+
                 {/* Summary */}
                 <section className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
                     <SummaryCard
@@ -391,16 +841,19 @@ export default function LawyerSupportPage() {
                         value={summary.total}
                         label="Total Requests"
                     />
+
                     <SummaryCard
                         icon={AlertCircle}
                         value={summary.open}
                         label="Open"
                     />
+
                     <SummaryCard
                         icon={Clock3}
                         value={summary.inProgress}
                         label="In Progress"
                     />
+
                     <SummaryCard
                         icon={CheckCircle2}
                         value={summary.resolved}
@@ -413,13 +866,25 @@ export default function LawyerSupportPage() {
                     {/* Tickets */}
                     <div className="min-w-0 rounded-2xl border border-white/[0.08] bg-white/[0.02]">
                         <div className="border-b border-white/[0.06] p-4">
-                            <h2 className="text-sm font-semibold text-white">
-                                My Support Requests
-                            </h2>
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <h2 className="text-sm font-semibold text-white">
+                                        My Support Requests
+                                    </h2>
 
-                            <p className="mt-1 text-[11px] text-zinc-600">
-                                Track your open and previous requests
-                            </p>
+                                    <p className="mt-1 text-[11px] text-zinc-600">
+                                        Track your open and previous requests
+                                    </p>
+                                </div>
+
+                                <button
+                                    onClick={loadTickets}
+                                    disabled={loading}
+                                    className="rounded-lg border border-white/[0.06] px-2.5 py-1.5 text-[10px] text-zinc-500 hover:text-white disabled:opacity-50"
+                                >
+                                    Refresh
+                                </button>
+                            </div>
 
                             <div className="relative mt-4">
                                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
@@ -427,7 +892,9 @@ export default function LawyerSupportPage() {
                                 <input
                                     value={search}
                                     onChange={(e) =>
-                                        setSearch(e.target.value)
+                                        setSearch(
+                                            e.target.value
+                                        )
                                     }
                                     placeholder="Search requests..."
                                     className="w-full rounded-xl border border-white/[0.07] bg-white/[0.025] py-2.5 pl-10 pr-3 text-sm text-white outline-none placeholder:text-zinc-700 focus:border-blue-400/30"
@@ -440,8 +907,8 @@ export default function LawyerSupportPage() {
                                         'All',
                                         'Open',
                                         'In Progress',
-                                        'Waiting for Response',
                                         'Resolved',
+                                        'Closed',
                                     ] as const
                                 ).map(
                                     (status) => (
@@ -453,9 +920,9 @@ export default function LawyerSupportPage() {
                                                 )
                                             }
                                             className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[10px] ${statusFilter ===
-                                                    status
-                                                    ? 'bg-blue-400/10 text-blue-400 ring-1 ring-blue-400/20'
-                                                    : 'bg-white/[0.02] text-zinc-600 hover:text-zinc-300'
+                                                status
+                                                ? 'bg-blue-400/10 text-blue-400 ring-1 ring-blue-400/20'
+                                                : 'bg-white/[0.02] text-zinc-600 hover:text-zinc-300'
                                                 }`}
                                         >
                                             {status}
@@ -466,66 +933,107 @@ export default function LawyerSupportPage() {
                         </div>
 
                         <div className="max-h-[700px] overflow-y-auto p-2">
-                            {filteredTickets.map(
-                                (ticket) => {
-                                    const selected =
-                                        selectedTicketId ===
-                                        ticket.id
+                            {loading ? (
+                                <div className="space-y-2 p-2">
+                                    {Array.from(
+                                        { length: 4 }
+                                    ).map(
+                                        (_, index) => (
+                                            <div
+                                                key={index}
+                                                className="h-24 animate-pulse rounded-xl bg-white/[0.02]"
+                                            />
+                                        )
+                                    )}
+                                </div>
+                            ) : filteredTickets.length ===
+                                0 ? (
+                                <div className="px-5 py-16 text-center">
+                                    <MessageCircle className="mx-auto h-8 w-8 text-zinc-700" />
 
-                                    return (
-                                        <button
-                                            key={ticket.id}
-                                            onClick={() => {
-                                                setSelectedTicketId(
+                                    <p className="mt-4 text-sm text-zinc-400">
+                                        No support requests found
+                                    </p>
+
+                                    <p className="mt-1 text-xs text-zinc-700">
+                                        Create a request when you need help.
+                                    </p>
+                                </div>
+                            ) : (
+                                filteredTickets.map(
+                                    (ticket) => {
+                                        const selected =
+                                            selectedTicketId ===
+                                            ticket.id
+
+                                        return (
+                                            <button
+                                                key={
                                                     ticket.id
-                                                )
-                                                setMobileDetailOpen(
-                                                    true
-                                                )
-                                            }}
-                                            className={`mb-1 w-full rounded-xl p-3 text-left transition ${selected
+                                                }
+                                                onClick={() => {
+                                                    setSelectedTicketId(
+                                                        ticket.id
+                                                    )
+                                                    setMobileDetailOpen(
+                                                        true
+                                                    )
+                                                    setActionError(
+                                                        ''
+                                                    )
+                                                }}
+                                                className={`mb-1 w-full rounded-xl p-3 text-left transition ${selected
                                                     ? 'bg-blue-400/[0.07] ring-1 ring-blue-400/15'
                                                     : 'hover:bg-white/[0.025]'
-                                                }`}
-                                        >
-                                            <div className="flex gap-3">
-                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.025]">
-                                                    <MessageCircle className="h-4 w-4 text-blue-400" />
-                                                </div>
+                                                    }`}
+                                            >
+                                                <div className="flex gap-3">
+                                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.025]">
+                                                        <MessageCircle className="h-4 w-4 text-blue-400" />
+                                                    </div>
 
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="flex items-center justify-between gap-2">
-                                                        <p className="truncate text-sm font-medium text-white">
-                                                            {ticket.subject}
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <p className="truncate text-sm font-medium text-white">
+                                                                {
+                                                                    ticket.subject
+                                                                }
+                                                            </p>
+
+                                                            {selected && (
+                                                                <ChevronRight className="h-4 w-4 shrink-0 text-blue-400" />
+                                                            )}
+                                                        </div>
+
+                                                        <p className="mt-1 text-[10px] text-zinc-600">
+                                                            {
+                                                                ticket.ticketNumber
+                                                            }{' '}
+                                                            •{' '}
+                                                            {
+                                                                ticket.category
+                                                            }
                                                         </p>
 
-                                                        {selected && (
-                                                            <ChevronRight className="h-4 w-4 shrink-0 text-blue-400" />
-                                                        )}
-                                                    </div>
+                                                        <div className="mt-2 flex flex-wrap gap-2">
+                                                            <StatusBadge
+                                                                status={
+                                                                    ticket.status
+                                                                }
+                                                            />
 
-                                                    <p className="mt-1 text-[10px] text-zinc-600">
-                                                        {ticket.ticketNumber} •{' '}
-                                                        {ticket.category}
-                                                    </p>
-
-                                                    <div className="mt-2 flex flex-wrap gap-2">
-                                                        <StatusBadge
-                                                            status={
-                                                                ticket.status
-                                                            }
-                                                        />
-                                                        <PriorityBadge
-                                                            priority={
-                                                                ticket.priority
-                                                            }
-                                                        />
+                                                            <PriorityBadge
+                                                                priority={
+                                                                    ticket.priority
+                                                                }
+                                                            />
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        </button>
-                                    )
-                                }
+                                            </button>
+                                        )
+                                    }
+                                )
                             )}
                         </div>
                     </div>
@@ -534,6 +1042,21 @@ export default function LawyerSupportPage() {
                     <div className="hidden lg:block">
                         <SupportDetails
                             ticket={selectedTicket}
+                            loading={
+                                detailLoading
+                            }
+                            onReply={
+                                handleReply
+                            }
+                            onStatusChange={
+                                handleStatusChange
+                            }
+                            statusLoading={
+                                statusLoading
+                            }
+                            replyLoading={
+                                replyLoading
+                            }
                         />
                     </div>
                 </section>
@@ -589,6 +1112,21 @@ export default function LawyerSupportPage() {
                             <div className="p-4">
                                 <SupportDetails
                                     ticket={selectedTicket}
+                                    loading={
+                                        detailLoading
+                                    }
+                                    onReply={
+                                        handleReply
+                                    }
+                                    onStatusChange={
+                                        handleStatusChange
+                                    }
+                                    statusLoading={
+                                        statusLoading
+                                    }
+                                    replyLoading={
+                                        replyLoading
+                                    }
                                 />
                             </div>
                         </motion.div>
@@ -610,9 +1148,11 @@ export default function LawyerSupportPage() {
                                 opacity: 0,
                             }}
                             className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm"
-                            onClick={() =>
-                                setNewTicketOpen(false)
-                            }
+                            onClick={() => {
+                                if (!submittingTicket) {
+                                    setNewTicketOpen(false)
+                                }
+                            }}
                         />
 
                         <motion.div
@@ -638,6 +1178,7 @@ export default function LawyerSupportPage() {
                                     <h3 className="text-sm font-semibold">
                                         New Support Request
                                     </h3>
+
                                     <p className="mt-1 text-xs text-zinc-600">
                                         Tell the NyayMitra support team what you need.
                                     </p>
@@ -645,33 +1186,123 @@ export default function LawyerSupportPage() {
 
                                 <button
                                     onClick={() =>
-                                        setNewTicketOpen(false)
+                                        !submittingTicket &&
+                                        setNewTicketOpen(
+                                            false
+                                        )
+                                    }
+                                    disabled={
+                                        submittingTicket
                                     }
                                 >
                                     <X className="h-4 w-4 text-zinc-600" />
                                 </button>
                             </div>
 
+                            {actionError && (
+                                <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-300">
+                                    {actionError}
+                                </div>
+                            )}
+
                             <div className="mt-5 space-y-3">
                                 <input
+                                    value={subject}
+                                    onChange={(e) =>
+                                        setSubject(
+                                            e.target.value
+                                        )
+                                    }
                                     placeholder="Subject"
-                                    className="w-full rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-3 text-sm text-white outline-none placeholder:text-zinc-700"
+                                    className="w-full rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-3 text-sm text-white outline-none placeholder:text-zinc-700 focus:border-blue-400/30"
                                 />
 
+                                <div className="grid grid-cols-2 gap-3">
+                                    <select
+                                        value={category}
+                                        onChange={(e) =>
+                                            setCategory(
+                                                e.target.value
+                                            )
+                                        }
+                                        className="w-full rounded-xl border border-white/[0.07] bg-[#0b0e12] px-3 py-3 text-xs text-zinc-300 outline-none focus:border-blue-400/30"
+                                    >
+                                        {CATEGORY_OPTIONS.map(
+                                            (
+                                                option
+                                            ) => (
+                                                <option
+                                                    key={
+                                                        option.value
+                                                    }
+                                                    value={
+                                                        option.value
+                                                    }
+                                                >
+                                                    {
+                                                        option.label
+                                                    }
+                                                </option>
+                                            )
+                                        )}
+                                    </select>
+
+                                    <select
+                                        value={priority}
+                                        onChange={(e) =>
+                                            setPriority(
+                                                e.target.value
+                                            )
+                                        }
+                                        className="w-full rounded-xl border border-white/[0.07] bg-[#0b0e12] px-3 py-3 text-xs text-zinc-300 outline-none focus:border-blue-400/30"
+                                    >
+                                        {PRIORITY_OPTIONS.map(
+                                            (
+                                                option
+                                            ) => (
+                                                <option
+                                                    key={
+                                                        option.value
+                                                    }
+                                                    value={
+                                                        option.value
+                                                    }
+                                                >
+                                                    {
+                                                        option.label
+                                                    }
+                                                </option>
+                                            )
+                                        )}
+                                    </select>
+                                </div>
+
                                 <textarea
+                                    value={description}
+                                    onChange={(e) =>
+                                        setDescription(
+                                            e.target.value
+                                        )
+                                    }
                                     rows={5}
                                     placeholder="Describe your issue..."
-                                    className="w-full resize-none rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-3 text-sm text-white outline-none placeholder:text-zinc-700"
+                                    className="w-full resize-none rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-3 text-sm text-white outline-none placeholder:text-zinc-700 focus:border-blue-400/30"
                                 />
 
                                 <button
-                                    onClick={() =>
-                                        setNewTicketOpen(false)
+                                    onClick={
+                                        handleCreateTicket
                                     }
-                                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500/10 py-3 text-xs font-medium text-blue-300 ring-1 ring-blue-400/20"
+                                    disabled={
+                                        submittingTicket
+                                    }
+                                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500/10 py-3 text-xs font-medium text-blue-300 ring-1 ring-blue-400/20 transition hover:bg-blue-500/15 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     <Send className="h-4 w-4" />
-                                    Submit Request
+
+                                    {submittingTicket
+                                        ? 'Submitting...'
+                                        : 'Submit Request'}
                                 </button>
                             </div>
                         </motion.div>
@@ -684,14 +1315,40 @@ export default function LawyerSupportPage() {
 
 function SupportDetails({
     ticket,
+    loading,
+    onReply,
+    onStatusChange,
+    statusLoading,
+    replyLoading,
 }: {
     ticket: SupportTicket | null
+    loading: boolean
+    onReply: (message: string) => Promise<void>
+    onStatusChange: (
+        status: TicketStatus
+    ) => Promise<void>
+    statusLoading: boolean
+    replyLoading: boolean
 }) {
+    const [reply, setReply] = useState('')
+
+    useEffect(() => {
+        setReply('')
+    }, [ticket?.id])
+
+    const submitReply = async () => {
+        if (!reply.trim()) return
+
+        await onReply(reply)
+        setReply('')
+    }
+
     if (!ticket) {
         return (
             <div className="flex min-h-[650px] items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.02]">
                 <div className="text-center">
                     <HelpCircle className="mx-auto h-10 w-10 text-zinc-700" />
+
                     <p className="mt-4 text-sm text-zinc-400">
                         Select a support request
                     </p>
@@ -704,7 +1361,7 @@ function SupportDetails({
         <div className="space-y-5">
             <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5">
                 <div className="flex items-start justify-between gap-4">
-                    <div>
+                    <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                             <h2 className="text-xl font-semibold">
                                 {ticket.subject}
@@ -722,7 +1379,41 @@ function SupportDetails({
                         </p>
                     </div>
 
-                    <MoreHorizontal className="h-4 w-4 text-zinc-600" />
+                    <div className="flex items-center gap-2">
+                        <select
+                            value={
+                                statusToApi(
+                                    ticket.status
+                                )
+                            }
+                            onChange={(e) =>
+                                onStatusChange(
+                                    normalizeStatus(
+                                        e.target.value
+                                    )
+                                )
+                            }
+                            disabled={statusLoading}
+                            className="rounded-lg border border-white/[0.07] bg-[#0b0e12] px-2.5 py-2 text-[10px] text-zinc-300 outline-none disabled:opacity-50"
+                        >
+                            {STATUS_OPTIONS.map(
+                                (option) => (
+                                    <option
+                                        key={
+                                            option.value
+                                        }
+                                        value={
+                                            option.value
+                                        }
+                                    >
+                                        {option.label}
+                                    </option>
+                                )
+                            )}
+                        </select>
+
+                        <MoreHorizontal className="h-4 w-4 text-zinc-600" />
+                    </div>
                 </div>
 
                 <div className="mt-5 rounded-xl border border-white/[0.05] bg-white/[0.02] p-4">
@@ -731,79 +1422,150 @@ function SupportDetails({
                     </p>
                 </div>
 
-                <div className="mt-4 flex items-center gap-2">
+                <div className="mt-4 flex flex-wrap items-center gap-2">
                     <PriorityBadge
                         priority={ticket.priority}
                     />
 
                     <span className="text-[11px] text-zinc-600">
-                        Last updated {ticket.updatedAt}
+                        Last updated{' '}
+                        {ticket.updatedAt}
                     </span>
+
+                    {loading && (
+                        <span className="text-[10px] text-blue-400">
+                            Refreshing...
+                        </span>
+                    )}
                 </div>
             </div>
 
             <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025]">
                 <div className="border-b border-white/[0.06] px-5 py-4">
-                    <h3 className="text-sm font-semibold">
-                        Conversation
-                    </h3>
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold">
+                            Conversation
+                        </h3>
+
+                        <span className="text-[10px] text-zinc-600">
+                            {ticket.messages.length}{' '}
+                            {ticket.messages.length ===
+                                1
+                                ? 'message'
+                                : 'messages'}
+                        </span>
+                    </div>
                 </div>
 
-                <div className="space-y-4 p-5">
-                    {ticket.messages.map(
-                        (message) => (
-                            <div
-                                key={message.id}
-                                className={`flex gap-3 ${message.role ===
+                <div className="max-h-[520px] space-y-4 overflow-y-auto p-5">
+                    {loading &&
+                        ticket.messages.length === 0 ? (
+                        <div className="space-y-3">
+                            <div className="h-20 animate-pulse rounded-xl bg-white/[0.02]" />
+                            <div className="ml-auto h-20 w-4/5 animate-pulse rounded-xl bg-white/[0.02]" />
+                        </div>
+                    ) : ticket.messages.length ===
+                        0 ? (
+                        <div className="py-10 text-center text-xs text-zinc-600">
+                            No messages yet.
+                        </div>
+                    ) : (
+                        ticket.messages.map(
+                            (message) => (
+                                <div
+                                    key={
+                                        message.id
+                                    }
+                                    className={`flex gap-3 ${message.role ===
                                         'Lawyer'
                                         ? ''
                                         : 'flex-row-reverse'
-                                    }`}
-                            >
-                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-400/10">
-                                    {message.role ===
-                                        'Lawyer' ? (
-                                        <UserRound className="h-4 w-4 text-blue-400" />
-                                    ) : (
-                                        <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                                    )}
-                                </div>
+                                        }`}
+                                >
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-400/10">
+                                        {message.role ===
+                                            'Lawyer' ? (
+                                            <UserRound className="h-4 w-4 text-blue-400" />
+                                        ) : (
+                                            <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                                        )}
+                                    </div>
 
-                                <div
-                                    className={`max-w-[80%] rounded-xl border border-white/[0.05] bg-white/[0.025] p-3 ${message.role ===
+                                    <div
+                                        className={`max-w-[80%] rounded-xl border border-white/[0.05] bg-white/[0.025] p-3 ${message.role ===
                                             'Support'
                                             ? 'text-right'
                                             : ''
-                                        }`}
-                                >
-                                    <p className="text-xs font-medium text-white">
-                                        {message.sender}
-                                    </p>
+                                            }`}
+                                    >
+                                        <p className="text-xs font-medium text-white">
+                                            {
+                                                message.sender
+                                            }
+                                        </p>
 
-                                    <p className="mt-2 text-xs leading-5 text-zinc-500">
-                                        {message.message}
-                                    </p>
+                                        <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-zinc-500">
+                                            {
+                                                message.message
+                                            }
+                                        </p>
 
-                                    <p className="mt-2 text-[10px] text-zinc-700">
-                                        {message.timestamp}
-                                    </p>
+                                        <p className="mt-2 text-[10px] text-zinc-700">
+                                            {
+                                                message.timestamp
+                                            }
+                                        </p>
+                                    </div>
                                 </div>
-                            </div>
+                            )
                         )
                     )}
                 </div>
 
                 <div className="border-t border-white/[0.06] p-4">
-                    <div className="flex gap-2">
-                        <input
-                            placeholder="Write a reply..."
-                            className="flex-1 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-3 text-xs text-white outline-none placeholder:text-zinc-700"
-                        />
+                    {ticket.status ===
+                        'Closed' ? (
+                        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-center text-xs text-zinc-600">
+                            This support request is closed.
+                        </div>
+                    ) : (
+                        <div className="flex gap-2">
+                            <input
+                                value={reply}
+                                onChange={(e) =>
+                                    setReply(
+                                        e.target.value
+                                    )
+                                }
+                                onKeyDown={(e) => {
+                                    if (
+                                        e.key ===
+                                        'Enter' &&
+                                        !e.shiftKey
+                                    ) {
+                                        e.preventDefault()
+                                        submitReply()
+                                    }
+                                }}
+                                disabled={
+                                    replyLoading
+                                }
+                                placeholder="Write a reply..."
+                                className="flex-1 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-3 text-xs text-white outline-none placeholder:text-zinc-700 focus:border-blue-400/30 disabled:opacity-50"
+                            />
 
-                        <button className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400 ring-1 ring-blue-400/20">
-                            <Send className="h-4 w-4" />
-                        </button>
-                    </div>
+                            <button
+                                onClick={submitReply}
+                                disabled={
+                                    replyLoading ||
+                                    !reply.trim()
+                                }
+                                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400 ring-1 ring-blue-400/20 transition hover:bg-blue-500/15 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                <Send className="h-4 w-4" />
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

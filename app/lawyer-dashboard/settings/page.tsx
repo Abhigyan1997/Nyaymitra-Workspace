@@ -1,11 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-    ArrowRight,
     BadgeCheck,
-    Banknote,
     Bell,
     BriefcaseBusiness,
     Building2,
@@ -28,7 +26,10 @@ import {
     UserRound,
     WalletCards,
     X,
-    Clock3
+    Clock3,
+    Camera,
+    Loader2,
+    Upload,
 } from 'lucide-react'
 
 type SettingsSection =
@@ -37,6 +38,8 @@ type SettingsSection =
     | 'security'
 
 interface LawyerProfile {
+    id?: string
+    userId?: string
     fullName: string
     email: string
     phone: string
@@ -71,32 +74,77 @@ interface Transaction {
     status: 'Paid' | 'Pending'
 }
 
-const INITIAL_PROFILE: LawyerProfile = {
-    fullName: 'Bharat Rajak',
-    email: 'rajakbharat1995@gmail.com',
-    phone: '+91 90977 93641',
-    barNumber: 'BR/2019/4821',
-    experience: '7 Years',
-    bio: 'Corporate and commercial lawyer focused on contracts, compliance and business legal operations.',
-    city: 'Bhagalpur',
-    state: 'Bihar',
-    country: 'India',
-    specialization: [
-        'Corporate Law',
-        'Contract Management',
-        'Compliance',
-    ],
-    practiceAreas: [
-        'Corporate Law',
-        'Commercial Contracts',
-        'Employment Law',
-        'Compliance',
-        'Technology Law',
-    ],
-    profilePhoto:
-        'https://res.cloudinary.com/dgkefbwq4/image/upload/v1770397720/nyaymitra-profiles/mayon2hnkdnynsq89d377.png',
-    verificationStatus: 'Verified',
+/* -------------------------------------------------------------------------- */
+/* API                                                                        */
+/* -------------------------------------------------------------------------- */
+
+const AUTH_API_BASE = 'https://nyaymitra-backend-production.up.railway.app/api/v1/auth'
+
+function getToken() {
+    if (typeof window === 'undefined') return ''
+    return localStorage.getItem('token') || ''
 }
+
+async function authApiRequest<T>(
+    endpoint: string,
+    options: RequestInit = {}
+): Promise<T> {
+    const token = getToken()
+
+    const headers = new Headers(options.headers)
+
+    headers.set('Accept', 'application/json')
+
+    // Do NOT set Content-Type for FormData.
+    // The browser must set the multipart boundary itself.
+    if (!(options.body instanceof FormData)) {
+        if (options.body) {
+            headers.set('Content-Type', 'application/json')
+        }
+    }
+
+    if (token) {
+        headers.set(
+            'Authorization',
+            `Bearer ${token}`
+        )
+    }
+
+    const response = await fetch(
+        `${AUTH_API_BASE}${endpoint}`,
+        {
+            ...options,
+            headers,
+            cache: 'no-store',
+        }
+    )
+
+    const text = await response.text()
+
+    let data: any = {}
+
+    try {
+        data = text ? JSON.parse(text) : {}
+    } catch {
+        throw new Error(
+            `Invalid server response (${response.status})`
+        )
+    }
+
+    if (!response.ok) {
+        throw new Error(
+            data?.message ||
+            data?.error ||
+            `Request failed with status ${response.status}`
+        )
+    }
+
+    return data as T
+}
+
+/* -------------------------------------------------------------------------- */
+/* Mock payment data - untouched for now                                     */
+/* -------------------------------------------------------------------------- */
 
 const INITIAL_PAYMENT_DETAILS: PaymentDetails = {
     accountHolder: 'Bharat Rajak',
@@ -142,6 +190,182 @@ const TRANSACTIONS: Transaction[] = [
         status: 'Paid',
     },
 ]
+
+/* -------------------------------------------------------------------------- */
+/* Helpers                                                                    */
+/* -------------------------------------------------------------------------- */
+
+const EMPTY_PROFILE: LawyerProfile = {
+    fullName: '',
+    email: '',
+    phone: '',
+    barNumber: '',
+    experience: '',
+    bio: '',
+    city: '',
+    state: '',
+    country: 'India',
+    specialization: [],
+    practiceAreas: [],
+    profilePhoto: '',
+    verificationStatus: 'Pending',
+}
+
+function extractProfile(response: any): any {
+    return (
+        response?.lawyer ||
+        response?.user ||
+        response?.profile ||
+        response?.data?.lawyer ||
+        response?.data?.user ||
+        response?.data?.profile ||
+        response?.data ||
+        response
+    )
+}
+
+function normalizeProfile(response: any): LawyerProfile {
+    const source = extractProfile(response)
+
+    const lawyerDetails =
+        source?.lawyerDetails ||
+        source?.lawyerProfile ||
+        source?.professionalDetails ||
+        {}
+
+    const address =
+        source?.address ||
+        lawyerDetails?.address ||
+        {}
+
+    const specialization =
+        source?.specialization ||
+        lawyerDetails?.specialization ||
+        []
+
+    const practiceAreas =
+        source?.practiceAreas ||
+        lawyerDetails?.practiceAreas ||
+        []
+
+    let verificationStatus: 'Verified' | 'Pending' =
+        'Pending'
+
+    const verifiedValue =
+        source?.verificationStatus ||
+        lawyerDetails?.verificationStatus ||
+        source?.isVerified
+
+    if (
+        verifiedValue === true ||
+        verifiedValue === 'Verified' ||
+        verifiedValue === 'verified'
+    ) {
+        verificationStatus = 'Verified'
+    }
+
+    return {
+        id: source?._id || source?.id,
+        userId: source?.userId,
+
+        fullName:
+            source?.fullName ||
+            source?.name ||
+            '',
+
+        email:
+            source?.email ||
+            '',
+
+        phone:
+            source?.phone ||
+            '',
+
+        barNumber:
+            source?.barNumber ||
+            source?.barCouncilNumber ||
+            source?.barCouncilNumber ||
+            lawyerDetails?.barNumber ||
+            lawyerDetails?.barCouncilNumber ||
+            '',
+
+        experience: String(
+            source?.experience ??
+            lawyerDetails?.experience ??
+            ''
+        ),
+
+        bio:
+            source?.bio ||
+            lawyerDetails?.bio ||
+            '',
+
+        city:
+            source?.city ||
+            address?.city ||
+            lawyerDetails?.city ||
+            '',
+
+        state:
+            source?.state ||
+            address?.state ||
+            lawyerDetails?.state ||
+            '',
+
+        country:
+            source?.country ||
+            address?.country ||
+            lawyerDetails?.country ||
+            'India',
+
+        specialization:
+            Array.isArray(specialization)
+                ? specialization
+                : specialization
+                    ? [String(specialization)]
+                    : [],
+
+        practiceAreas:
+            Array.isArray(practiceAreas)
+                ? practiceAreas
+                : practiceAreas
+                    ? [String(practiceAreas)]
+                    : [],
+
+        profilePhoto:
+            source?.profilePhoto ||
+            source?.photo ||
+            source?.avatar ||
+            lawyerDetails?.profilePhoto ||
+            '',
+
+        verificationStatus,
+    }
+}
+
+function initials(name: string) {
+    if (!name.trim()) return 'L'
+
+    return name
+        .trim()
+        .split(/\s+/)
+        .map((part) => part[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase()
+}
+
+function formatError(error: unknown) {
+    if (error instanceof Error) {
+        return error.message
+    }
+
+    return 'Something went wrong. Please try again.'
+}
+
+/* -------------------------------------------------------------------------- */
+/* UI Components                                                              */
+/* -------------------------------------------------------------------------- */
 
 function Card({
     children,
@@ -209,12 +433,14 @@ function Field({
     onChange,
     type = 'text',
     placeholder,
+    disabled = false,
 }: {
     label: string
     value: string
     onChange: (value: string) => void
     type?: string
     placeholder?: string
+    disabled?: boolean
 }) {
     return (
         <div>
@@ -225,11 +451,12 @@ function Field({
             <input
                 type={type}
                 value={value}
+                disabled={disabled}
                 onChange={(e) =>
                     onChange(e.target.value)
                 }
                 placeholder={placeholder}
-                className="w-full rounded-xl border border-white/[0.07] bg-white/[0.025] px-3.5 py-3 text-sm text-white outline-none placeholder:text-zinc-700 transition focus:border-blue-400/30"
+                className="w-full rounded-xl border border-white/[0.07] bg-white/[0.025] px-3.5 py-3 text-sm text-white outline-none placeholder:text-zinc-700 transition focus:border-blue-400/30 disabled:cursor-not-allowed disabled:opacity-50"
             />
         </div>
     )
@@ -242,11 +469,14 @@ function Money({
 }) {
     return (
         <span>
-            ₹
-            {value.toLocaleString('en-IN')}
+            ₹{value.toLocaleString('en-IN')}
         </span>
     )
 }
+
+/* -------------------------------------------------------------------------- */
+/* Main Page                                                                  */
+/* -------------------------------------------------------------------------- */
 
 export default function LawyerSettingsPage() {
     const [activeSection, setActiveSection] =
@@ -254,7 +484,12 @@ export default function LawyerSettingsPage() {
 
     const [profile, setProfile] =
         useState<LawyerProfile>(
-            INITIAL_PROFILE
+            EMPTY_PROFILE
+        )
+
+    const [originalProfile, setOriginalProfile] =
+        useState<LawyerProfile>(
+            EMPTY_PROFILE
         )
 
     const [paymentDetails, setPaymentDetails] =
@@ -267,6 +502,21 @@ export default function LawyerSettingsPage() {
 
     const [editingPayment, setEditingPayment] =
         useState(false)
+
+    const [loadingProfile, setLoadingProfile] =
+        useState(true)
+
+    const [savingProfile, setSavingProfile] =
+        useState(false)
+
+    const [uploadingPhoto, setUploadingPhoto] =
+        useState(false)
+
+    const [profileMessage, setProfileMessage] =
+        useState('')
+
+    const [profileError, setProfileError] =
+        useState('')
 
     const [showCurrentPassword, setShowCurrentPassword] =
         useState(false)
@@ -289,8 +539,14 @@ export default function LawyerSettingsPage() {
     const [passwordMessage, setPasswordMessage] =
         useState('')
 
-    const [saveMessage, setSaveMessage] =
+    const [passwordLoading, setPasswordLoading] =
+        useState(false)
+
+    const [photoPreview, setPhotoPreview] =
         useState('')
+
+    const fileInputRef =
+        useRef<HTMLInputElement | null>(null)
 
     const totals = useMemo(() => {
         const paid = TRANSACTIONS.filter(
@@ -318,45 +574,71 @@ export default function LawyerSettingsPage() {
         }
     }, [])
 
-    useEffect(() => {
+    /* ---------------------------------------------------------------------- */
+    /* Get profile                                                            */
+    /* ---------------------------------------------------------------------- */
+
+    const fetchProfile = async () => {
         try {
-            const storedUser =
-                localStorage.getItem('user')
+            setLoadingProfile(true)
+            setProfileError('')
 
-            if (!storedUser) return
+            const response =
+                await authApiRequest<any>(
+                    '/profile'
+                )
 
-            const parsed = JSON.parse(
-                storedUser
+            const normalized =
+                normalizeProfile(response)
+
+            setProfile(normalized)
+            setOriginalProfile(normalized)
+        } catch (error) {
+            console.error(
+                'Fetch lawyer profile error:',
+                error
             )
 
-            setProfile((current) => ({
-                ...current,
-                fullName:
-                    parsed.fullName ||
-                    current.fullName,
-                email:
-                    parsed.email ||
-                    current.email,
-                phone:
-                    parsed.phone ||
-                    current.phone,
-                profilePhoto:
-                    parsed.profilePhoto ||
-                    current.profilePhoto,
-                specialization:
-                    parsed.specialization ||
-                    current.specialization,
-                practiceAreas:
-                    parsed.practiceAreas ||
-                    current.practiceAreas,
-                barNumber:
-                    parsed.barNumber ||
-                    current.barNumber,
-            }))
-        } catch {
-            // Keep static defaults if localStorage data is unavailable.
+            setProfileError(
+                formatError(error)
+            )
+
+            // Fallback to local user object
+            try {
+                const storedUser =
+                    localStorage.getItem('user')
+
+                if (storedUser) {
+                    const parsed =
+                        JSON.parse(
+                            storedUser
+                        )
+
+                    const fallback =
+                        normalizeProfile({
+                            user: parsed,
+                        })
+
+                    setProfile(fallback)
+                    setOriginalProfile(
+                        fallback
+                    )
+                }
+            } catch {
+                // Ignore fallback error
+            }
+        } finally {
+            setLoadingProfile(false)
         }
+    }
+
+    useEffect(() => {
+        fetchProfile()
     }, [])
+
+    /* ---------------------------------------------------------------------- */
+    /* Profile update                                                         */
+    /* ---------------------------------------------------------------------- */
 
     const updateProfile = <
         K extends keyof LawyerProfile
@@ -370,6 +652,309 @@ export default function LawyerSettingsPage() {
         }))
     }
 
+    const cancelProfileEdit = () => {
+        setProfile(originalProfile)
+        setEditingProfile(false)
+        setProfileError('')
+        setProfileMessage('')
+        setPhotoPreview('')
+    }
+
+    const saveProfile = async () => {
+        try {
+            setSavingProfile(true)
+            setProfileError('')
+            setProfileMessage('')
+
+            /*
+             * These are the profile fields currently exposed
+             * by your Settings UI.
+             *
+             * Your /auth/edit_lawyer endpoint receives the
+             * authenticated lawyer from the JWT.
+             */
+            const payload = {
+                fullName: profile.fullName,
+                email: profile.email,
+                phone: profile.phone,
+                barNumber: profile.barNumber,
+                experience: profile.experience,
+                bio: profile.bio,
+                city: profile.city,
+                state: profile.state,
+                country: profile.country,
+                specialization:
+                    profile.specialization,
+                practiceAreas:
+                    profile.practiceAreas,
+            }
+
+            const response =
+                await authApiRequest<any>(
+                    '/edit_lawyer',
+                    {
+                        method: 'PUT',
+                        body: JSON.stringify(
+                            payload
+                        ),
+                    }
+                )
+
+            const updated =
+                normalizeProfile(
+                    response
+                )
+
+            /*
+             * If backend response doesn't contain
+             * every profile field, preserve the
+             * values we just saved.
+             */
+            const merged: LawyerProfile = {
+                ...profile,
+                ...updated,
+
+                fullName:
+                    updated.fullName ||
+                    profile.fullName,
+
+                email:
+                    updated.email ||
+                    profile.email,
+
+                phone:
+                    updated.phone ||
+                    profile.phone,
+
+                barNumber:
+                    updated.barNumber ||
+                    profile.barNumber,
+
+                experience:
+                    updated.experience ||
+                    profile.experience,
+
+                bio:
+                    updated.bio ||
+                    profile.bio,
+
+                city:
+                    updated.city ||
+                    profile.city,
+
+                state:
+                    updated.state ||
+                    profile.state,
+
+                country:
+                    updated.country ||
+                    profile.country,
+
+                specialization:
+                    updated.specialization
+                        .length
+                        ? updated.specialization
+                        : profile.specialization,
+
+                practiceAreas:
+                    updated.practiceAreas
+                        .length
+                        ? updated.practiceAreas
+                        : profile.practiceAreas,
+
+                profilePhoto:
+                    updated.profilePhoto ||
+                    profile.profilePhoto,
+            }
+
+            setProfile(merged)
+            setOriginalProfile(merged)
+
+            // Keep localStorage user synchronized
+            try {
+                const storedUser =
+                    localStorage.getItem(
+                        'user'
+                    )
+
+                if (storedUser) {
+                    const parsed =
+                        JSON.parse(
+                            storedUser
+                        )
+
+                    localStorage.setItem(
+                        'user',
+                        JSON.stringify({
+                            ...parsed,
+                            ...merged,
+                        })
+                    )
+                }
+            } catch {
+                // Local storage sync is optional
+            }
+
+            setEditingProfile(false)
+
+            setProfileMessage(
+                'Profile updated successfully.'
+            )
+
+            window.setTimeout(() => {
+                setProfileMessage('')
+            }, 3000)
+        } catch (error) {
+            console.error(
+                'Save lawyer profile error:',
+                error
+            )
+
+            setProfileError(
+                formatError(error)
+            )
+        } finally {
+            setSavingProfile(false)
+        }
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Profile photo upload                                                   */
+    /* ---------------------------------------------------------------------- */
+
+    const openPhotoPicker = () => {
+        fileInputRef.current?.click()
+    }
+
+    const handlePhotoChange = async (
+        event: React.ChangeEvent<HTMLInputElement>
+    ) => {
+        const file =
+            event.target.files?.[0]
+
+        if (!file) return
+
+        if (!file.type.startsWith('image/')) {
+            setProfileError(
+                'Please select a valid image file.'
+            )
+            return
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+            setProfileError(
+                'Profile picture must be smaller than 5MB.'
+            )
+            return
+        }
+
+        try {
+            setUploadingPhoto(true)
+            setProfileError('')
+            setProfileMessage('')
+
+            const localPreview =
+                URL.createObjectURL(file)
+
+            setPhotoPreview(localPreview)
+
+            const formData = new FormData()
+
+            formData.append(
+                'profilePhoto',
+                file
+            )
+
+            const response =
+                await authApiRequest<any>(
+                    '/profile-photo',
+                    {
+                        method: 'PUT',
+                        body: formData,
+                    }
+                )
+
+            const updated =
+                normalizeProfile(
+                    response
+                )
+
+            /*
+             * Backend usually returns the new
+             * profilePhoto URL.
+             */
+            const newPhoto =
+                updated.profilePhoto
+
+            if (newPhoto) {
+                setProfile(
+                    (current) => ({
+                        ...current,
+                        profilePhoto:
+                            newPhoto,
+                    })
+                )
+
+                setOriginalProfile(
+                    (current) => ({
+                        ...current,
+                        profilePhoto:
+                            newPhoto,
+                    })
+                )
+
+                setPhotoPreview('')
+            } else {
+                /*
+                 * Keep preview until the next
+                 * profile fetch if backend response
+                 * doesn't return profilePhoto.
+                 */
+                setProfile(
+                    (current) => ({
+                        ...current,
+                        profilePhoto:
+                            localPreview,
+                    })
+                )
+            }
+
+            // Refresh from backend to get canonical photo URL
+            await fetchProfile()
+
+            setProfileMessage(
+                'Profile picture updated successfully.'
+            )
+
+            window.setTimeout(() => {
+                setProfileMessage('')
+            }, 3000)
+        } catch (error) {
+            console.error(
+                'Upload profile photo error:',
+                error
+            )
+
+            setPhotoPreview('')
+
+            setProfileError(
+                formatError(error)
+            )
+        } finally {
+            setUploadingPhoto(false)
+
+            // Reset file input so same file can be selected again
+            if (fileInputRef.current) {
+                fileInputRef.current.value =
+                    ''
+            }
+        }
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Payment local handlers                                                 */
+    /* ---------------------------------------------------------------------- */
+
     const updatePayment = <
         K extends keyof PaymentDetails
     >(
@@ -382,31 +967,23 @@ export default function LawyerSettingsPage() {
         }))
     }
 
-    const saveProfile = () => {
-        setEditingProfile(false)
-        setSaveMessage(
-            'Profile changes saved locally.'
-        )
-
-        window.setTimeout(
-            () => setSaveMessage(''),
-            3000
-        )
-    }
-
     const savePayment = () => {
         setEditingPayment(false)
-        setSaveMessage(
+        setProfileMessage(
             'Payment details saved locally.'
         )
 
         window.setTimeout(
-            () => setSaveMessage(''),
+            () => setProfileMessage(''),
             3000
         )
     }
 
-    const changePassword = () => {
+    /* ---------------------------------------------------------------------- */
+    /* Change password                                                        */
+    /* ---------------------------------------------------------------------- */
+
+    const changePassword = async () => {
         setPasswordMessage('')
 
         if (
@@ -437,20 +1014,65 @@ export default function LawyerSettingsPage() {
             return
         }
 
-        setCurrentPassword('')
-        setNewPassword('')
-        setConfirmPassword('')
+        try {
+            setPasswordLoading(true)
 
-        setPasswordMessage(
-            'Password updated successfully.'
-        )
+            const response =
+                await authApiRequest<any>(
+                    '/change-password',
+                    {
+                        method: 'PUT',
+                        body: JSON.stringify({
+                            currentPassword,
+                            newPassword,
+                        }),
+                    }
+                )
+
+            setCurrentPassword('')
+            setNewPassword('')
+            setConfirmPassword('')
+
+            setPasswordMessage(
+                response?.message ||
+                'Password updated successfully.'
+            )
+        } catch (error) {
+            console.error(
+                'Change password error:',
+                error
+            )
+
+            setPasswordMessage(
+                formatError(error)
+            )
+        } finally {
+            setPasswordLoading(false)
+        }
     }
+
+    /* ---------------------------------------------------------------------- */
+    /* Sign out                                                               */
+    /* ---------------------------------------------------------------------- */
+
+    const handleSignOut = () => {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+
+        window.location.href =
+            '/auth/login'
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Render                                                                 */
+    /* ---------------------------------------------------------------------- */
 
     return (
         <div className="min-h-screen bg-[#06080b] text-white">
             {/* Background */}
             <div className="pointer-events-none fixed inset-0 overflow-hidden">
                 <div className="absolute left-[25%] top-0 h-[420px] w-[420px] rounded-full bg-blue-500/[0.025] blur-3xl" />
+
                 <div className="absolute right-0 top-[35%] h-[360px] w-[360px] rounded-full bg-violet-500/[0.018] blur-3xl" />
             </div>
 
@@ -468,8 +1090,12 @@ export default function LawyerSettingsPage() {
                     className="border-b border-white/[0.06] pb-6"
                 >
                     <div className="mb-3 flex items-center gap-2 text-xs text-zinc-600">
-                        <span>Lawyer Dashboard</span>
+                        <span>
+                            Lawyer Dashboard
+                        </span>
+
                         <ChevronRight className="h-3 w-3" />
+
                         <span className="text-zinc-300">
                             Settings
                         </span>
@@ -484,7 +1110,8 @@ export default function LawyerSettingsPage() {
                     </p>
                 </motion.div>
 
-                {saveMessage && (
+                {/* Success message */}
+                {profileMessage && (
                     <motion.div
                         initial={{
                             opacity: 0,
@@ -497,13 +1124,45 @@ export default function LawyerSettingsPage() {
                         className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-500/15 bg-emerald-500/[0.05] px-4 py-3 text-xs text-emerald-400"
                     >
                         <CheckCircle2 className="h-4 w-4" />
-                        {saveMessage}
+
+                        {profileMessage}
+                    </motion.div>
+                )}
+
+                {/* Error message */}
+                {profileError && (
+                    <motion.div
+                        initial={{
+                            opacity: 0,
+                            y: -5,
+                        }}
+                        animate={{
+                            opacity: 1,
+                            y: 0,
+                        }}
+                        className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-red-500/15 bg-red-500/[0.04] px-4 py-3 text-xs text-red-400"
+                    >
+                        <span>
+                            {profileError}
+                        </span>
+
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setProfileError(
+                                    ''
+                                )
+                            }
+                            className="text-red-400/70 hover:text-red-300"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
                     </motion.div>
                 )}
 
                 {/* Layout */}
                 <div className="mt-6 grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
-                    {/* Settings navigation */}
+                    {/* Navigation */}
                     <aside>
                         <Card className="overflow-hidden p-2">
                             <SettingsNavButton
@@ -561,11 +1220,17 @@ export default function LawyerSettingsPage() {
 
                                 <div>
                                     <p className="text-xs font-medium text-white">
-                                        Verified Lawyer
+                                        {profile.verificationStatus ===
+                                            'Verified'
+                                            ? 'Verified Lawyer'
+                                            : 'Verification Pending'}
                                     </p>
 
                                     <p className="mt-0.5 text-[10px] text-zinc-600">
-                                        Profile verification complete
+                                        {profile.verificationStatus ===
+                                            'Verified'
+                                            ? 'Profile verification complete'
+                                            : 'Profile verification in progress'}
                                     </p>
                                 </div>
                             </div>
@@ -594,25 +1259,46 @@ export default function LawyerSettingsPage() {
                                         className="space-y-5"
                                     >
                                         <ProfileSection
-                                            profile={profile}
+                                            profile={
+                                                profile
+                                            }
                                             editing={
                                                 editingProfile
+                                            }
+                                            loading={
+                                                loadingProfile
+                                            }
+                                            saving={
+                                                savingProfile
+                                            }
+                                            uploadingPhoto={
+                                                uploadingPhoto
+                                            }
+                                            photoPreview={
+                                                photoPreview
+                                            }
+                                            fileInputRef={
+                                                fileInputRef
                                             }
                                             onEdit={() =>
                                                 setEditingProfile(
                                                     true
                                                 )
                                             }
-                                            onCancel={() =>
-                                                setEditingProfile(
-                                                    false
-                                                )
+                                            onCancel={
+                                                cancelProfileEdit
                                             }
                                             onSave={
                                                 saveProfile
                                             }
                                             updateProfile={
                                                 updateProfile
+                                            }
+                                            onPhotoPick={
+                                                openPhotoPicker
+                                            }
+                                            onPhotoChange={
+                                                handlePhotoChange
                                             }
                                         />
                                     </motion.div>
@@ -659,7 +1345,9 @@ export default function LawyerSettingsPage() {
                                             updatePayment={
                                                 updatePayment
                                             }
-                                            totals={totals}
+                                            totals={
+                                                totals
+                                            }
                                         />
                                     </motion.div>
                                 )}
@@ -722,8 +1410,14 @@ export default function LawyerSettingsPage() {
                                             passwordMessage={
                                                 passwordMessage
                                             }
+                                            passwordLoading={
+                                                passwordLoading
+                                            }
                                             changePassword={
                                                 changePassword
+                                            }
+                                            onSignOut={
+                                                handleSignOut
                                             }
                                         />
                                     </motion.div>
@@ -735,6 +1429,10 @@ export default function LawyerSettingsPage() {
         </div>
     )
 }
+
+/* -------------------------------------------------------------------------- */
+/* Settings Navigation                                                        */
+/* -------------------------------------------------------------------------- */
 
 function SettingsNavButton({
     active,
@@ -753,6 +1451,7 @@ function SettingsNavButton({
 }) {
     return (
         <button
+            type="button"
             onClick={onClick}
             className={`flex w-full items-center gap-3 rounded-xl p-3 text-left transition ${active
                 ? 'bg-blue-400/[0.08] ring-1 ring-blue-400/15'
@@ -795,16 +1494,32 @@ function SettingsNavButton({
     )
 }
 
+/* -------------------------------------------------------------------------- */
+/* Profile Section                                                            */
+/* -------------------------------------------------------------------------- */
+
 function ProfileSection({
     profile,
     editing,
+    loading,
+    saving,
+    uploadingPhoto,
+    photoPreview,
+    fileInputRef,
     onEdit,
     onCancel,
     onSave,
     updateProfile,
+    onPhotoPick,
+    onPhotoChange,
 }: {
     profile: LawyerProfile
     editing: boolean
+    loading: boolean
+    saving: boolean
+    uploadingPhoto: boolean
+    photoPreview: string
+    fileInputRef: React.RefObject<HTMLInputElement | null>
     onEdit: () => void
     onCancel: () => void
     onSave: () => void
@@ -812,7 +1527,15 @@ function ProfileSection({
         key: K,
         value: LawyerProfile[K]
     ) => void
+    onPhotoPick: () => void
+    onPhotoChange: (
+        event: React.ChangeEvent<HTMLInputElement>
+    ) => void
 }) {
+    const displayedPhoto =
+        photoPreview ||
+        profile.profilePhoto
+
     return (
         <>
             <Card className="overflow-hidden">
@@ -822,6 +1545,7 @@ function ProfileSection({
                             <h2 className="text-sm font-semibold">
                                 Professional Profile
                             </h2>
+
                             <p className="mt-1 text-xs text-zinc-600">
                                 Information visible to your clients and NyayMitra workspace.
                             </p>
@@ -829,8 +1553,10 @@ function ProfileSection({
 
                         {!editing ? (
                             <button
+                                type="button"
                                 onClick={onEdit}
-                                className="inline-flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-xs text-zinc-300 hover:bg-white/[0.05]"
+                                disabled={loading}
+                                className="inline-flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-xs text-zinc-300 hover:bg-white/[0.05] disabled:opacity-50"
                             >
                                 <Pencil className="h-3.5 w-3.5" />
                                 Edit
@@ -838,18 +1564,31 @@ function ProfileSection({
                         ) : (
                             <div className="flex gap-2">
                                 <button
-                                    onClick={onCancel}
-                                    className="rounded-lg border border-white/[0.06] px-3 py-2 text-xs text-zinc-500 hover:text-white"
+                                    type="button"
+                                    onClick={
+                                        onCancel
+                                    }
+                                    disabled={saving}
+                                    className="rounded-lg border border-white/[0.06] px-3 py-2 text-xs text-zinc-500 hover:text-white disabled:opacity-50"
                                 >
                                     Cancel
                                 </button>
 
                                 <button
+                                    type="button"
                                     onClick={onSave}
-                                    className="inline-flex items-center gap-2 rounded-lg bg-blue-500/10 px-3 py-2 text-xs text-blue-300 ring-1 ring-blue-400/20"
+                                    disabled={saving}
+                                    className="inline-flex items-center gap-2 rounded-lg bg-blue-500/10 px-3 py-2 text-xs text-blue-300 ring-1 ring-blue-400/20 disabled:opacity-50"
                                 >
-                                    <Save className="h-3.5 w-3.5" />
-                                    Save Changes
+                                    {saving ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                        <Save className="h-3.5 w-3.5" />
+                                    )}
+
+                                    {saving
+                                        ? 'Saving...'
+                                        : 'Save Changes'}
                                 </button>
                             </div>
                         )}
@@ -857,240 +1596,402 @@ function ProfileSection({
                 </div>
 
                 <div className="p-5">
-                    {/* Identity */}
-                    <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-                        <div className="relative">
-                            <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-white/[0.08] bg-blue-500/[0.06]">
-                                {profile.profilePhoto ? (
-                                    <img
-                                        src={profile.profilePhoto}
-                                        alt={profile.fullName}
-                                        className="h-full w-full object-cover"
+                    {loading ? (
+                        <ProfileLoading />
+                    ) : (
+                        <>
+                            {/* Identity */}
+                            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+                                <div className="relative">
+                                    <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-white/[0.08] bg-blue-500/[0.06]">
+                                        {displayedPhoto ? (
+                                            <img
+                                                src={
+                                                    displayedPhoto
+                                                }
+                                                alt={
+                                                    profile.fullName ||
+                                                    'Lawyer'
+                                                }
+                                                className="h-full w-full object-cover"
+                                            />
+                                        ) : (
+                                            <span className="text-xl font-semibold text-blue-300">
+                                                {initials(
+                                                    profile.fullName
+                                                )}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={
+                                            onPhotoPick
+                                        }
+                                        disabled={
+                                            uploadingPhoto
+                                        }
+                                        className="absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center rounded-lg border border-[#0b0e12] bg-blue-500 text-white shadow-lg transition hover:bg-blue-400 disabled:opacity-50"
+                                        title="Upload profile picture"
+                                    >
+                                        {uploadingPhoto ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                            <Camera className="h-3.5 w-3.5" />
+                                        )}
+                                    </button>
+
+                                    <input
+                                        ref={
+                                            fileInputRef
+                                        }
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp"
+                                        className="hidden"
+                                        onChange={
+                                            onPhotoChange
+                                        }
+                                    />
+
+                                    {profile.verificationStatus ===
+                                        'Verified' && (
+                                            <div className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#0b0e12] bg-emerald-500">
+                                                <BadgeCheck className="h-3.5 w-3.5 text-white" />
+                                            </div>
+                                        )}
+                                </div>
+
+                                <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <h3 className="text-lg font-semibold">
+                                            {profile.fullName ||
+                                                'Lawyer'}
+                                        </h3>
+
+                                        {profile.verificationStatus ===
+                                            'Verified' && (
+                                                <StatusBadge
+                                                    status="Verified"
+                                                />
+                                            )}
+                                    </div>
+
+                                    <p className="mt-1 text-xs text-zinc-500">
+                                        Legal Professional
+                                        {profile.experience
+                                            ? ` • ${profile.experience}`
+                                            : ''}
+                                    </p>
+
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                        {profile.specialization
+                                            .slice(
+                                                0,
+                                                5
+                                            )
+                                            .map(
+                                                (
+                                                    item
+                                                ) => (
+                                                    <span
+                                                        key={
+                                                            item
+                                                        }
+                                                        className="rounded-full border border-blue-400/10 bg-blue-400/[0.06] px-2.5 py-1 text-[10px] text-blue-300"
+                                                    >
+                                                        {
+                                                            item
+                                                        }
+                                                    </span>
+                                                )
+                                            )}
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={
+                                            onPhotoPick
+                                        }
+                                        disabled={
+                                            uploadingPhoto
+                                        }
+                                        className="mt-3 inline-flex items-center gap-1.5 text-[10px] text-zinc-500 transition hover:text-blue-400 disabled:opacity-50"
+                                    >
+                                        <Upload className="h-3 w-3" />
+                                        {uploadingPhoto
+                                            ? 'Uploading...'
+                                            : 'Change profile picture'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="my-6 h-px bg-white/[0.06]" />
+
+                            {/* Fields */}
+                            <div className="grid gap-5 md:grid-cols-2">
+                                {editing ? (
+                                    <>
+                                        <Field
+                                            label="Full Name"
+                                            value={
+                                                profile.fullName
+                                            }
+                                            onChange={(
+                                                value
+                                            ) =>
+                                                updateProfile(
+                                                    'fullName',
+                                                    value
+                                                )
+                                            }
+                                        />
+
+                                        <Field
+                                            label="Email"
+                                            value={
+                                                profile.email
+                                            }
+                                            onChange={(
+                                                value
+                                            ) =>
+                                                updateProfile(
+                                                    'email',
+                                                    value
+                                                )
+                                            }
+                                            type="email"
+                                        />
+
+                                        <Field
+                                            label="Phone"
+                                            value={
+                                                profile.phone
+                                            }
+                                            onChange={(
+                                                value
+                                            ) =>
+                                                updateProfile(
+                                                    'phone',
+                                                    value
+                                                )
+                                            }
+                                        />
+
+                                        <Field
+                                            label="Bar Registration Number"
+                                            value={
+                                                profile.barNumber
+                                            }
+                                            onChange={(
+                                                value
+                                            ) =>
+                                                updateProfile(
+                                                    'barNumber',
+                                                    value
+                                                )
+                                            }
+                                        />
+
+                                        <Field
+                                            label="Experience"
+                                            value={
+                                                profile.experience
+                                            }
+                                            onChange={(
+                                                value
+                                            ) =>
+                                                updateProfile(
+                                                    'experience',
+                                                    value
+                                                )
+                                            }
+                                            placeholder="e.g. 7 Years"
+                                        />
+
+                                        <Field
+                                            label="City"
+                                            value={
+                                                profile.city
+                                            }
+                                            onChange={(
+                                                value
+                                            ) =>
+                                                updateProfile(
+                                                    'city',
+                                                    value
+                                                )
+                                            }
+                                        />
+
+                                        <Field
+                                            label="State"
+                                            value={
+                                                profile.state
+                                            }
+                                            onChange={(
+                                                value
+                                            ) =>
+                                                updateProfile(
+                                                    'state',
+                                                    value
+                                                )
+                                            }
+                                        />
+
+                                        <Field
+                                            label="Country"
+                                            value={
+                                                profile.country
+                                            }
+                                            onChange={(
+                                                value
+                                            ) =>
+                                                updateProfile(
+                                                    'country',
+                                                    value
+                                                )
+                                            }
+                                        />
+                                    </>
+                                ) : (
+                                    <>
+                                        <ProfileInfo
+                                            icon={
+                                                UserRound
+                                            }
+                                            label="Full Name"
+                                            value={
+                                                profile.fullName ||
+                                                '—'
+                                            }
+                                        />
+
+                                        <ProfileInfo
+                                            icon={Mail}
+                                            label="Email"
+                                            value={
+                                                profile.email ||
+                                                '—'
+                                            }
+                                        />
+
+                                        <ProfileInfo
+                                            icon={
+                                                Phone
+                                            }
+                                            label="Phone"
+                                            value={
+                                                profile.phone ||
+                                                '—'
+                                            }
+                                        />
+
+                                        <ProfileInfo
+                                            icon={
+                                                BadgeCheck
+                                            }
+                                            label="Bar Registration"
+                                            value={
+                                                profile.barNumber ||
+                                                '—'
+                                            }
+                                        />
+
+                                        <ProfileInfo
+                                            icon={
+                                                MapPin
+                                            }
+                                            label="Location"
+                                            value={`${profile.city || '—'}, ${profile.state ||
+                                                '—'
+                                                }, ${profile.country ||
+                                                'India'
+                                                }`}
+                                        />
+
+                                        <ProfileInfo
+                                            icon={
+                                                BriefcaseBusiness
+                                            }
+                                            label="Experience"
+                                            value={
+                                                profile.experience ||
+                                                '—'
+                                            }
+                                        />
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Bio */}
+                            <div className="mt-6">
+                                <label className="mb-2 block text-[11px] font-medium text-zinc-500">
+                                    Professional Bio
+                                </label>
+
+                                {editing ? (
+                                    <textarea
+                                        value={
+                                            profile.bio
+                                        }
+                                        onChange={(e) =>
+                                            updateProfile(
+                                                'bio',
+                                                e.target
+                                                    .value
+                                            )
+                                        }
+                                        rows={4}
+                                        placeholder="Tell clients about your professional experience..."
+                                        className="w-full resize-none rounded-xl border border-white/[0.07] bg-white/[0.025] px-3.5 py-3 text-sm leading-6 text-white outline-none placeholder:text-zinc-700 focus:border-blue-400/30"
                                     />
                                 ) : (
-                                    <UserRound className="h-8 w-8 text-blue-400" />
+                                    <p className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-4 text-xs leading-6 text-zinc-500">
+                                        {profile.bio ||
+                                            'No professional bio added yet.'}
+                                    </p>
                                 )}
                             </div>
 
-                            {profile.verificationStatus ===
-                                'Verified' && (
-                                    <div className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#0b0e12] bg-emerald-500">
-                                        <BadgeCheck className="h-3.5 w-3.5 text-white" />
-                                    </div>
-                                )}
-                        </div>
+                            {/* Practice areas */}
+                            <div className="mt-6">
+                                <label className="mb-3 block text-[11px] font-medium text-zinc-500">
+                                    Practice Areas
+                                </label>
 
-                        <div>
-                            <h3 className="text-lg font-semibold">
-                                {profile.fullName}
-                            </h3>
-
-                            <p className="mt-1 text-xs text-zinc-500">
-                                Legal Professional •{' '}
-                                {profile.experience}
-                            </p>
-
-                            <div className="mt-3 flex flex-wrap gap-2">
-                                {profile.specialization.map(
-                                    (item) => (
-                                        <span
-                                            key={item}
-                                            className="rounded-full border border-blue-400/10 bg-blue-400/[0.06] px-2.5 py-1 text-[10px] text-blue-300"
-                                        >
-                                            {item}
+                                <div className="flex flex-wrap gap-2">
+                                    {profile.practiceAreas.length >
+                                        0 ? (
+                                        profile.practiceAreas.map(
+                                            (
+                                                area
+                                            ) => (
+                                                <span
+                                                    key={
+                                                        area
+                                                    }
+                                                    className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-xs text-zinc-300"
+                                                >
+                                                    {
+                                                        area
+                                                    }
+                                                </span>
+                                            )
+                                        )
+                                    ) : (
+                                        <span className="text-xs text-zinc-700">
+                                            No practice areas added.
                                         </span>
-                                    )
-                                )}
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    </div>
-
-                    <div className="my-6 h-px bg-white/[0.06]" />
-
-                    {/* Fields */}
-                    <div className="grid gap-5 md:grid-cols-2">
-                        {editing ? (
-                            <>
-                                <Field
-                                    label="Full Name"
-                                    value={
-                                        profile.fullName
-                                    }
-                                    onChange={(value) =>
-                                        updateProfile(
-                                            'fullName',
-                                            value
-                                        )
-                                    }
-                                />
-
-                                <Field
-                                    label="Email"
-                                    value={
-                                        profile.email
-                                    }
-                                    onChange={(value) =>
-                                        updateProfile(
-                                            'email',
-                                            value
-                                        )
-                                    }
-                                    type="email"
-                                />
-
-                                <Field
-                                    label="Phone"
-                                    value={
-                                        profile.phone
-                                    }
-                                    onChange={(value) =>
-                                        updateProfile(
-                                            'phone',
-                                            value
-                                        )
-                                    }
-                                />
-
-                                <Field
-                                    label="Bar Registration Number"
-                                    value={
-                                        profile.barNumber
-                                    }
-                                    onChange={(value) =>
-                                        updateProfile(
-                                            'barNumber',
-                                            value
-                                        )
-                                    }
-                                />
-
-                                <Field
-                                    label="City"
-                                    value={
-                                        profile.city
-                                    }
-                                    onChange={(value) =>
-                                        updateProfile(
-                                            'city',
-                                            value
-                                        )
-                                    }
-                                />
-
-                                <Field
-                                    label="State"
-                                    value={
-                                        profile.state
-                                    }
-                                    onChange={(value) =>
-                                        updateProfile(
-                                            'state',
-                                            value
-                                        )
-                                    }
-                                />
-                            </>
-                        ) : (
-                            <>
-                                <ProfileInfo
-                                    icon={UserRound}
-                                    label="Full Name"
-                                    value={
-                                        profile.fullName
-                                    }
-                                />
-
-                                <ProfileInfo
-                                    icon={Mail}
-                                    label="Email"
-                                    value={
-                                        profile.email
-                                    }
-                                />
-
-                                <ProfileInfo
-                                    icon={Phone}
-                                    label="Phone"
-                                    value={
-                                        profile.phone
-                                    }
-                                />
-
-                                <ProfileInfo
-                                    icon={BadgeCheck}
-                                    label="Bar Registration"
-                                    value={
-                                        profile.barNumber
-                                    }
-                                />
-
-                                <ProfileInfo
-                                    icon={MapPin}
-                                    label="Location"
-                                    value={`${profile.city}, ${profile.state}, ${profile.country}`}
-                                />
-
-                                <ProfileInfo
-                                    icon={BriefcaseBusiness}
-                                    label="Experience"
-                                    value={
-                                        profile.experience
-                                    }
-                                />
-                            </>
-                        )}
-                    </div>
-
-                    {/* Bio */}
-                    <div className="mt-6">
-                        <label className="mb-2 block text-[11px] font-medium text-zinc-500">
-                            Professional Bio
-                        </label>
-
-                        {editing ? (
-                            <textarea
-                                value={
-                                    profile.bio
-                                }
-                                onChange={(e) =>
-                                    updateProfile(
-                                        'bio',
-                                        e.target.value
-                                    )
-                                }
-                                rows={4}
-                                className="w-full resize-none rounded-xl border border-white/[0.07] bg-white/[0.025] px-3.5 py-3 text-sm leading-6 text-white outline-none focus:border-blue-400/30"
-                            />
-                        ) : (
-                            <p className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-4 text-xs leading-6 text-zinc-500">
-                                {profile.bio}
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Practice Areas */}
-                    <div className="mt-6">
-                        <label className="mb-3 block text-[11px] font-medium text-zinc-500">
-                            Practice Areas
-                        </label>
-
-                        <div className="flex flex-wrap gap-2">
-                            {profile.practiceAreas.map(
-                                (area) => (
-                                    <span
-                                        key={area}
-                                        className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-xs text-zinc-300"
-                                    >
-                                        {area}
-                                    </span>
-                                )
-                            )}
-                        </div>
-                    </div>
+                        </>
+                    )}
                 </div>
             </Card>
 
-            {/* Profile preferences */}
+            {/* Preferences */}
             <Card className="p-5">
                 <SectionTitle
                     title="Workspace Preferences"
@@ -1121,6 +2022,44 @@ function ProfileSection({
     )
 }
 
+/* -------------------------------------------------------------------------- */
+/* Profile Loading                                                            */
+/* -------------------------------------------------------------------------- */
+
+function ProfileLoading() {
+    return (
+        <div className="space-y-6 animate-pulse">
+            <div className="flex items-center gap-5">
+                <div className="h-20 w-20 rounded-2xl bg-white/[0.05]" />
+
+                <div className="space-y-3">
+                    <div className="h-5 w-36 rounded bg-white/[0.05]" />
+                    <div className="h-3 w-48 rounded bg-white/[0.04]" />
+                    <div className="h-5 w-40 rounded-full bg-white/[0.04]" />
+                </div>
+            </div>
+
+            <div className="grid gap-5 md:grid-cols-2">
+                {[1, 2, 3, 4, 5, 6].map(
+                    (item) => (
+                        <div
+                            key={item}
+                            className="space-y-2"
+                        >
+                            <div className="h-3 w-20 rounded bg-white/[0.04]" />
+                            <div className="h-11 rounded-xl bg-white/[0.04]" />
+                        </div>
+                    )
+                )}
+            </div>
+        </div>
+    )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Payments                                                                   */
+/* -------------------------------------------------------------------------- */
+
 function PaymentsSection({
     details,
     editing,
@@ -1147,7 +2086,6 @@ function PaymentsSection({
 }) {
     return (
         <>
-            {/* Earnings */}
             <Card className="p-5">
                 <SectionTitle
                     title="Earnings Overview"
@@ -1168,14 +2106,13 @@ function PaymentsSection({
                     />
 
                     <EarningCard
-                        icon={Clock3Icon}
+                        icon={Clock3}
                         label="Pending"
                         value={totals.pending}
                     />
                 </div>
             </Card>
 
-            {/* Payment details */}
             <Card className="overflow-hidden">
                 <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
                     <div>
@@ -1190,6 +2127,7 @@ function PaymentsSection({
 
                     {!editing ? (
                         <button
+                            type="button"
                             onClick={onEdit}
                             className="inline-flex items-center gap-2 rounded-lg border border-white/[0.06] px-3 py-2 text-xs text-zinc-300"
                         >
@@ -1199,6 +2137,7 @@ function PaymentsSection({
                     ) : (
                         <div className="flex gap-2">
                             <button
+                                type="button"
                                 onClick={onCancel}
                                 className="px-3 py-2 text-xs text-zinc-500"
                             >
@@ -1206,6 +2145,7 @@ function PaymentsSection({
                             </button>
 
                             <button
+                                type="button"
                                 onClick={onSave}
                                 className="rounded-lg bg-blue-500/10 px-3 py-2 text-xs text-blue-300 ring-1 ring-blue-400/20"
                             >
@@ -1381,7 +2321,6 @@ function PaymentsSection({
                 </div>
             </Card>
 
-            {/* Transactions */}
             <Card className="overflow-hidden">
                 <div className="border-b border-white/[0.06] px-5 py-4">
                     <h2 className="text-sm font-semibold">
@@ -1397,7 +2336,9 @@ function PaymentsSection({
                     {TRANSACTIONS.map(
                         (transaction) => (
                             <div
-                                key={transaction.id}
+                                key={
+                                    transaction.id
+                                }
                                 className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center"
                             >
                                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/[0.06]">
@@ -1412,8 +2353,13 @@ function PaymentsSection({
                                     </p>
 
                                     <p className="mt-1 truncate text-[10px] text-zinc-600">
-                                        {transaction.client} •{' '}
-                                        {transaction.date}
+                                        {
+                                            transaction.client
+                                        }{' '}
+                                        •{' '}
+                                        {
+                                            transaction.date
+                                        }
                                     </p>
                                 </div>
 
@@ -1441,6 +2387,10 @@ function PaymentsSection({
     )
 }
 
+/* -------------------------------------------------------------------------- */
+/* Security                                                                   */
+/* -------------------------------------------------------------------------- */
+
 function SecuritySection({
     currentPassword,
     newPassword,
@@ -1455,7 +2405,9 @@ function SecuritySection({
     setShowNewPassword,
     setShowConfirmPassword,
     passwordMessage,
+    passwordLoading,
     changePassword,
+    onSignOut,
 }: {
     currentPassword: string
     newPassword: string
@@ -1466,20 +2418,29 @@ function SecuritySection({
     showCurrentPassword: boolean
     showNewPassword: boolean
     showConfirmPassword: boolean
-    setShowCurrentPassword: (value: boolean) => void
-    setShowNewPassword: (value: boolean) => void
-    setShowConfirmPassword: (value: boolean) => void
+    setShowCurrentPassword: (
+        value: boolean
+    ) => void
+    setShowNewPassword: (
+        value: boolean
+    ) => void
+    setShowConfirmPassword: (
+        value: boolean
+    ) => void
     passwordMessage: string
+    passwordLoading: boolean
     changePassword: () => void
+    onSignOut: () => void
 }) {
     const messageSuccess =
-        passwordMessage.includes(
-            'successfully'
-        )
+        passwordMessage
+            .toLowerCase()
+            .includes(
+                'success'
+            )
 
     return (
         <>
-            {/* Change password */}
             <Card className="overflow-hidden">
                 <div className="border-b border-white/[0.06] px-5 py-4">
                     <div className="flex items-center gap-3">
@@ -1554,9 +2515,22 @@ function SecuritySection({
                         </p>
 
                         <div className="mt-2 space-y-1 text-[11px] text-zinc-600">
-                            <p>• Minimum 8 characters</p>
-                            <p>• Use a mix of letters and numbers</p>
-                            <p>• Avoid using easily guessed information</p>
+                            <p>
+                                • Minimum 8
+                                characters
+                            </p>
+
+                            <p>
+                                • Use a mix of
+                                letters and
+                                numbers
+                            </p>
+
+                            <p>
+                                • Avoid using
+                                easily guessed
+                                information
+                            </p>
                         </div>
                     </div>
 
@@ -1567,25 +2541,37 @@ function SecuritySection({
                                 : 'border-red-500/15 bg-red-500/[0.04] text-red-400'
                                 }`}
                         >
-                            {passwordMessage}
+                            {
+                                passwordMessage
+                            }
                         </div>
                     )}
 
                     <div className="flex justify-end">
                         <button
+                            type="button"
                             onClick={
                                 changePassword
                             }
-                            className="inline-flex items-center gap-2 rounded-xl bg-blue-500/10 px-4 py-2.5 text-xs font-medium text-blue-300 ring-1 ring-blue-400/20 transition hover:bg-blue-500/15"
+                            disabled={
+                                passwordLoading
+                            }
+                            className="inline-flex items-center gap-2 rounded-xl bg-blue-500/10 px-4 py-2.5 text-xs font-medium text-blue-300 ring-1 ring-blue-400/20 transition hover:bg-blue-500/15 disabled:opacity-50"
                         >
-                            <Lock className="h-3.5 w-3.5" />
-                            Update Password
+                            {passwordLoading ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                                <Lock className="h-3.5 w-3.5" />
+                            )}
+
+                            {passwordLoading
+                                ? 'Updating...'
+                                : 'Update Password'}
                         </button>
                     </div>
                 </div>
             </Card>
 
-            {/* Security status */}
             <Card className="p-5">
                 <SectionTitle
                     title="Account Security"
@@ -1596,21 +2582,21 @@ function SecuritySection({
                     <SecurityRow
                         icon={Shield}
                         title="Account verification"
-                        description="Your lawyer account is verified."
+                        description="Your lawyer account verification status."
                         status="Verified"
                     />
 
                     <SecurityRow
                         icon={Mail}
                         title="Email verification"
-                        description="Your primary email is verified."
-                        status="Verified"
+                        description="Your primary email address."
+                        status="Active"
                     />
 
                     <SecurityRow
                         icon={Lock}
                         title="Password"
-                        description="Your password is protected."
+                        description="Your account password is protected."
                         status="Active"
                     />
 
@@ -1623,7 +2609,6 @@ function SecuritySection({
                 </div>
             </Card>
 
-            {/* Danger zone */}
             <Card className="border-red-500/10 p-5">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -1636,8 +2621,15 @@ function SecuritySection({
                         </p>
                     </div>
 
-                    <button className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/15 bg-red-500/[0.04] px-4 py-2.5 text-xs text-red-400 hover:bg-red-500/[0.08]">
+                    <button
+                        type="button"
+                        onClick={
+                            onSignOut
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/15 bg-red-500/[0.04] px-4 py-2.5 text-xs text-red-400 hover:bg-red-500/[0.08]"
+                    >
                         <LogOut className="h-4 w-4" />
+
                         Sign Out
                     </button>
                 </div>
@@ -1645,6 +2637,10 @@ function SecuritySection({
         </>
     )
 }
+
+/* -------------------------------------------------------------------------- */
+/* Supporting UI                                                              */
+/* -------------------------------------------------------------------------- */
 
 function ProfileInfo({
     icon: Icon,
@@ -1732,12 +2728,6 @@ function EarningCard({
     )
 }
 
-function Clock3Icon() {
-    return (
-        <Clock3 className="h-4 w-4 text-blue-400" />
-    )
-}
-
 function PasswordField({
     label,
     value,
@@ -1822,6 +2812,7 @@ function PreferenceRow({
             </div>
 
             <button
+                type="button"
                 onClick={() =>
                     setEnabled(!enabled)
                 }
