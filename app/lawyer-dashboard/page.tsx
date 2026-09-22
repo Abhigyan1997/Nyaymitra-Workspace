@@ -649,25 +649,25 @@ export default function LawyerDashboardPage() {
                             label: 'Active Clients',
                             value: totals.clients,
                             icon: Building2,
-                            href: '/lawyer/clients',
+                            href: '/dashboard/clients',
                         },
                         {
                             label: 'Open Work',
                             value: totals.openWork,
                             icon: Briefcase,
-                            href: '/lawyer/work',
+                            href: '/dashboard/work',
                         },
                         {
                             label: 'Pending Actions',
                             value: totals.pendingActions,
                             icon: AlertCircle,
-                            href: '/lawyer/compliance',
+                            href: '/dashboard/compliance',
                         },
                         {
                             label: 'Contracts',
                             value: totals.contracts,
                             icon: FileText,
-                            href: '/lawyer/contracts',
+                            href: '/dashboard/contracts',
                         },
                     ].map((item, index) => {
                         const Icon = item.icon
