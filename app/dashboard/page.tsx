@@ -1639,7 +1639,7 @@ export default function DashboardPage() {
               <button
                 onClick={() =>
                   navigateTo(
-                    '/business/documents'
+                    '/dashboard/documents'
                   )
                 }
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-400 text-black text-xs font-semibold hover:bg-amber-300 transition shadow-lg shadow-amber-400/10"

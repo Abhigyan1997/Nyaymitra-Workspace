@@ -39,6 +39,7 @@ const navItems = [
   { label: 'LegalBox', icon: Lock, href: '/dashboard/documents', badge: null },
   { label: 'Compliance', icon: CheckSquare, href: '/dashboard/compliance', badge: null },
   { label: 'Contracts', icon: FileCheck, href: '/dashboard/contracts', badge: 'dynamic' }, // 'dynamic' indicates we'll fetch the count
+  { label: 'Legal Requests', icon: Briefcase, href: '/dashboard/legal-requests', badge: null },
   { label: 'Team', icon: Users, href: '/dashboard/team', badge: null },
 ]
 
