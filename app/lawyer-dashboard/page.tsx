@@ -649,25 +649,25 @@ export default function LawyerDashboardPage() {
                             label: 'Active Clients',
                             value: totals.clients,
                             icon: Building2,
-                            href: '/dashboard/clients',
+                            href: '/lawyer-dashboard/clients',
                         },
                         {
                             label: 'Open Work',
                             value: totals.openWork,
                             icon: Briefcase,
-                            href: '/dashboard/work',
+                            href: '/lawyer-dashboard/work',
                         },
                         {
                             label: 'Pending Actions',
                             value: totals.pendingActions,
                             icon: AlertCircle,
-                            href: '/dashboard/compliance',
+                            href: '/lawyer-dashboard/compliance',
                         },
                         {
                             label: 'Contracts',
                             value: totals.contracts,
                             icon: FileText,
-                            href: '/dashboard/contracts',
+                            href: '/lawyer-dashboard/contracts',
                         },
                     ].map((item, index) => {
                         const Icon = item.icon
@@ -900,7 +900,7 @@ export default function LawyerDashboardPage() {
                             <button
                                 type="button"
                                 onClick={() =>
-                                    router.push('/lawyer/clients')
+                                    router.push('/lawyer-dashboard/clients')
                                 }
                                 className="flex items-center gap-1 text-sm font-medium text-blue-400 hover:text-blue-300"
                             >
@@ -1191,32 +1191,32 @@ export default function LawyerDashboardPage() {
                             {
                                 label: 'Clients',
                                 icon: Users,
-                                href: '/lawyer/clients',
+                                href: '/lawyer-dashboard/clients',
                             },
                             {
                                 label: 'Contracts',
                                 icon: FileText,
-                                href: '/lawyer/contracts',
+                                href: '/lawyer-dashboard/contracts',
                             },
                             {
                                 label: 'Documents',
                                 icon: Upload,
-                                href: '/lawyer/documents',
+                                href: '/lawyer-dashboard/documents',
                             },
                             {
                                 label: 'My Work',
                                 icon: CheckCircle2,
-                                href: '/lawyer/work',
+                                href: '/lawyer-dashboard/work',
                             },
                             {
                                 label: 'Compliance',
                                 icon: Shield,
-                                href: '/lawyer/compliance',
+                                href: '/lawyer-dashboard/compliance',
                             },
                             {
                                 label: 'Messages',
                                 icon: MessageCircle,
-                                href: '/lawyer/messages',
+                                href: '/lawyer-dashboard/messages',
                             },
                         ].map((action) => {
                             const Icon = action.icon
