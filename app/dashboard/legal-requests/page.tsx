@@ -31,7 +31,7 @@ import {
 
 const API_BASE_URL = (
   process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:5000/api/v1'
+  'https://nyaymitra-backend-production.up.railway.app/api/v1'
 ).replace(/\/$/, '')
 
 const LEGAL_REQUESTS_API =
