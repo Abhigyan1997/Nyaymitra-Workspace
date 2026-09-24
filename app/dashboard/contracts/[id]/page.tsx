@@ -5,7 +5,6 @@
 import {
     useCallback,
     useEffect,
-    useMemo,
     useState,
 } from "react"
 
@@ -13,9 +12,7 @@ import Link from "next/link"
 
 import {
     ArrowLeft,
-    ArrowUpRight,
     CalendarDays,
-    Check,
     Download,
     MoreHorizontal,
     RefreshCw,
@@ -37,7 +34,6 @@ import {
     type ContractActivity as ApiContractActivity,
     type ContractComment,
     type ContractRequest,
-    type ContractStatus,
 } from "@/lib/services/contract.service"
 
 import {
@@ -69,6 +65,8 @@ type DetailComment = {
     isInternal?: boolean
 }
 
+type FinalFileType = "pdf" | "docx" | "signedPdf"
+
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -78,8 +76,7 @@ function isNotFoundError(error: unknown): boolean {
         return false
     }
 
-    const message =
-        error.message.toLowerCase()
+    const message = error.message.toLowerCase()
 
     return (
         message.includes("404") ||
@@ -113,6 +110,199 @@ function normalizeActivities(
     }>
 }
 
+/**
+ * A contract has a downloadable final document when at least
+ * one of these populated fields is present:
+ *
+ *   currentDocument  → the working PDF (fileType: "pdf")
+ *   signedDocument   → the executed PDF (fileType: "signedPdf")
+ *
+ * Fields may be a populated BusinessDocument object OR a string ID.
+ * Both are valid — the backend resolves the ID.
+ */
+function hasAnyFinalDocument(contract: Contract): boolean {
+    const isPresent = (value: unknown): boolean => {
+        if (!value) return false
+        if (typeof value === "string") return value.length > 0
+        if (typeof value === "object") return true
+        return false
+    }
+
+    return (
+        isPresent(contract.currentDocument) ||
+        isPresent(contract.signedDocument)
+    )
+}
+
+function isAbsoluteUrl(value: string): boolean {
+    return /^https?:\/\//i.test(value)
+}
+
+/* -------------------------------------------------------------------------- */
+/* Final document download (R2)                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Order matters:
+ *  1. Prefer the signed/executed copy if present.
+ *  2. Fall back to the working PDF.
+ *  3. Finally try the DOCX source.
+ */
+const FINAL_FILE_CANDIDATES: FinalFileType[] = [
+    "signedPdf",
+    "pdf",
+    "docx",
+]
+
+function buildFinalFilename(
+    contractId: string,
+    fileType: FinalFileType
+): string {
+    const ext = fileType === "docx" ? "docx" : "pdf"
+
+    const suffix =
+        fileType === "signedPdf"
+            ? "signed"
+            : fileType === "pdf"
+                ? "final"
+                : "source"
+
+    return `contract-${contractId}-${suffix}.${ext}`
+}
+
+/**
+ * Fetch an R2 object from a signed URL and force a browser save.
+ *
+ * We do NOT use window.open here:
+ *   window.open() after an await is blocked by popup blockers.
+ *
+ * We do NOT send an Authorization header to R2:
+ *   the signed URL is self-authorizing. Sending extra headers
+ *   will invalidate the signature and R2 returns 403.
+ */
+async function downloadFromR2(
+    signedUrl: string,
+    filename: string
+): Promise<void> {
+    const response = await fetch(signedUrl, {
+        method: "GET",
+        credentials: "omit",
+        mode: "cors",
+    })
+
+    if (!response.ok) {
+        throw new Error(
+            `Failed to fetch file from R2 (${response.status} ${response.statusText})`
+        )
+    }
+
+    const blob = await response.blob()
+    const blobUrl = URL.createObjectURL(blob)
+
+    try {
+        const a = document.createElement("a")
+        a.href = blobUrl
+        a.download = filename
+        a.rel = "noopener noreferrer"
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+    } finally {
+        // Free the blob URL after the browser has had time
+        // to start the download.
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
+    }
+}
+
+function FinalDocumentButton({
+    contractId,
+    hasDocument,
+}: {
+    contractId: string
+    hasDocument: boolean
+}) {
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+
+    const download = async () => {
+        if (!hasDocument || loading) return
+
+        setLoading(true)
+        setError(null)
+
+        let lastError: unknown = null
+
+        for (const fileType of FINAL_FILE_CANDIDATES) {
+            try {
+                const result =
+                    await contractService.getFinalFileUrl(
+                        contractId,
+                        fileType
+                    )
+
+                if (!result?.url) {
+                    continue
+                }
+
+                if (!isAbsoluteUrl(result.url)) {
+                    throw new Error(
+                        "Backend returned a non-absolute URL for the R2 object."
+                    )
+                }
+
+                const filename = buildFinalFilename(
+                    contractId,
+                    fileType
+                )
+
+                await downloadFromR2(result.url, filename)
+
+                setLoading(false)
+                return
+            } catch (err) {
+                lastError = err
+                // Try the next candidate.
+            }
+        }
+
+        setLoading(false)
+
+        const message =
+            lastError instanceof Error
+                ? lastError.message
+                : "No final document is available for this contract."
+
+        setError(message)
+        window.alert(message)
+    }
+
+    return (
+        <div className="flex flex-col items-end gap-1">
+            <button
+                type="button"
+                onClick={download}
+                disabled={!hasDocument || loading}
+                className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 px-3 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                title={
+                    hasDocument
+                        ? "Download final document"
+                        : "No final document available yet"
+                }
+            >
+                <Download className="size-4" />
+
+                {loading ? "Preparing…" : "Download"}
+            </button>
+
+            {error && (
+                <span className="max-w-[200px] text-right text-[11px] text-red-400">
+                    {error}
+                </span>
+            )}
+        </div>
+    )
+}
+
 /* -------------------------------------------------------------------------- */
 /* Page                                                                       */
 /* -------------------------------------------------------------------------- */
@@ -122,8 +312,7 @@ export default function ContractDetailPage({
 }: {
     params: Promise<{ id: string }>
 }) {
-    const [id, setId] =
-        useState<string | null>(null)
+    const [id, setId] = useState<string | null>(null)
 
     const [contract, setContract] =
         useState<Contract | null>(null)
@@ -135,9 +324,7 @@ export default function ContractDetailPage({
         useState<DetailComment[]>([])
 
     const [activities, setActivities] =
-        useState<
-            ReturnType<typeof normalizeActivities>
-        >([])
+        useState<ReturnType<typeof normalizeActivities>>([])
 
     const [pageState, setPageState] =
         useState<PageState>("loading")
@@ -176,9 +363,7 @@ export default function ContractDetailPage({
     const loadContract = useCallback(
         async (
             contractId: string,
-            options?: {
-                silent?: boolean
-            }
+            options?: { silent?: boolean }
         ) => {
             try {
                 if (!options?.silent) {
@@ -187,11 +372,6 @@ export default function ContractDetailPage({
 
                 setError(null)
 
-                /*
-                 * First try the ACTUAL contract endpoint.
-                 *
-                 * /contracts/:id
-                 */
                 try {
                     const actualContract =
                         await contractService.getContractById(
@@ -202,11 +382,6 @@ export default function ContractDetailPage({
                     setRequest(null)
                     setPageState("contract")
 
-                    /*
-                     * Load secondary resources only after
-                     * we have confirmed that this is an
-                     * actual contract.
-                     */
                     const [
                         activityResult,
                         commentsResult,
@@ -214,16 +389,12 @@ export default function ContractDetailPage({
                         contractService.getActivities(
                             actualContract._id
                         ),
-
                         contractService.getComments(
                             actualContract._id
                         ),
                     ])
 
-                    if (
-                        activityResult.status ===
-                        "fulfilled"
-                    ) {
+                    if (activityResult.status === "fulfilled") {
                         setActivities(
                             normalizeActivities(
                                 activityResult.value
@@ -234,14 +405,10 @@ export default function ContractDetailPage({
                             "Failed to load contract activity:",
                             activityResult.reason
                         )
-
                         setActivities([])
                     }
 
-                    if (
-                        commentsResult.status ===
-                        "fulfilled"
-                    ) {
+                    if (commentsResult.status === "fulfilled") {
                         setComments(
                             normalizeComments(
                                 commentsResult.value
@@ -252,29 +419,16 @@ export default function ContractDetailPage({
                             "Failed to load contract comments:",
                             commentsResult.reason
                         )
-
                         setComments([])
                     }
 
                     return
                 } catch (contractError) {
-                    /*
-                     * The ID may actually belong to a
-                     * ContractRequest.
-                     *
-                     * Try request endpoint before declaring
-                     * the page missing.
-                     */
-                    if (
-                        !isNotFoundError(contractError)
-                    ) {
+                    if (!isNotFoundError(contractError)) {
                         throw contractError
                     }
                 }
 
-                /*
-                 * /contracts/requests/:id
-                 */
                 const actualRequest =
                     await contractService.getContractRequestById(
                         contractId
@@ -310,10 +464,7 @@ export default function ContractDetailPage({
     /* ---------------------------------------------------------------------- */
 
     useEffect(() => {
-        if (!id) {
-            return
-        }
-
+        if (!id) return
         void loadContract(id)
     }, [id, loadContract])
 
@@ -322,15 +473,11 @@ export default function ContractDetailPage({
     /* ---------------------------------------------------------------------- */
 
     const refresh = async () => {
-        if (!id || refreshing) {
-            return
-        }
+        if (!id || refreshing) return
 
         try {
             setRefreshing(true)
-            await loadContract(id, {
-                silent: true,
-            })
+            await loadContract(id, { silent: true })
         } finally {
             setRefreshing(false)
         }
@@ -340,12 +487,8 @@ export default function ContractDetailPage({
     /* Add comment                                                             */
     /* ---------------------------------------------------------------------- */
 
-    const handleAddComment = async (
-        message: string
-    ) => {
-        if (!contract) {
-            return
-        }
+    const handleAddComment = async (message: string) => {
+        if (!contract) return
 
         try {
             setCommentSubmitting(true)
@@ -369,10 +512,7 @@ export default function ContractDetailPage({
     /* Loading                                                                 */
     /* ---------------------------------------------------------------------- */
 
-    if (
-        pageState === "loading" ||
-        !id
-    ) {
+    if (pageState === "loading" || !id) {
         return (
             <main className="contracts-theme flex min-h-screen items-center justify-center bg-black text-zinc-100">
                 <div className="flex items-center gap-3 text-sm text-zinc-400">
@@ -387,9 +527,7 @@ export default function ContractDetailPage({
     /* Error                                                                   */
     /* ---------------------------------------------------------------------- */
 
-    if (
-        pageState === "error"
-    ) {
+    if (pageState === "error") {
         return (
             <main className="contracts-theme flex min-h-screen items-center justify-center bg-black p-6 text-zinc-100">
                 <div className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-950 p-8 text-center shadow-sm">
@@ -428,10 +566,7 @@ export default function ContractDetailPage({
     /* Request detail                                                          */
     /* ---------------------------------------------------------------------- */
 
-    if (
-        pageState === "request" &&
-        request
-    ) {
+    if (pageState === "request" && request) {
         return (
             <RequestDetail
                 request={request}
@@ -442,7 +577,7 @@ export default function ContractDetailPage({
     }
 
     /* ---------------------------------------------------------------------- */
-    /* Contract                                                                */
+    /* Contract missing                                                        */
     /* ---------------------------------------------------------------------- */
 
     if (!contract) {
@@ -454,8 +589,7 @@ export default function ContractDetailPage({
                     </h1>
 
                     <p className="mt-2 text-sm text-zinc-400">
-                        This contract may have been archived
-                        or removed.
+                        This contract may have been archived or removed.
                     </p>
 
                     <Link
@@ -476,9 +610,9 @@ export default function ContractDetailPage({
     return (
         <main className="contracts-theme min-h-screen bg-black text-zinc-100">
             <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 lg:px-8">
-                {/* ---------------------------------------------------------------- */}
-                {/* Top bar                                                           */}
-                {/* ---------------------------------------------------------------- */}
+                {/* ---------------------------------------------------------- */}
+                {/* Top bar                                                     */}
+                {/* ---------------------------------------------------------- */}
 
                 <div className="flex items-center justify-between">
                     <Link
@@ -498,9 +632,7 @@ export default function ContractDetailPage({
                             className="rounded-xl border border-zinc-800 bg-zinc-950 p-2 text-zinc-400 transition hover:bg-zinc-900 hover:text-white disabled:opacity-50"
                         >
                             <RefreshCw
-                                className={`size-5 ${refreshing
-                                        ? "animate-spin"
-                                        : ""
+                                className={`size-5 ${refreshing ? "animate-spin" : ""
                                     }`}
                             />
                         </button>
@@ -515,9 +647,9 @@ export default function ContractDetailPage({
                     </div>
                 </div>
 
-                {/* ---------------------------------------------------------------- */}
-                {/* Header                                                            */}
-                {/* ---------------------------------------------------------------- */}
+                {/* ---------------------------------------------------------- */}
+                {/* Header                                                      */}
+                {/* ---------------------------------------------------------- */}
 
                 <header className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm sm:p-7">
                     <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
@@ -527,13 +659,8 @@ export default function ContractDetailPage({
                                     {contract.contractNumber}
                                 </span>
 
-                                <StatusBadge
-                                    status={contract.status}
-                                />
-
-                                <PriorityBadge
-                                    priority={contract.priority}
-                                />
+                                <StatusBadge status={contract.status} />
+                                <PriorityBadge priority={contract.priority} />
                             </div>
 
                             <h1 className="mt-3 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
@@ -544,21 +671,16 @@ export default function ContractDetailPage({
                                 {contract.contractType}
                                 {" · "}
                                 Last updated{" "}
-                                {formatContractDate(
-                                    contract.updatedAt
-                                )}
+                                {formatContractDate(contract.updatedAt)}
                             </p>
                         </div>
 
                         <div className="flex items-center gap-2">
                             <FinalDocumentButton
                                 contractId={contract._id}
-                                hasDocument={
-                                    Boolean(
-                                        contract.currentDocument ||
-                                        contract.signedDocument
-                                    )
-                                }
+                                hasDocument={hasAnyFinalDocument(
+                                    contract
+                                )}
                             />
 
                             <button
@@ -567,9 +689,7 @@ export default function ContractDetailPage({
                                 disabled={refreshing}
                                 className="rounded-xl bg-yellow-400 px-3 py-2.5 text-sm font-semibold text-black transition hover:bg-yellow-300 disabled:opacity-50"
                             >
-                                {refreshing
-                                    ? "Refreshing…"
-                                    : "Refresh"}
+                                {refreshing ? "Refreshing…" : "Refresh"}
                             </button>
                         </div>
                     </div>
@@ -609,9 +729,9 @@ export default function ContractDetailPage({
                     </div>
                 </header>
 
-                {/* ---------------------------------------------------------------- */}
-                {/* Tabs                                                              */}
-                {/* ---------------------------------------------------------------- */}
+                {/* ---------------------------------------------------------- */}
+                {/* Tabs                                                        */}
+                {/* ---------------------------------------------------------- */}
 
                 <div className="mt-5 flex gap-1 overflow-x-auto border-b border-zinc-800">
                     <button
@@ -643,19 +763,15 @@ export default function ContractDetailPage({
                     </button>
                 </div>
 
-                {/* ---------------------------------------------------------------- */}
-                {/* Content                                                           */}
-                {/* ---------------------------------------------------------------- */}
+                {/* ---------------------------------------------------------- */}
+                {/* Content                                                     */}
+                {/* ---------------------------------------------------------- */}
 
                 <div className="mt-5 flex flex-col gap-4">
-                    <ContractOverview
-                        contract={contract}
-                    />
+                    <ContractOverview contract={contract} />
 
                     <div className="grid gap-4 lg:grid-cols-[1.45fr_1fr]">
-                        <ContractDocuments
-                            contract={contract}
-                        />
+                        <ContractDocuments contract={contract} />
 
                         <ContractActivity
                             contract={contract}
@@ -695,22 +811,15 @@ function RequestDetail({
             "Business user"
 
     const professional =
-        typeof request.assignedProfessional ===
-            "string"
+        typeof request.assignedProfessional === "string"
             ? request.assignedProfessional
-            : request.assignedProfessional
-                ?.name ??
-            request.assignedProfessional
-                ?.email ??
+            : request.assignedProfessional?.name ??
+            request.assignedProfessional?.email ??
             "Not assigned"
 
     return (
         <main className="contracts-theme min-h-screen bg-black text-zinc-100">
             <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 lg:px-8">
-                {/* ---------------------------------------------------------------- */}
-                {/* Top bar                                                           */}
-                {/* ---------------------------------------------------------------- */}
-
                 <div className="flex items-center justify-between">
                     <Link
                         href="/dashboard/contracts"
@@ -728,17 +837,11 @@ function RequestDetail({
                         className="rounded-xl border border-zinc-800 bg-zinc-950 p-2 text-zinc-400 transition hover:bg-zinc-900 hover:text-white disabled:opacity-50"
                     >
                         <RefreshCw
-                            className={`size-5 ${refreshing
-                                    ? "animate-spin"
-                                    : ""
+                            className={`size-5 ${refreshing ? "animate-spin" : ""
                                 }`}
                         />
                     </button>
                 </div>
-
-                {/* ---------------------------------------------------------------- */}
-                {/* Request header                                                    */}
-                {/* ---------------------------------------------------------------- */}
 
                 <header className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm sm:p-7">
                     <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
@@ -748,13 +851,8 @@ function RequestDetail({
                                     {request.requestNumber}
                                 </span>
 
-                                <StatusBadge
-                                    status={request.status}
-                                />
-
-                                <PriorityBadge
-                                    priority={request.priority}
-                                />
+                                <StatusBadge status={request.status} />
+                                <PriorityBadge priority={request.priority} />
                             </div>
 
                             <h1 className="mt-3 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
@@ -765,9 +863,7 @@ function RequestDetail({
                                 {request.contractType}
                                 {" · "}
                                 Request submitted{" "}
-                                {formatContractDate(
-                                    request.createdAt
-                                )}
+                                {formatContractDate(request.createdAt)}
                             </p>
                         </div>
 
@@ -777,9 +873,7 @@ function RequestDetail({
                             disabled={refreshing}
                             className="rounded-xl bg-yellow-400 px-3 py-2.5 text-sm font-semibold text-black transition hover:bg-yellow-300 disabled:opacity-50"
                         >
-                            {refreshing
-                                ? "Refreshing…"
-                                : "Refresh"}
+                            {refreshing ? "Refreshing…" : "Refresh"}
                         </button>
                     </div>
 
@@ -800,10 +894,6 @@ function RequestDetail({
                     </div>
                 </header>
 
-                {/* ---------------------------------------------------------------- */}
-                {/* Request content                                                   */}
-                {/* ---------------------------------------------------------------- */}
-
                 <div className="mt-5 grid gap-4 lg:grid-cols-[1.45fr_1fr]">
                     <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm">
                         <h2 className="text-sm font-semibold text-white">
@@ -811,8 +901,7 @@ function RequestDetail({
                         </h2>
 
                         <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-zinc-300">
-                            {request.description ||
-                                "No description provided."}
+                            {request.description || "No description provided."}
                         </p>
 
                         <dl className="mt-6 grid gap-5 sm:grid-cols-2">
@@ -820,7 +909,6 @@ function RequestDetail({
                                 <dt className="text-xs text-zinc-500">
                                     Request number
                                 </dt>
-
                                 <dd className="mt-1 text-sm font-medium text-zinc-100">
                                     {request.requestNumber}
                                 </dd>
@@ -830,7 +918,6 @@ function RequestDetail({
                                 <dt className="text-xs text-zinc-500">
                                     Contract type
                                 </dt>
-
                                 <dd className="mt-1 text-sm font-medium text-zinc-100">
                                     {request.contractType}
                                 </dd>
@@ -840,7 +927,6 @@ function RequestDetail({
                                 <dt className="text-xs text-zinc-500">
                                     Requested by
                                 </dt>
-
                                 <dd className="mt-1 text-sm font-medium text-zinc-100">
                                     {requestedBy}
                                 </dd>
@@ -850,7 +936,6 @@ function RequestDetail({
                                 <dt className="text-xs text-zinc-500">
                                     Assigned professional
                                 </dt>
-
                                 <dd className="mt-1 text-sm font-medium text-zinc-100">
                                     {professional}
                                 </dd>
@@ -860,11 +945,8 @@ function RequestDetail({
                                 <dt className="text-xs text-zinc-500">
                                     Created
                                 </dt>
-
                                 <dd className="mt-1 text-sm font-medium text-zinc-100">
-                                    {formatContractDate(
-                                        request.createdAt
-                                    )}
+                                    {formatContractDate(request.createdAt)}
                                 </dd>
                             </div>
 
@@ -872,7 +954,6 @@ function RequestDetail({
                                 <dt className="text-xs text-zinc-500">
                                     Expected delivery
                                 </dt>
-
                                 <dd className="mt-1 text-sm font-medium text-zinc-100">
                                     {formatContractDate(
                                         request.expectedDeliveryDate
@@ -916,84 +997,13 @@ function RequestDetail({
                         )}
 
                         <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-xs leading-5 text-zinc-400">
-                            This is a legal request. Once it is
-                            converted into an actual contract, the
-                            contract record will be available in the
-                            Contracts workspace.
+                            This is a legal request. Once it is converted into
+                            an actual contract, the contract record will be
+                            available in the Contracts workspace.
                         </div>
                     </section>
                 </div>
             </div>
         </main>
-    )
-}
-
-/* -------------------------------------------------------------------------- */
-/* Final document                                                             */
-/* -------------------------------------------------------------------------- */
-
-function FinalDocumentButton({
-    contractId,
-    hasDocument,
-}: {
-    contractId: string
-    hasDocument: boolean
-}) {
-    const [loading, setLoading] =
-        useState(false)
-
-    const download = async () => {
-        if (!hasDocument || loading) {
-            return
-        }
-
-        try {
-            setLoading(true)
-
-            const result =
-                await contractService.getFinalFileUrl(
-                    contractId,
-                    "pdf"
-                )
-
-            window.open(
-                result.url,
-                "_blank",
-                "noopener,noreferrer"
-            )
-        } catch (error) {
-            console.error(
-                "Failed to get final document URL:",
-                error
-            )
-
-            /*
-             * Do not silently fail.
-             * The parent page doesn't own a toast system,
-             * so a browser alert is used as a minimal fallback.
-             */
-            window.alert(
-                error instanceof Error
-                    ? error.message
-                    : "Final document is not available."
-            )
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    return (
-        <button
-            type="button"
-            onClick={download}
-            disabled={!hasDocument || loading}
-            className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 px-3 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-        >
-            <Download className="size-4" />
-
-            {loading
-                ? "Opening…"
-                : "Download"}
-        </button>
     )
 }

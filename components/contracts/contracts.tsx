@@ -9,8 +9,10 @@ import {
     CalendarDays,
     Check,
     ChevronDown,
+    Download,
     FileText,
     Filter,
+    Loader2,
     MessageSquare,
     MoreHorizontal,
     Plus,
@@ -35,10 +37,11 @@ import {
     statuses,
 } from "@/lib/contracts"
 
-import type {
-    Contract,
-    ContractRequest,
-    ContractRequestFormData,
+import {
+    contractService,
+    type Contract,
+    type ContractRequest,
+    type ContractRequestFormData,
 } from "@/lib/services/contract.service"
 
 /* -------------------------------------------------------------------------- */
@@ -82,6 +85,18 @@ type ActivityLike = {
     user?: unknown
 }
 
+type FinalFileType = "pdf" | "docx" | "signedPdf"
+
+type DocumentRow = {
+    id: string
+    name: string
+    mimeType?: string
+    size?: number
+    source:
+    | { kind: "final"; fileType: FinalFileType }
+    | { kind: "supporting"; documentId: string }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Primitives                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -102,16 +117,8 @@ function Badge({
     )
 }
 
-export function StatusBadge({
-    status,
-}: {
-    status: string
-}) {
-    return (
-        <Badge className={statusClass(status)}>
-            {status}
-        </Badge>
-    )
+export function StatusBadge({ status }: { status: string }) {
+    return <Badge className={statusClass(status)}>{status}</Badge>
 }
 
 export function PriorityBadge({
@@ -147,19 +154,10 @@ function Avatar({
     )
 }
 
-function Info({
-    label,
-    value,
-}: {
-    label: string
-    value: string
-}) {
+function Info({ label, value }: { label: string; value: string }) {
     return (
         <div>
-            <dt className="text-xs text-zinc-500">
-                {label}
-            </dt>
-
+            <dt className="text-xs text-zinc-500">{label}</dt>
             <dd className="mt-1 text-sm font-medium text-zinc-100">
                 {value}
             </dd>
@@ -195,20 +193,13 @@ export function StatCards({
     ).length
 
     const renewalsThisQuarter = contracts.filter((contract) => {
-        if (!contract.renewalDate) {
-            return false
-        }
+        if (!contract.renewalDate) return false
 
         const renewal = new Date(contract.renewalDate)
-
-        if (Number.isNaN(renewal.getTime())) {
-            return false
-        }
+        if (Number.isNaN(renewal.getTime())) return false
 
         const now = new Date()
-
-        const quarterStartMonth =
-            Math.floor(now.getMonth() / 3) * 3
+        const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3
 
         const quarterStart = new Date(
             now.getFullYear(),
@@ -314,15 +305,11 @@ function FilterSelect({
 }) {
     return (
         <label className="relative">
-            <span className="sr-only">
-                Filter
-            </span>
+            <span className="sr-only">Filter</span>
 
             <select
                 value={value}
-                onChange={(event) =>
-                    onChange(event.target.value)
-                }
+                onChange={(event) => onChange(event.target.value)}
                 className="h-10 appearance-none rounded-xl border border-zinc-800 bg-zinc-950 py-0 pl-3 pr-8 text-xs font-medium text-zinc-200 outline-none transition focus:border-yellow-400"
             >
                 {options.map((option) => (
@@ -367,9 +354,7 @@ export function ContractFilters({
 
                 <input
                     value={search}
-                    onChange={(event) =>
-                        setSearch(event.target.value)
-                    }
+                    onChange={(event) => setSearch(event.target.value)}
                     placeholder="Search contracts, counterparties, or IDs"
                     className="h-10 w-full rounded-xl border border-zinc-800 bg-zinc-900 pl-10 pr-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-yellow-400 focus:bg-zinc-950"
                 />
@@ -436,15 +421,13 @@ export function ContractTable({
 
                     <tbody className="divide-y divide-zinc-800">
                         {contracts.map((contract) => {
-                            const professional =
-                                displayUserName(
-                                    contract.assignedProfessional
-                                )
+                            const professional = displayUserName(
+                                contract.assignedProfessional
+                            )
 
-                            const counterparty =
-                                displayCounterparty(
-                                    contract.counterparty
-                                )
+                            const counterparty = displayCounterparty(
+                                contract.counterparty
+                            )
 
                             return (
                                 <tr
@@ -479,9 +462,7 @@ export function ContractTable({
                                     </td>
 
                                     <td className="px-5 py-4">
-                                        <StatusBadge
-                                            status={contract.status}
-                                        />
+                                        <StatusBadge status={contract.status} />
                                     </td>
 
                                     <td className="px-5 py-4">
@@ -533,7 +514,6 @@ export function ContractTable({
                                     <td className="px-5 py-4">
                                         <span className="flex items-center gap-1.5 text-xs text-zinc-400">
                                             <CalendarDays className="size-4" />
-
                                             {formatContractDate(
                                                 contract.expiryDate
                                             )}
@@ -573,8 +553,7 @@ export function ContractTable({
                     </h3>
 
                     <p className="mt-1 text-sm text-zinc-500">
-                        Contracts created for your business will
-                        appear here.
+                        Contracts created for your business will appear here.
                     </p>
                 </div>
             )}
@@ -626,10 +605,9 @@ export function RequestTable({
 
                     <tbody className="divide-y divide-zinc-800">
                         {requests.map((request) => {
-                            const professional =
-                                displayUserName(
-                                    request.assignedProfessional
-                                )
+                            const professional = displayUserName(
+                                request.assignedProfessional
+                            )
 
                             return (
                                 <tr
@@ -664,9 +642,7 @@ export function RequestTable({
                                     </td>
 
                                     <td className="px-5 py-4">
-                                        <StatusBadge
-                                            status={request.status}
-                                        />
+                                        <StatusBadge status={request.status} />
                                     </td>
 
                                     <td className="px-5 py-4">
@@ -706,7 +682,6 @@ export function RequestTable({
                                     <td className="px-5 py-4">
                                         <span className="flex items-center gap-1.5 text-xs text-zinc-400">
                                             <CalendarDays className="size-4 shrink-0" />
-
                                             {formatContractDate(
                                                 request.expectedDeliveryDate
                                             )}
@@ -746,8 +721,8 @@ export function RequestTable({
                     </h3>
 
                     <p className="mt-1 text-sm text-zinc-500">
-                        Contract requests submitted by your business
-                        will appear here.
+                        Contract requests submitted by your business will
+                        appear here.
                     </p>
                 </div>
             )}
@@ -777,33 +752,24 @@ export function NewRequestModal({
         data: ContractRequestFormData
     ) => Promise<void> | void
 }) {
-    const [form, setForm] =
-        useState<ContractRequestFormData>({
-            title: "",
-            contractType: "NDA",
-            priority: "Medium",
-            expectedDeliveryDate: "",
-            description: "",
-        })
+    const [form, setForm] = useState<ContractRequestFormData>({
+        title: "",
+        contractType: "NDA",
+        priority: "Medium",
+        expectedDeliveryDate: "",
+        description: "",
+    })
 
-    const [saving, setSaving] =
-        useState(false)
+    const [saving, setSaving] = useState(false)
+    const [error, setError] = useState("")
 
-    const [error, setError] =
-        useState("")
-
-    if (!open) {
-        return null
-    }
+    if (!open) return null
 
     const update = (
         key: keyof ContractRequestFormData,
         value: string
     ) => {
-        setForm((current) => ({
-            ...current,
-            [key]: value,
-        }))
+        setForm((current) => ({ ...current, [key]: value }))
     }
 
     const reset = () => {
@@ -814,13 +780,10 @@ export function NewRequestModal({
             expectedDeliveryDate: "",
             description: "",
         })
-
         setError("")
     }
 
-    const submit = async (
-        event: React.FormEvent
-    ) => {
+    const submit = async (event: React.FormEvent) => {
         event.preventDefault()
 
         if (!form.title?.trim()) {
@@ -842,16 +805,6 @@ export function NewRequestModal({
             setSaving(true)
             setError("")
 
-            /*
-             * IMPORTANT:
-             *
-             * The modal does NOT create the request itself.
-             *
-             * It passes ContractRequestFormData to the parent,
-             * and the parent calls:
-             *
-             * contractService.createContractRequest(form)
-             */
             await onCreated({
                 ...form,
                 title: form.title.trim(),
@@ -893,8 +846,8 @@ export function NewRequestModal({
                         </h2>
 
                         <p className="mt-1 text-sm text-zinc-400">
-                            Tell us what your business needs. A
-                            professional will be assigned shortly.
+                            Tell us what your business needs. A professional
+                            will be assigned shortly.
                         </p>
                     </div>
 
@@ -915,10 +868,7 @@ export function NewRequestModal({
                     </div>
                 )}
 
-                <form
-                    onSubmit={submit}
-                    className="mt-6 flex flex-col gap-4"
-                >
+                <form onSubmit={submit} className="mt-6 flex flex-col gap-4">
                     <label className="flex flex-col gap-1.5 text-sm font-medium text-zinc-300">
                         Request title
 
@@ -926,10 +876,7 @@ export function NewRequestModal({
                             required
                             value={form.title ?? ""}
                             onChange={(event) =>
-                                update(
-                                    "title",
-                                    event.target.value
-                                )
+                                update("title", event.target.value)
                             }
                             placeholder="e.g. Mutual NDA with a new partner"
                             className="h-10 rounded-xl border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-yellow-400"
@@ -1038,9 +985,7 @@ export function NewRequestModal({
                             disabled={saving}
                             className="rounded-xl bg-yellow-400 px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-yellow-300 disabled:opacity-60"
                         >
-                            {saving
-                                ? "Submitting…"
-                                : "Submit request"}
+                            {saving ? "Submitting…" : "Submit request"}
                         </button>
                     </div>
                 </form>
@@ -1058,10 +1003,7 @@ export function ContractOverview({
 }: {
     contract: Contract
 }) {
-    const professional =
-        displayUserName(
-            contract.assignedProfessional
-        )
+    const professional = displayUserName(contract.assignedProfessional)
 
     return (
         <div className="grid gap-4 lg:grid-cols-[1.45fr_1fr]">
@@ -1085,9 +1027,7 @@ export function ContractOverview({
                 <dl className="mt-6 grid gap-5 sm:grid-cols-2">
                     <Info
                         label="Counterparty"
-                        value={displayCounterparty(
-                            contract.counterparty
-                        )}
+                        value={displayCounterparty(contract.counterparty)}
                     />
 
                     <Info
@@ -1100,23 +1040,17 @@ export function ContractOverview({
 
                     <Info
                         label="Effective date"
-                        value={formatContractDate(
-                            contract.effectiveDate
-                        )}
+                        value={formatContractDate(contract.effectiveDate)}
                     />
 
                     <Info
                         label="Expiry date"
-                        value={formatContractDate(
-                            contract.expiryDate
-                        )}
+                        value={formatContractDate(contract.expiryDate)}
                     />
 
                     <Info
                         label="Renewal date"
-                        value={formatContractDate(
-                            contract.renewalDate
-                        )}
+                        value={formatContractDate(contract.renewalDate)}
                     />
 
                     <Info
@@ -1131,10 +1065,7 @@ export function ContractOverview({
                         value={contract.contractNumber}
                     />
 
-                    <Info
-                        label="Status"
-                        value={contract.status}
-                    />
+                    <Info label="Status" value={contract.status} />
                 </dl>
             </section>
 
@@ -1163,10 +1094,7 @@ export function ContractOverview({
                             "string" &&
                             contract.assignedProfessional.email && (
                                 <p className="mt-0.5 text-xs text-zinc-500">
-                                    {
-                                        contract.assignedProfessional
-                                            .email
-                                    }
+                                    {contract.assignedProfessional.email}
                                 </p>
                             )}
                     </div>
@@ -1190,8 +1118,8 @@ export function ContractOverview({
                 </div>
 
                 <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-xs leading-5 text-zinc-400">
-                    Your legal professional is notified when
-                    you add a comment or upload a new document.
+                    Your legal professional is notified when you add a
+                    comment or upload a new document.
                 </div>
             </section>
         </div>
@@ -1199,68 +1127,150 @@ export function ContractOverview({
 }
 
 /* -------------------------------------------------------------------------- */
-/* Documents                                                                   */
+/* Documents — real R2 download                                               */
 /* -------------------------------------------------------------------------- */
 
-function normalizeDocument(
-    document: ContractDocumentLike
-) {
-    return {
-        id:
-            document._id ??
-            document.id ??
-            document.fileName ??
-            document.name ??
-            crypto.randomUUID(),
-
-        name:
-            document.fileName ??
-            document.originalName ??
-            document.name ??
-            document.title ??
-            "Document",
-
-        type:
-            document.fileType ??
-            document.type ??
-            document.mimeType ??
-            "Document",
-
-        size: formatFileSize(
-            document.fileSize ??
-            document.size
-        ),
-
-        url:
-            document.downloadUrl ??
-            document.url ??
-            null,
-    }
+function formatFileSize(size?: number | null): string {
+    if (!size || size <= 0) return "Unknown size"
+    if (size < 1024) return `${size} B`
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+    if (size < 1024 * 1024 * 1024)
+        return `${(size / (1024 * 1024)).toFixed(1)} MB`
+    return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`
 }
 
-function formatFileSize(
-    size?: number | null
-): string {
-    if (!size || size <= 0) {
-        return "Unknown size"
+function isObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null
+}
+
+function isBusinessDocumentLike(
+    value: unknown
+): value is ContractDocumentLike & { _id: string } {
+    return (
+        isObject(value) &&
+        typeof (value as { _id?: unknown })._id === "string"
+    )
+}
+
+function isAbsoluteUrl(value: string): boolean {
+    return /^https?:\/\//i.test(value)
+}
+
+function guessExtension(mimeType?: string, name?: string): string {
+    if (name && name.includes(".")) {
+        return name.split(".").pop()!.toLowerCase()
+    }
+    if (!mimeType) return "bin"
+    if (mimeType.includes("pdf")) return "pdf"
+    if (mimeType.includes("word")) return "docx"
+    if (mimeType.includes("sheet")) return "xlsx"
+    if (mimeType.includes("png")) return "png"
+    if (mimeType.includes("jpeg") || mimeType.includes("jpg")) return "jpg"
+    return "bin"
+}
+
+/**
+ * Convert a contract into a flat list of downloadable rows.
+ *
+ * Every row carries a "source" so we know which backend endpoint
+ * to hit for a fresh signed R2 URL at click time.
+ */
+function collectDocumentRows(contract: Contract): DocumentRow[] {
+    const rows: DocumentRow[] = []
+    const seen = new Set<string>()
+
+    const push = (row: DocumentRow) => {
+        if (seen.has(row.id)) return
+        seen.add(row.id)
+        rows.push(row)
     }
 
-    if (size < 1024) {
-        return `${size} B`
+    // currentDocument → final "pdf"
+    if (isBusinessDocumentLike(contract.currentDocument)) {
+        const doc = contract.currentDocument
+        push({
+            id: doc._id,
+            name: doc.originalName || doc.name || "Contract (final PDF)",
+            mimeType: doc.mimeType,
+            size: doc.size,
+            source: { kind: "final", fileType: "pdf" },
+        })
+    } else if (typeof contract.currentDocument === "string") {
+        push({
+            id: contract.currentDocument,
+            name: "Contract (final PDF)",
+            source: { kind: "final", fileType: "pdf" },
+        })
     }
 
-    if (size < 1024 * 1024) {
-        return `${(size / 1024).toFixed(1)} KB`
+    // signedDocument → final "signedPdf"
+    if (isBusinessDocumentLike(contract.signedDocument)) {
+        const doc = contract.signedDocument
+        push({
+            id: doc._id,
+            name: doc.originalName || doc.name || "Contract (signed PDF)",
+            mimeType: doc.mimeType,
+            size: doc.size,
+            source: { kind: "final", fileType: "signedPdf" },
+        })
+    } else if (typeof contract.signedDocument === "string") {
+        push({
+            id: contract.signedDocument,
+            name: "Contract (signed PDF)",
+            source: { kind: "final", fileType: "signedPdf" },
+        })
     }
 
-    if (size < 1024 * 1024 * 1024) {
-        return `${(size / (1024 * 1024)).toFixed(1)} MB`
+    // supportingDocuments[]
+    if (Array.isArray(contract.supportingDocuments)) {
+        for (const doc of contract.supportingDocuments) {
+            if (!isBusinessDocumentLike(doc)) continue
+            push({
+                id: doc._id,
+                name: doc.originalName || doc.name || "Supporting document",
+                mimeType: doc.mimeType,
+                size: doc.size,
+                source: { kind: "supporting", documentId: doc._id },
+            })
+        }
     }
 
-    return `${(
-        size /
-        (1024 * 1024 * 1024)
-    ).toFixed(1)} GB`
+    return rows
+}
+
+/**
+ * Fetch an R2 object from a signed URL and force a browser save.
+ *
+ * We do NOT send an Authorization header to R2 — the signed URL
+ * is self-authorizing and extra headers invalidate the signature.
+ */
+async function saveFromUrl(signedUrl: string, filename: string) {
+    const response = await fetch(signedUrl, {
+        method: "GET",
+        credentials: "omit",
+        mode: "cors",
+    })
+
+    if (!response.ok) {
+        throw new Error(
+            `Failed to fetch file (${response.status} ${response.statusText})`
+        )
+    }
+
+    const blob = await response.blob()
+    const blobUrl = URL.createObjectURL(blob)
+
+    try {
+        const a = document.createElement("a")
+        a.href = blobUrl
+        a.download = filename
+        a.rel = "noopener noreferrer"
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+    } finally {
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
+    }
 }
 
 export function ContractDocuments({
@@ -1270,36 +1280,66 @@ export function ContractDocuments({
     contract: Contract
     onUpload?: () => void
 }) {
-    const supportingDocuments =
-        (contract.supportingDocuments ??
-            []) as unknown as ContractDocumentLike[]
+    const rows = collectDocumentRows(contract)
 
-    const documents = supportingDocuments.map(
-        normalizeDocument
-    )
+    const [downloadingId, setDownloadingId] = useState<string | null>(null)
+    const [errorById, setErrorById] = useState<Record<string, string>>({})
 
-    const currentDocument = contract.currentDocument
-        ? normalizeDocument(
-            contract.currentDocument as unknown as ContractDocumentLike
-        )
-        : null
+    const handleDownload = async (row: DocumentRow) => {
+        if (downloadingId) return
 
-    const signedDocument = contract.signedDocument
-        ? normalizeDocument(
-            contract.signedDocument as unknown as ContractDocumentLike
-        )
-        : null
+        setDownloadingId(row.id)
+        setErrorById((prev) => {
+            const next = { ...prev }
+            delete next[row.id]
+            return next
+        })
 
-    const allDocuments = [
-        ...documents,
-        ...(currentDocument ? [currentDocument] : []),
-        ...(signedDocument ? [signedDocument] : []),
-    ].filter(
-        (document, index, array) =>
-            array.findIndex(
-                (item) => item.id === document.id
-            ) === index
-    )
+        try {
+            // 1) Ask backend for a fresh signed R2 URL.
+            const urlResponse =
+                row.source.kind === "final"
+                    ? await contractService.getFinalFileUrl(
+                        contract._id,
+                        row.source.fileType
+                    )
+                    : await contractService.getSupportingDocumentUrl(
+                        contract._id,
+                        row.source.documentId
+                    )
+
+            const signedUrl = urlResponse?.url
+
+            if (!signedUrl) {
+                throw new Error("Backend did not return a download URL.")
+            }
+
+            if (!isAbsoluteUrl(signedUrl)) {
+                throw new Error(
+                    "Backend returned a non-absolute URL for the R2 object."
+                )
+            }
+
+            // 2) Fetch and force save.
+            const ext = guessExtension(row.mimeType, row.name)
+            const filename = row.name.includes(".")
+                ? row.name
+                : `${row.name}.${ext}`
+
+            await saveFromUrl(signedUrl, filename)
+        } catch (err) {
+            console.error("Document download failed:", err)
+
+            const message =
+                err instanceof Error
+                    ? err.message
+                    : "Unable to download this document."
+
+            setErrorById((prev) => ({ ...prev, [row.id]: message }))
+        } finally {
+            setDownloadingId(null)
+        }
+    }
 
     return (
         <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm">
@@ -1326,7 +1366,7 @@ export function ContractDocuments({
                 )}
             </div>
 
-            {allDocuments.length === 0 ? (
+            {rows.length === 0 ? (
                 <div className="mt-5 rounded-xl border border-dashed border-zinc-800 p-8 text-center">
                     <FileText className="mx-auto size-6 text-zinc-700" />
 
@@ -1335,46 +1375,62 @@ export function ContractDocuments({
                     </p>
                 </div>
             ) : (
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    {allDocuments.map((document) => (
-                        <div
-                            key={document.id}
-                            className="flex items-center justify-between rounded-xl border border-zinc-800 p-3 transition hover:border-zinc-700"
-                        >
-                            <div className="flex min-w-0 items-center gap-3">
-                                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-zinc-400">
-                                    <FileText className="size-4" />
-                                </span>
+                <ul className="mt-4 flex flex-col divide-y divide-zinc-800/70">
+                    {rows.map((row) => {
+                        const isDownloading = downloadingId === row.id
+                        const rowError = errorById[row.id]
 
-                                <div className="min-w-0">
-                                    <p className="max-w-[200px] truncate text-xs font-semibold text-zinc-100">
-                                        {document.name}
-                                    </p>
+                        return (
+                            <li
+                                key={row.id}
+                                className="flex items-center justify-between gap-3 py-3"
+                            >
+                                <div className="flex min-w-0 items-center gap-3">
+                                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-zinc-400">
+                                        <FileText className="size-4" />
+                                    </span>
 
-                                    <p className="mt-1 truncate text-[11px] text-zinc-500">
-                                        {document.type} · {document.size}
-                                    </p>
+                                    <div className="min-w-0">
+                                        <p className="max-w-[220px] truncate text-xs font-semibold text-zinc-100">
+                                            {row.name}
+                                        </p>
+
+                                        <p className="mt-1 truncate text-[11px] text-zinc-500">
+                                            {row.mimeType ||
+                                                "application/octet-stream"}
+                                            {row.size
+                                                ? ` · ${formatFileSize(row.size)}`
+                                                : ""}
+                                        </p>
+
+                                        {rowError && (
+                                            <p className="mt-1 text-[11px] text-red-400">
+                                                {rowError}
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
 
-                            {document.url ? (
-                                <a
-                                    href={document.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    aria-label={`Open ${document.name}`}
-                                    className="rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-800 hover:text-yellow-400"
+                                <button
+                                    type="button"
+                                    onClick={() => void handleDownload(row)}
+                                    disabled={isDownloading}
+                                    aria-label={`Download ${row.name}`}
+                                    title={`Download ${row.name}`}
+                                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-300 transition hover:bg-zinc-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                                 >
-                                    <ArrowUpRight className="size-4" />
-                                </a>
-                            ) : (
-                                <span className="rounded-lg p-2 text-zinc-700">
-                                    <ArrowUpRight className="size-4" />
-                                </span>
-                            )}
-                        </div>
-                    ))}
-                </div>
+                                    {isDownloading ? (
+                                        <Loader2 className="size-3.5 animate-spin" />
+                                    ) : (
+                                        <Download className="size-3.5" />
+                                    )}
+
+                                    {isDownloading ? "Preparing" : "Download"}
+                                </button>
+                            </li>
+                        )
+                    })}
+                </ul>
             )}
         </section>
     )
@@ -1395,16 +1451,12 @@ export function ContractActivity({
         {
             id: "created",
             label: "Contract created",
-            description:
-                "Contract record was created.",
+            description: "Contract record was created.",
             createdAt: contract.createdAt,
         },
     ]
 
-    const items =
-        activities.length > 0
-            ? activities
-            : fallbackActivity
+    const items = activities.length > 0 ? activities : fallbackActivity
 
     return (
         <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm">
@@ -1430,19 +1482,10 @@ export function ContractActivity({
                         item.type ??
                         "Contract activity"
 
-                    const detail =
-                        item.description ??
-                        item.detail ??
-                        ""
+                    const detail = item.description ?? item.detail ?? ""
+                    const date = item.createdAt ?? item.date
 
-                    const date =
-                        item.createdAt ??
-                        item.date
-
-                    const performedBy =
-                        item.performedBy ??
-                        item.user
-
+                    const performedBy = item.performedBy ?? item.user
                     const performedByName = performedBy
                         ? displayUserName(performedBy as never)
                         : null
@@ -1506,16 +1549,6 @@ export function ContractActivity({
 /* Comments                                                                    */
 /* -------------------------------------------------------------------------- */
 
-/**
- * CommentComposer is intentionally API-ready.
- *
- * The detail page should supply:
- *
- * - comments loaded through contractService.getComments()
- * - onSubmit -> contractService.addComment()
- *
- * This component no longer stores fake comments in local state.
- */
 export type ContractComment = {
     _id?: string
     id?: string
@@ -1535,32 +1568,22 @@ export function CommentComposer({
 }: {
     comments?: ContractComment[]
     currentUser?: unknown
-    onSubmit?: (
-        comment: string
-    ) => Promise<void> | void
+    onSubmit?: (comment: string) => Promise<void> | void
     submitting?: boolean
 }) {
-    const [comment, setComment] =
-        useState("")
+    const [comment, setComment] = useState("")
+    const [error, setError] = useState("")
 
-    const [error, setError] =
-        useState("")
-
-    const userName =
-        displayUserName(currentUser as never)
+    const userName = displayUserName(currentUser as never)
 
     const submit = async () => {
         const value = comment.trim()
 
-        if (!value || !onSubmit || submitting) {
-            return
-        }
+        if (!value || !onSubmit || submitting) return
 
         try {
             setError("")
-
             await onSubmit(value)
-
             setComment("")
         } catch (err) {
             setError(
@@ -1573,9 +1596,7 @@ export function CommentComposer({
 
     return (
         <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm">
-            <h2 className="text-sm font-semibold text-white">
-                Comments
-            </h2>
+            <h2 className="text-sm font-semibold text-white">Comments</h2>
 
             <div className="mt-4 flex items-start gap-3">
                 <Avatar
@@ -1586,9 +1607,7 @@ export function CommentComposer({
                 <div className="min-w-0 flex-1">
                     <textarea
                         value={comment}
-                        onChange={(event) =>
-                            setComment(event.target.value)
-                        }
+                        onChange={(event) => setComment(event.target.value)}
                         placeholder="Add a note for your legal professional…"
                         rows={3}
                         disabled={submitting}
@@ -1596,9 +1615,7 @@ export function CommentComposer({
                     />
 
                     {error && (
-                        <p className="mt-2 text-xs text-red-400">
-                            {error}
-                        </p>
+                        <p className="mt-2 text-xs text-red-400">{error}</p>
                     )}
 
                     <div className="mt-2 flex justify-end">
@@ -1606,15 +1623,11 @@ export function CommentComposer({
                             type="button"
                             onClick={submit}
                             disabled={
-                                !comment.trim() ||
-                                !onSubmit ||
-                                submitting
+                                !comment.trim() || !onSubmit || submitting
                             }
                             className="rounded-xl bg-yellow-400 px-3 py-2 text-xs font-semibold text-black transition hover:bg-yellow-300 disabled:opacity-40"
                         >
-                            {submitting
-                                ? "Posting…"
-                                : "Post comment"}
+                            {submitting ? "Posting…" : "Post comment"}
                         </button>
                     </div>
                 </div>
@@ -1624,16 +1637,11 @@ export function CommentComposer({
                 <div className="mt-4">
                     {comments.map((item, index) => {
                         const text =
-                            item.comment ??
-                            item.text ??
-                            item.content ??
-                            ""
+                            item.comment ?? item.text ?? item.content ?? ""
 
-                        const author =
-                            displayUserName(
-                                item.user ??
-                                item.createdBy
-                            )
+                        const author = displayUserName(
+                            item.user ?? item.createdBy
+                        )
 
                         return (
                             <div
@@ -1690,17 +1698,13 @@ export function MobileSectionTabs({
     setActive,
 }: {
     active: "contracts" | "requests"
-    setActive: (
-        value: "contracts" | "requests"
-    ) => void
+    setActive: (value: "contracts" | "requests") => void
 }) {
     return (
         <div className="flex rounded-xl border border-zinc-800 bg-zinc-950 p-1">
             <button
                 type="button"
-                onClick={() =>
-                    setActive("contracts")
-                }
+                onClick={() => setActive("contracts")}
                 className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${active === "contracts"
                     ? "bg-yellow-400 text-black shadow-sm"
                     : "text-zinc-400 hover:text-zinc-200"
@@ -1711,9 +1715,7 @@ export function MobileSectionTabs({
 
             <button
                 type="button"
-                onClick={() =>
-                    setActive("requests")
-                }
+                onClick={() => setActive("requests")}
                 className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${active === "requests"
                     ? "bg-yellow-400 text-black shadow-sm"
                     : "text-zinc-400 hover:text-zinc-200"

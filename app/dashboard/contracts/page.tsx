@@ -991,7 +991,7 @@ export default function ContractsPage() {
 
                             <Plus className="size-4" />
 
-                            New legal request
+                            New contract request
 
                         </button>
 

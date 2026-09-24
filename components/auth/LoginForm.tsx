@@ -77,7 +77,9 @@ export function LoginForm() {
           // Redirect based on role
           const userRole = user.role?.toLowerCase() || ''
 
-          if (userRole === 'lawyer' || userRole === 'attorney' || userRole === 'legal') {
+          if (userRole === 'admin' || userRole === 'superadmin') {
+            router.push('/admin-dashboard')
+          } else if (userRole === 'lawyer' || userRole === 'attorney' || userRole === 'legal') {
             router.push('/lawyer-dashboard')
           } else if (userRole === 'business' || userRole === 'client' || userRole === 'user') {
             router.push('/dashboard')

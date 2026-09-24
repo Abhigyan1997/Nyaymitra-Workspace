@@ -1,4 +1,5 @@
 'use client'
+import { useRouter } from 'next/navigation'
 
 import {
   FormEvent,
@@ -30,7 +31,7 @@ import {
 
 const API_BASE_URL = (
   process.env.NEXT_PUBLIC_API_URL ||
-  'https://nyaymitra-backend-production.up.railway.app/api/v1'
+  'http://localhost:5000/api/v1'
 ).replace(/\/$/, '')
 
 const LEGAL_REQUESTS_API =
@@ -1264,6 +1265,7 @@ function Chevron() {
 ========================================================= */
 
 export default function LegalRequestsPage() {
+  const router = useRouter()
   const [requests, setRequests] =
     useState<LegalRequest[]>([])
 
@@ -1286,6 +1288,7 @@ export default function LegalRequestsPage() {
     useState<
       'all' | LegalRequestStatus
     >('all')
+
 
   /* -------------------------------------------------------
      FETCH REQUESTS
@@ -1797,12 +1800,14 @@ export default function LegalRequestsPage() {
                         request
                       }
                       onClick={() => {
-                        /*
-                         * Later:
-                         * router.push(
-                         *   `/business/legal-requests/${request._id}`
-                         * )
-                         */
+                        const requestId =
+                          request._id || request.id
+
+                        if (!requestId) return
+
+                        router.push(
+                          `/dashboard/legal-requests/${requestId}`
+                        )
                       }}
                     />
                   )
