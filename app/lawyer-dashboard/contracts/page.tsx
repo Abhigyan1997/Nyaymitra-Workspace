@@ -1,6 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
     ArrowLeft,
@@ -16,10 +22,10 @@ import {
     History,
     Mail,
     MessageSquare,
-    MoreHorizontal,
     RefreshCw,
     Search,
     Send,
+    Upload,
     Users,
     X,
 } from 'lucide-react'
@@ -33,15 +39,12 @@ import {
  * Live APIs used:
  * GET    /lawyer/contracts
  * GET    /lawyer/contracts/:contractId
- * PATCH  /lawyer/contracts/:contractId/status
  * POST   /lawyer/contracts/:contractId/comments
  * GET    /lawyer/contracts/:contractId/comments
  * GET    /lawyer/contracts/:contractId/activity
  * GET    /lawyer/contracts/:contractId/documents
- *
- * Document download is intentionally handled by the lawyer document API
- * when a document id is available:
- * GET /lawyer/documents/:documentId/download
+ * POST   /lawyer/contracts/:contractId/documents       (multipart upload)
+ * GET    /lawyer/documents/:documentId/download
  */
 
 const API_BASE =
@@ -90,6 +93,8 @@ interface ContractDocument {
     category?: string
     key?: string
     status?: string
+    uploadedBy?: string
+    source?: 'client' | 'lawyer' | 'system' | string
 }
 
 interface Contract {
@@ -153,10 +158,14 @@ async function apiRequest<T>(
         throw new Error('NO_TOKEN')
     }
 
+    const isFormData =
+        typeof FormData !== 'undefined' &&
+        options.body instanceof FormData
+
     const response = await fetch(`${API_BASE}${path}`, {
         ...options,
         headers: {
-            ...(options.body
+            ...(options.body && !isFormData
                 ? { 'Content-Type': 'application/json' }
                 : {}),
             ...(options.headers || {}),
@@ -194,12 +203,23 @@ async function apiRequest<T>(
 }
 
 function extractArray<T>(response: any): T[] {
+    if (!response) return []
+    if (Array.isArray(response)) return response
     if (Array.isArray(response?.data)) return response.data
     if (Array.isArray(response?.items)) return response.items
     if (Array.isArray(response?.contracts)) return response.contracts
     if (Array.isArray(response?.comments)) return response.comments
     if (Array.isArray(response?.activity)) return response.activity
+    if (Array.isArray(response?.activities)) return response.activities
     if (Array.isArray(response?.documents)) return response.documents
+    if (Array.isArray(response?.data?.comments))
+        return response.data.comments
+    if (Array.isArray(response?.data?.activity))
+        return response.data.activity
+    if (Array.isArray(response?.data?.activities))
+        return response.data.activities
+    if (Array.isArray(response?.data?.documents))
+        return response.data.documents
     return []
 }
 
@@ -260,10 +280,18 @@ function normalizeStatus(value: any): ContractStatus {
 
     if (exact) return exact
 
+    const slug = valueString
+        .toLowerCase()
+        .replace(/[_\s]+/g, '-')
+
     const aliases: Record<string, ContractStatus> = {
-        'in review': 'Internal Review',
-        'awaiting signature': 'Pending Signature',
-        'changes requested': 'Revision Requested',
+        'in-review': 'Internal Review',
+        'internal-review': 'Internal Review',
+        'client-review': 'Client Review',
+        'revision-requested': 'Revision Requested',
+        'awaiting-signature': 'Pending Signature',
+        'pending-signature': 'Pending Signature',
+        'changes-requested': 'Revision Requested',
         approved: 'Approved',
         executed: 'Executed',
         active: 'Active',
@@ -273,10 +301,7 @@ function normalizeStatus(value: any): ContractStatus {
         draft: 'Draft',
     }
 
-    return (
-        aliases[valueString.toLowerCase()] ||
-        'Draft'
-    )
+    return aliases[slug] || 'Draft'
 }
 
 function normalizePriority(value: any): ContractPriority {
@@ -289,21 +314,7 @@ function normalizePriority(value: any): ContractPriority {
     return 'Medium'
 }
 
-function prettyStatus(status: string) {
-    return status
-        .replace(/-/g, ' ')
-        .replace(
-            /\w\S*/g,
-            (word) =>
-                word.charAt(0).toUpperCase() +
-                word.slice(1).toLowerCase()
-        )
-}
-
-function formatDate(
-    value?: string,
-    includeTime = false
-) {
+function formatDate(value?: string, includeTime = false) {
     if (!value) return '—'
 
     const date = new Date(value)
@@ -339,21 +350,12 @@ function formatRelativeOrDate(value?: string) {
     const diff = now - date.getTime()
 
     if (diff >= 0 && diff < 60 * 60 * 1000) {
-        const minutes = Math.max(
-            1,
-            Math.floor(diff / 60000)
-        )
+        const minutes = Math.max(1, Math.floor(diff / 60000))
         return `${minutes} min ago`
     }
 
-    if (
-        diff >= 0 &&
-        diff < 24 * 60 * 60 * 1000
-    ) {
-        const hours = Math.max(
-            1,
-            Math.floor(diff / 3600000)
-        )
+    if (diff >= 0 && diff < 24 * 60 * 60 * 1000) {
+        const hours = Math.max(1, Math.floor(diff / 3600000))
         return `${hours}h ago`
     }
 
@@ -386,8 +388,7 @@ function mapContractSummary(item: any): Contract {
         id: getId(item),
         contractNumber: item?.contractNumber,
         title: item?.title || 'Untitled Contract',
-        contractType:
-            item?.contractType || 'Custom Contract',
+        contractType: item?.contractType || 'Custom Contract',
         clientName: getBusinessName(item),
         clientIndustry: getBusinessIndustry(item),
         clientId: getBusinessId(item),
@@ -418,8 +419,7 @@ function mapContractSummary(item: any): Contract {
                 assignedProfessional?.fullName ||
                 assignedProfessional?.name ||
                 'Assigned Lawyer',
-            email:
-                assignedProfessional?.email || '',
+            email: assignedProfessional?.email || '',
         },
         documents: [],
         activities: [],
@@ -428,6 +428,12 @@ function mapContractSummary(item: any): Contract {
     }
 }
 
+/**
+ * Merge API detail with a fallback (previous state) — but IMPORTANTLY,
+ * do NOT wipe activities/comments/documents that were separately fetched.
+ * Only fill them from the detail response if the detail response actually
+ * contains them.
+ */
 function mapContractDetail(
     item: any,
     fallback?: Contract
@@ -454,10 +460,7 @@ function mapContractDetail(
         item?.signedDocument,
     ].filter(Boolean)
 
-    const uniqueDocuments = new Map<
-        string,
-        ContractDocument
-    >()
+    const uniqueDocuments = new Map<string, ContractDocument>()
 
     directDocuments.forEach((doc: any) => {
         const id = getId(doc)
@@ -480,8 +483,32 @@ function mapContractDetail(
             category: doc?.category,
             key: doc?.key,
             status: doc?.status,
+            uploadedBy:
+                doc?.uploadedBy?.fullName ||
+                doc?.uploadedBy?.name ||
+                doc?.uploadedBy?.email,
+            source: doc?.source || doc?.uploadedByRole,
         })
     })
+
+    const detailDocuments = Array.from(uniqueDocuments.values())
+
+    // Only use detail-provided documents if we didn't already have a
+    // separately-fetched document list from the documents endpoint.
+    const documents =
+        detailDocuments.length > 0
+            ? detailDocuments
+            : fallback?.documents || []
+
+    const activitiesFromDetail = Array.isArray(item?.activity)
+        ? item.activity
+        : Array.isArray(item?.activities)
+            ? item.activities
+            : null
+
+    const commentsFromDetail = Array.isArray(item?.comments)
+        ? item.comments
+        : null
 
     return {
         ...base,
@@ -497,9 +524,7 @@ function mapContractDetail(
             fallback?.dueDate ||
             '',
         lastUpdated:
-            item?.updatedAt ||
-            fallback?.lastUpdated ||
-            '',
+            item?.updatedAt || fallback?.lastUpdated || '',
         assignedLawyer: {
             name:
                 assignedProfessional?.fullName ||
@@ -511,27 +536,28 @@ function mapContractDetail(
                 fallback?.assignedLawyer.email ||
                 '',
         },
-        parties:
-            [
-                getBusinessName(item),
-                item?.counterparty?.name ||
-                item?.counterparty?.companyName ||
-                (typeof item?.counterparty === 'string'
-                    ? item.counterparty
-                    : null),
-            ].filter(Boolean),
-        documents: Array.from(uniqueDocuments.values()),
-        activities: fallback?.activities || [],
-        comments: fallback?.comments || [],
+        parties: [
+            getBusinessName(item),
+            item?.counterparty?.name ||
+            item?.counterparty?.companyName ||
+            (typeof item?.counterparty === 'string'
+                ? item.counterparty
+                : null),
+        ].filter(Boolean),
+        documents,
+        activities: activitiesFromDetail
+            ? activitiesFromDetail.map(mapActivity)
+            : fallback?.activities || [],
+        comments: commentsFromDetail
+            ? commentsFromDetail.map(mapComment)
+            : fallback?.comments || [],
         raw: item,
     }
 }
 
 function mapActivity(item: any): ContractActivity {
     const performedBy =
-        item?.performedBy ||
-        item?.author ||
-        item?.user
+        item?.performedBy || item?.author || item?.user
 
     return {
         id: getId(item),
@@ -545,22 +571,16 @@ function mapActivity(item: any): ContractActivity {
             performedBy?.name ||
             performedBy?.email ||
             'User',
-        timestamp:
-            item?.createdAt ||
-            item?.timestamp ||
-            '',
-        role:
-            Array.isArray(performedBy?.role)
-                ? performedBy.role.join(', ')
-                : performedBy?.role,
+        timestamp: item?.createdAt || item?.timestamp || '',
+        role: Array.isArray(performedBy?.role)
+            ? performedBy.role.join(', ')
+            : performedBy?.role,
     }
 }
 
 function mapComment(item: any): ContractComment {
     const author =
-        item?.author ||
-        item?.createdBy ||
-        item?.user
+        item?.author || item?.createdBy || item?.user
 
     return {
         id: getId(item),
@@ -575,10 +595,7 @@ function mapComment(item: any): ContractComment {
             (Array.isArray(author?.role)
                 ? author.role.join(', ')
                 : author?.role),
-        createdAt:
-            item?.createdAt ||
-            item?.updatedAt ||
-            '',
+        createdAt: item?.createdAt || item?.updatedAt || '',
         isInternal: Boolean(item?.isInternal),
         isEdited: Boolean(item?.isEdited),
     }
@@ -591,28 +608,22 @@ function mapDocument(item: any): ContractDocument {
             item?.name ||
             item?.originalName ||
             'Contract Document',
-        type:
-            item?.mimeType ||
-            item?.type ||
-            'Document',
+        type: item?.mimeType || item?.type || 'Document',
         size: formatFileSize(item?.size),
         category: item?.category,
         key: item?.key,
         status: item?.status,
+        uploadedBy:
+            item?.uploadedBy?.fullName ||
+            item?.uploadedBy?.name ||
+            item?.uploadedBy?.email,
+        source: item?.source || item?.uploadedByRole,
     }
 }
 
-function StatusBadge({
-    status,
-}: {
-    status: ContractStatus
-}) {
-    const styles: Record<
-        ContractStatus,
-        string
-    > = {
-        Draft:
-            'border-zinc-500/20 bg-zinc-500/10 text-zinc-400',
+function StatusBadge({ status }: { status: ContractStatus }) {
+    const styles: Record<ContractStatus, string> = {
+        Draft: 'border-zinc-500/20 bg-zinc-500/10 text-zinc-400',
         'Internal Review':
             'border-blue-500/20 bg-blue-500/10 text-blue-400',
         'Client Review':
@@ -649,16 +660,11 @@ function PriorityBadge({
 }: {
     priority: ContractPriority
 }) {
-    const styles: Record<
-        ContractPriority,
-        string
-    > = {
-        Low:
-            'text-zinc-400 bg-zinc-500/10 border-zinc-500/15',
+    const styles: Record<ContractPriority, string> = {
+        Low: 'text-zinc-400 bg-zinc-500/10 border-zinc-500/15',
         Medium:
             'text-amber-400 bg-amber-500/10 border-amber-500/15',
-        High:
-            'text-red-400 bg-red-500/10 border-red-500/15',
+        High: 'text-red-400 bg-red-500/10 border-red-500/15',
         Urgent:
             'text-red-300 bg-red-600/10 border-red-500/20',
     }
@@ -721,14 +727,12 @@ function LoadingState() {
             <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4">
                 <div className="h-8 w-40 animate-pulse rounded bg-white/[0.05]" />
                 <div className="mt-5 space-y-2">
-                    {Array.from({ length: 6 }).map(
-                        (_, index) => (
-                            <div
-                                key={index}
-                                className="h-20 animate-pulse rounded-xl bg-white/[0.04]"
-                            />
-                        )
-                    )}
+                    {Array.from({ length: 6 }).map((_, index) => (
+                        <div
+                            key={index}
+                            className="h-20 animate-pulse rounded-xl bg-white/[0.04]"
+                        />
+                    ))}
                 </div>
             </div>
 
@@ -740,267 +744,228 @@ function LoadingState() {
     )
 }
 
-export default function LawyerContractPage() {
-    const [contracts, setContracts] = useState<
-        Contract[]
-    >([])
+type DetailTab = 'overview' | 'activity' | 'comments' | 'documents'
 
-    const [
-        selectedContract,
-        setSelectedContract,
-    ] = useState<Contract | null>(null)
+export default function LawyerContractPage() {
+    const [contracts, setContracts] = useState<Contract[]>([])
+    const [selectedContract, setSelectedContract] =
+        useState<Contract | null>(null)
 
     const [search, setSearch] = useState('')
-
-    const [statusFilter, setStatusFilter] =
-        useState<'All' | ContractStatus>('All')
-
-    const [priorityFilter, setPriorityFilter] =
-        useState<'All' | ContractPriority>('All')
+    const [statusFilter, setStatusFilter] = useState<
+        'All' | ContractStatus
+    >('All')
+    const [priorityFilter, setPriorityFilter] = useState<
+        'All' | ContractPriority
+    >('All')
 
     const [loading, setLoading] = useState(true)
-    const [detailLoading, setDetailLoading] =
-        useState(false)
+    const [detailLoading, setDetailLoading] = useState(false)
+    const [refreshing, setRefreshing] = useState(false)
+    const [error, setError] = useState<string | null>(null)
 
-    const [refreshing, setRefreshing] =
-        useState(false)
+    const [mobileDetail, setMobileDetail] = useState(false)
+    const [activeTab, setActiveTab] = useState<DetailTab>('overview')
 
-    const [error, setError] = useState<string | null>(
-        null
-    )
+    const [newComment, setNewComment] = useState('')
+    const [sendingComment, setSendingComment] = useState(false)
+    const [commentsLoading, setCommentsLoading] = useState(false)
 
-    const [mobileDetail, setMobileDetail] =
-        useState(false)
+    const [activityLoading, setActivityLoading] = useState(false)
 
-    const [commentsOpen, setCommentsOpen] =
-        useState(false)
-
-    const [newComment, setNewComment] =
+    const [documentsLoading, setDocumentsLoading] = useState(false)
+    const [uploadingDocument, setUploadingDocument] = useState(false)
+    const [downloadingDocumentId, setDownloadingDocumentId] =
         useState('')
+    const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-    const [sendingComment, setSendingComment] =
-        useState(false)
+    // ----------------------- FETCH LIST -----------------------
+    const fetchContracts = useCallback(async () => {
+        try {
+            setLoading(true)
+            setError(null)
 
-    const [changingStatus, setChangingStatus] =
-        useState(false)
+            const response = await apiRequest<any>(
+                '/lawyer/contracts?page=1&limit=100'
+            )
 
-    const [
-        downloadingDocumentId,
-        setDownloadingDocumentId,
-    ] = useState('')
+            const mapped = extractArray<any>(response).map(
+                mapContractSummary
+            )
 
-    const fetchContracts =
-        useCallback(async () => {
+            setContracts(mapped)
+
+            setSelectedContract((current) => {
+                if (!current) return mapped[0] || null
+                return (
+                    mapped.find((item) => item.id === current.id) ||
+                    current
+                )
+            })
+        } catch (err) {
+            const message =
+                err instanceof Error
+                    ? err.message
+                    : 'Failed to load contracts'
+            setError(message)
+        } finally {
+            setLoading(false)
+            setRefreshing(false)
+        }
+    }, [])
+
+    // ----------------------- FETCH DETAIL -----------------------
+    // Preserves previously-loaded activity/comments/documents so the
+    // separate tab fetches aren't clobbered.
+    const fetchContractDetail = useCallback(
+        async (contractId: string) => {
+            if (!contractId) return
             try {
-                setLoading(true)
-                setError(null)
+                setDetailLoading(true)
 
-                const response =
-                    await apiRequest<any>(
-                        '/lawyer/contracts?page=1&limit=100'
-                    )
-
-                const mapped = extractArray<any>(
-                    response
-                ).map(mapContractSummary)
-
-                setContracts(mapped)
+                const response = await apiRequest<any>(
+                    `/lawyer/contracts/${encodeURIComponent(
+                        contractId
+                    )}`
+                )
+                const detail = extractObject(response)
 
                 setSelectedContract((current) => {
-                    if (!current) {
-                        return mapped[0] || null
+                    if (current?.id !== contractId) {
+                        // Different contract selected in the meantime
+                        return mapContractDetail(detail, current || undefined)
                     }
-
-                    return (
-                        mapped.find(
-                            (item) =>
-                                item.id === current.id
-                        ) || current
-                    )
+                    return mapContractDetail(detail, current)
                 })
             } catch (err) {
-                const message =
-                    err instanceof Error
-                        ? err.message
-                        : 'Failed to load contracts'
-
-                setError(message)
+                console.error('Contract detail error:', err)
             } finally {
-                setLoading(false)
-                setRefreshing(false)
+                setDetailLoading(false)
             }
-        }, [])
+        },
+        []
+    )
 
-    const fetchContractDetail =
-        useCallback(
-            async (contractId: string) => {
-                if (!contractId) return
+    // ----------------------- FETCH ACTIVITY -----------------------
+    const fetchContractActivity = useCallback(
+        async (contractId: string) => {
+            if (!contractId) return
+            try {
+                setActivityLoading(true)
 
-                try {
-                    setDetailLoading(true)
+                const response = await apiRequest<any>(
+                    `/lawyer/contracts/${encodeURIComponent(
+                        contractId
+                    )}/activity`
+                )
 
-                    const response =
-                        await apiRequest<any>(
-                            `/lawyer/contracts/${encodeURIComponent(
-                                contractId
-                            )}`
-                        )
+                const activity = extractArray<any>(response).map(
+                    mapActivity
+                )
 
-                    const detail =
-                        extractObject(response)
+                setSelectedContract((current) =>
+                    current && current.id === contractId
+                        ? { ...current, activities: activity }
+                        : current
+                )
+            } catch (err) {
+                console.error('Contract activity error:', err)
+            } finally {
+                setActivityLoading(false)
+            }
+        },
+        []
+    )
 
-                    setSelectedContract(
-                        (current) =>
-                            mapContractDetail(
-                                detail,
-                                current ||
-                                contracts.find(
-                                    (item) =>
-                                        item.id ===
-                                        contractId
-                                )
-                            )
-                    )
-                } catch (err) {
-                    console.error(
-                        'Contract detail error:',
-                        err
-                    )
-                } finally {
-                    setDetailLoading(false)
-                }
-            },
-            [contracts]
-        )
+    // ----------------------- FETCH COMMENTS -----------------------
+    const fetchContractComments = useCallback(
+        async (contractId: string) => {
+            if (!contractId) return
+            try {
+                setCommentsLoading(true)
 
-    const fetchContractActivity =
-        useCallback(
-            async (contractId: string) => {
-                try {
-                    const response =
-                        await apiRequest<any>(
-                            `/lawyer/contracts/${encodeURIComponent(
-                                contractId
-                            )}/activity`
-                        )
+                const response = await apiRequest<any>(
+                    `/lawyer/contracts/${encodeURIComponent(
+                        contractId
+                    )}/comments`
+                )
 
-                    const activity =
-                        extractArray<any>(
-                            response
-                        ).map(mapActivity)
+                const comments = extractArray<any>(response).map(
+                    mapComment
+                )
 
-                    setSelectedContract(
-                        (current) =>
-                            current
-                                ? {
-                                    ...current,
-                                    activities:
-                                        activity,
-                                }
-                                : current
-                    )
-                } catch (err) {
-                    console.error(
-                        'Contract activity error:',
-                        err
-                    )
-                }
-            },
-            []
-        )
+                setSelectedContract((current) =>
+                    current && current.id === contractId
+                        ? { ...current, comments }
+                        : current
+                )
+            } catch (err) {
+                console.error('Contract comments error:', err)
+            } finally {
+                setCommentsLoading(false)
+            }
+        },
+        []
+    )
 
-    const fetchContractComments =
-        useCallback(
-            async (contractId: string) => {
-                try {
-                    const response =
-                        await apiRequest<any>(
-                            `/lawyer/contracts/${encodeURIComponent(
-                                contractId
-                            )}/comments`
-                        )
+    // ----------------------- FETCH DOCUMENTS -----------------------
+    const fetchContractDocuments = useCallback(
+        async (contractId: string) => {
+            if (!contractId) return
+            try {
+                setDocumentsLoading(true)
 
-                    const comments =
-                        extractArray<any>(
-                            response
-                        ).map(mapComment)
+                const response = await apiRequest<any>(
+                    `/lawyer/contracts/${encodeURIComponent(
+                        contractId
+                    )}/documents`
+                )
 
-                    setSelectedContract(
-                        (current) =>
-                            current
-                                ? {
-                                    ...current,
-                                    comments,
-                                }
-                                : current
-                    )
-                } catch (err) {
-                    console.error(
-                        'Contract comments error:',
-                        err
-                    )
-                }
-            },
-            []
-        )
+                const documents = extractArray<any>(response).map(
+                    mapDocument
+                )
 
-    const fetchContractDocuments =
-        useCallback(
-            async (contractId: string) => {
-                try {
-                    const response =
-                        await apiRequest<any>(
-                            `/lawyer/contracts/${encodeURIComponent(
-                                contractId
-                            )}/documents`
-                        )
-
-                    const documents =
-                        extractArray<any>(
-                            response
-                        ).map(mapDocument)
-
-                    setSelectedContract(
-                        (current) =>
-                            current
-                                ? {
-                                    ...current,
-                                    documents,
-                                }
-                                : current
-                    )
-                } catch (err) {
-                    console.error(
-                        'Contract documents error:',
-                        err
-                    )
-                }
-            },
-            []
-        )
+                setSelectedContract((current) =>
+                    current && current.id === contractId
+                        ? { ...current, documents }
+                        : current
+                )
+            } catch (err) {
+                console.error('Contract documents error:', err)
+            } finally {
+                setDocumentsLoading(false)
+            }
+        },
+        []
+    )
 
     useEffect(() => {
         fetchContracts()
     }, [fetchContracts])
 
+    // Fetch detail once when selected contract id changes, then
+    // lazily fetch tab data only when that tab is opened.
     useEffect(() => {
         if (!selectedContract?.id) return
+        fetchContractDetail(selectedContract.id)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedContract?.id])
 
-        fetchContractDetail(
-            selectedContract.id
-        )
-        fetchContractActivity(
-            selectedContract.id
-        )
-        fetchContractComments(
-            selectedContract.id
-        )
-        fetchContractDocuments(
-            selectedContract.id
-        )
+    // Load tab-specific data on demand
+    useEffect(() => {
+        const id = selectedContract?.id
+        if (!id) return
+
+        if (activeTab === 'activity') {
+            fetchContractActivity(id)
+        } else if (activeTab === 'comments') {
+            fetchContractComments(id)
+        } else if (activeTab === 'documents') {
+            fetchContractDocuments(id)
+        }
     }, [
+        activeTab,
         selectedContract?.id,
-        fetchContractDetail,
         fetchContractActivity,
         fetchContractComments,
         fetchContractDocuments,
@@ -1012,15 +977,9 @@ export default function LawyerContractPage() {
         return contracts.filter((contract) => {
             const matchesSearch =
                 !term ||
-                contract.title
-                    .toLowerCase()
-                    .includes(term) ||
-                contract.clientName
-                    .toLowerCase()
-                    .includes(term) ||
-                contract.contractType
-                    .toLowerCase()
-                    .includes(term) ||
+                contract.title.toLowerCase().includes(term) ||
+                contract.clientName.toLowerCase().includes(term) ||
+                contract.contractType.toLowerCase().includes(term) ||
                 contract.contractNumber
                     ?.toLowerCase()
                     .includes(term)
@@ -1031,138 +990,47 @@ export default function LawyerContractPage() {
 
             const matchesPriority =
                 priorityFilter === 'All' ||
-                contract.priority ===
-                priorityFilter
+                contract.priority === priorityFilter
 
             return (
-                matchesSearch &&
-                matchesStatus &&
-                matchesPriority
+                matchesSearch && matchesStatus && matchesPriority
             )
         })
-    }, [
-        contracts,
-        search,
-        statusFilter,
-        priorityFilter,
-    ])
+    }, [contracts, search, statusFilter, priorityFilter])
 
     const summary = useMemo(
         () => ({
             total: contracts.length,
-
             inReview: contracts.filter(
                 (contract) =>
-                    contract.status ===
-                    'Internal Review' ||
-                    contract.status ===
-                    'Client Review' ||
-                    contract.status ===
-                    'Revision Requested'
+                    contract.status === 'Internal Review' ||
+                    contract.status === 'Client Review' ||
+                    contract.status === 'Revision Requested'
             ).length,
-
-            pendingSignature:
-                contracts.filter(
-                    (contract) =>
-                        contract.status ===
-                        'Pending Signature'
-                ).length,
-
-            executed:
-                contracts.filter(
-                    (contract) =>
-                        contract.status ===
-                        'Executed' ||
-                        contract.status === 'Active'
-                ).length,
+            pendingSignature: contracts.filter(
+                (contract) =>
+                    contract.status === 'Pending Signature'
+            ).length,
+            executed: contracts.filter(
+                (contract) =>
+                    contract.status === 'Executed' ||
+                    contract.status === 'Active'
+            ).length,
         }),
         [contracts]
     )
 
-    const selectContract = (
-        contract: Contract
-    ) => {
+    const selectContract = (contract: Contract) => {
         setSelectedContract(contract)
         setMobileDetail(true)
+        setActiveTab('overview')
     }
 
-    const updateStatus =
-        async (status: ContractStatus) => {
-            if (!selectedContract?.id) return
-
-            try {
-                setChangingStatus(true)
-
-                const response =
-                    await apiRequest<any>(
-                        `/lawyer/contracts/${encodeURIComponent(
-                            selectedContract.id
-                        )}/status`,
-                        {
-                            method: 'PATCH',
-                            body: JSON.stringify({
-                                status,
-                            }),
-                        }
-                    )
-
-                const updated =
-                    extractObject(response)
-
-                const mapped =
-                    mapContractDetail(
-                        updated,
-                        {
-                            ...selectedContract,
-                            status,
-                        }
-                    )
-
-                setSelectedContract(
-                    mapped
-                )
-
-                setContracts((current) =>
-                    current.map((item) =>
-                        item.id ===
-                            selectedContract.id
-                            ? {
-                                ...item,
-                                status,
-                            }
-                            : item
-                    )
-                )
-
-                await Promise.all([
-                    fetchContractActivity(
-                        selectedContract.id
-                    ),
-                    fetchContractDetail(
-                        selectedContract.id
-                    ),
-                ])
-            } catch (err) {
-                const message =
-                    err instanceof Error
-                        ? err.message
-                        : 'Failed to update contract status'
-
-                setError(message)
-            } finally {
-                setChangingStatus(false)
-            }
-        }
-
+    // ----------------------- ADD COMMENT -----------------------
     const addComment = async () => {
         const message = newComment.trim()
 
-        if (
-            !message ||
-            !selectedContract?.id
-        ) {
-            return
-        }
+        if (!message || !selectedContract?.id) return
 
         try {
             setSendingComment(true)
@@ -1183,44 +1051,77 @@ export default function LawyerContractPage() {
             setNewComment('')
 
             await Promise.all([
-                fetchContractComments(
-                    selectedContract.id
-                ),
-                fetchContractActivity(
-                    selectedContract.id
-                ),
+                fetchContractComments(selectedContract.id),
+                fetchContractActivity(selectedContract.id),
             ])
         } catch (err) {
             const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to add comment'
-
             setError(message)
         } finally {
             setSendingComment(false)
         }
     }
 
+    // ----------------------- UPLOAD DOCUMENT -----------------------
+    const uploadDocument = async (file: File) => {
+        if (!file || !selectedContract?.id) return
+
+        try {
+            setUploadingDocument(true)
+
+            const form = new FormData()
+            form.append('document', file)
+            // Some backends expect `file` — send both keys to be safe.
+            form.append('file', file)
+
+            await apiRequest<any>(
+                `/lawyer/contracts/${encodeURIComponent(
+                    selectedContract.id
+                )}/documents`,
+                {
+                    method: 'POST',
+                    body: form,
+                }
+            )
+
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ''
+            }
+
+            await Promise.all([
+                fetchContractDocuments(selectedContract.id),
+                fetchContractActivity(selectedContract.id),
+            ])
+        } catch (err) {
+            const message =
+                err instanceof Error
+                    ? err.message
+                    : 'Failed to upload document'
+            setError(message)
+        } finally {
+            setUploadingDocument(false)
+        }
+    }
+
+    // ----------------------- DOWNLOAD DOCUMENT -----------------------
     const downloadDocument = async (
         document: ContractDocument
     ) => {
         if (!document.id) return
 
         try {
-            setDownloadingDocumentId(
-                document.id
+            setDownloadingDocumentId(document.id)
+
+            const response = await apiRequest<any>(
+                `/lawyer/documents/${encodeURIComponent(
+                    document.id
+                )}/download`
             )
 
-            const response =
-                await apiRequest<any>(
-                    `/lawyer/documents/${encodeURIComponent(
-                        document.id
-                    )}/download`
-                )
-
-            const result =
-                extractObject(response)
+            const result = extractObject(response)
 
             const url =
                 result?.url ||
@@ -1228,11 +1129,7 @@ export default function LawyerContractPage() {
                 result?.signedUrl
 
             if (url) {
-                window.open(
-                    url,
-                    '_blank',
-                    'noopener,noreferrer'
-                )
+                window.open(url, '_blank', 'noopener,noreferrer')
                 return
             }
 
@@ -1247,12 +1144,9 @@ export default function LawyerContractPage() {
                 err instanceof Error
                     ? err.message
                     : 'Failed to download document'
-
             setError(message)
         } finally {
-            setDownloadingDocumentId(
-                ''
-            )
+            setDownloadingDocumentId('')
         }
     }
 
@@ -1270,8 +1164,7 @@ export default function LawyerContractPage() {
                     <button
                         type="button"
                         onClick={() =>
-                        (window.location.href =
-                            '/signin')
+                            (window.location.href = '/signin')
                         }
                         className="mt-6 rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-500"
                     >
@@ -1291,22 +1184,14 @@ export default function LawyerContractPage() {
 
             <main className="relative mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8">
                 <motion.div
-                    initial={{
-                        opacity: 0,
-                        y: -8,
-                    }}
-                    animate={{
-                        opacity: 1,
-                        y: 0,
-                    }}
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
                     className="border-b border-white/[0.06] pb-6"
                 >
                     <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                         <div>
                             <div className="mb-3 flex items-center gap-2 text-xs text-zinc-600">
-                                <span>
-                                    Lawyer Dashboard
-                                </span>
+                                <span>Lawyer Dashboard</span>
                                 <ChevronRight className="h-3 w-3" />
                                 <span className="text-zinc-300">
                                     Contracts
@@ -1321,16 +1206,14 @@ export default function LawyerContractPage() {
                             </div>
 
                             <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">
-                                Review and manage contracts assigned to you across your client portfolio.
+                                Review and manage contracts assigned to you
+                                across your client portfolio.
                             </p>
                         </div>
 
                         <button
                             type="button"
-                            disabled={
-                                loading ||
-                                refreshing
-                            }
+                            disabled={loading || refreshing}
                             onClick={async () => {
                                 setRefreshing(true)
                                 await fetchContracts()
@@ -1338,9 +1221,7 @@ export default function LawyerContractPage() {
                             className="flex items-center gap-2 self-start rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-xs text-zinc-400 hover:bg-white/[0.05] disabled:opacity-50 lg:self-auto"
                         >
                             <RefreshCw
-                                className={`h-4 w-4 ${refreshing
-                                    ? 'animate-spin'
-                                    : ''
+                                className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''
                                     }`}
                             />
                             Refresh
@@ -1355,23 +1236,18 @@ export default function LawyerContractPage() {
                         value={summary.total}
                         description="Contracts in your workspace"
                     />
-
                     <SummaryCard
                         icon={Eye}
                         label="Needs Review"
                         value={summary.inReview}
                         description="Contracts requiring your action"
                     />
-
                     <SummaryCard
                         icon={Clock3}
                         label="Awaiting Signature"
-                        value={
-                            summary.pendingSignature
-                        }
+                        value={summary.pendingSignature}
                         description="Waiting for final execution"
                     />
-
                     <SummaryCard
                         icon={CheckCircle2}
                         label="Executed"
@@ -1386,6 +1262,7 @@ export default function LawyerContractPage() {
                     </section>
                 ) : (
                     <section className="mt-6 grid gap-5 lg:grid-cols-[420px_minmax(0,1fr)]">
+                        {/* LEFT LIST */}
                         <div className="min-w-0 rounded-2xl border border-white/[0.08] bg-white/[0.02]">
                             <div className="border-b border-white/[0.06] p-4">
                                 <div className="flex items-center justify-between">
@@ -1394,29 +1271,22 @@ export default function LawyerContractPage() {
                                             My Contracts
                                         </h2>
                                         <p className="mt-1 text-[11px] text-zinc-600">
-                                            {
-                                                filteredContracts.length
-                                            }{' '}
+                                            {filteredContracts.length}{' '}
                                             contract
-                                            {filteredContracts.length !==
-                                                1
+                                            {filteredContracts.length !== 1
                                                 ? 's'
                                                 : ''}
                                         </p>
                                     </div>
-
                                     <FileCheck2 className="h-4 w-4 text-zinc-600" />
                                 </div>
 
                                 <div className="relative mt-4">
                                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
-
                                     <input
                                         value={search}
                                         onChange={(e) =>
-                                            setSearch(
-                                                e.target.value
-                                            )
+                                            setSearch(e.target.value)
                                         }
                                         placeholder="Search contracts or clients..."
                                         className="w-full rounded-xl border border-white/[0.07] bg-white/[0.025] py-2.5 pl-10 pr-3 text-sm text-white outline-none placeholder:text-zinc-700 focus:border-blue-400/30"
@@ -1435,26 +1305,21 @@ export default function LawyerContractPage() {
                                             'Executed',
                                             'Active',
                                         ] as const
-                                    ).map(
-                                        (status) => (
-                                            <button
-                                                key={status}
-                                                type="button"
-                                                onClick={() =>
-                                                    setStatusFilter(
-                                                        status
-                                                    )
-                                                }
-                                                className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[10px] transition ${statusFilter ===
-                                                    status
-                                                    ? 'border border-blue-400/20 bg-blue-400/10 text-blue-400'
-                                                    : 'border border-white/[0.05] bg-white/[0.02] text-zinc-600 hover:text-zinc-300'
-                                                    }`}
-                                            >
-                                                {status}
-                                            </button>
-                                        )
-                                    )}
+                                    ).map((status) => (
+                                        <button
+                                            key={status}
+                                            type="button"
+                                            onClick={() =>
+                                                setStatusFilter(status)
+                                            }
+                                            className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[10px] transition ${statusFilter === status
+                                                ? 'border border-blue-400/20 bg-blue-400/10 text-blue-400'
+                                                : 'border border-white/[0.05] bg-white/[0.02] text-zinc-600 hover:text-zinc-300'
+                                                }`}
+                                        >
+                                            {status}
+                                        </button>
+                                    ))}
                                 </div>
 
                                 <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
@@ -1463,57 +1328,50 @@ export default function LawyerContractPage() {
                                             'All',
                                             ...PRIORITY_OPTIONS,
                                         ] as const
-                                    ).map(
-                                        (priority) => (
-                                            <button
-                                                key={priority}
-                                                type="button"
-                                                onClick={() =>
-                                                    setPriorityFilter(
-                                                        priority
-                                                    )
-                                                }
-                                                className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[10px] transition ${priorityFilter ===
+                                    ).map((priority) => (
+                                        <button
+                                            key={priority}
+                                            type="button"
+                                            onClick={() =>
+                                                setPriorityFilter(
                                                     priority
-                                                    ? 'border border-blue-400/20 bg-blue-400/10 text-blue-400'
-                                                    : 'border border-white/[0.05] bg-white/[0.02] text-zinc-600 hover:text-zinc-300'
-                                                    }`}
-                                            >
-                                                {priority}
-                                            </button>
-                                        )
-                                    )}
+                                                )
+                                            }
+                                            className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[10px] transition ${priorityFilter ===
+                                                priority
+                                                ? 'border border-blue-400/20 bg-blue-400/10 text-blue-400'
+                                                : 'border border-white/[0.05] bg-white/[0.02] text-zinc-600 hover:text-zinc-300'
+                                                }`}
+                                        >
+                                            {priority}
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
 
                             <div className="max-h-[720px] overflow-y-auto p-2">
-                                {filteredContracts.length ===
-                                    0 ? (
+                                {filteredContracts.length === 0 ? (
                                     <div className="py-16 text-center">
                                         <FileText className="mx-auto h-8 w-8 text-zinc-700" />
                                         <p className="mt-3 text-sm text-zinc-400">
                                             No contracts found
                                         </p>
                                         <p className="mt-1 text-xs text-zinc-700">
-                                            Try changing your search or filters.
+                                            Try changing your search or
+                                            filters.
                                         </p>
                                     </div>
                                 ) : (
                                     <div className="space-y-1">
                                         {filteredContracts.map(
-                                            (
-                                                contract,
-                                                index
-                                            ) => {
+                                            (contract, index) => {
                                                 const selected =
                                                     selectedContract?.id ===
                                                     contract.id
 
                                                 return (
                                                     <motion.button
-                                                        key={
-                                                            contract.id
-                                                        }
+                                                        key={contract.id}
                                                         type="button"
                                                         initial={{
                                                             opacity: 0,
@@ -1566,7 +1424,6 @@ export default function LawyerContractPage() {
                                                                             contract.status
                                                                         }
                                                                     />
-
                                                                     <PriorityBadge
                                                                         priority={
                                                                             contract.priority
@@ -1594,188 +1451,187 @@ export default function LawyerContractPage() {
                             </div>
                         </div>
 
+                        {/* RIGHT DETAIL (desktop) */}
                         <div className="hidden min-w-0 lg:block">
                             <ContractDetails
-                                contract={
-                                    selectedContract
+                                contract={selectedContract}
+                                loading={detailLoading}
+                                activeTab={activeTab}
+                                onTabChange={setActiveTab}
+                                activityLoading={activityLoading}
+                                commentsLoading={commentsLoading}
+                                documentsLoading={documentsLoading}
+                                uploadingDocument={uploadingDocument}
+                                newComment={newComment}
+                                setNewComment={setNewComment}
+                                sendingComment={sendingComment}
+                                onSendComment={addComment}
+                                onUploadDocument={uploadDocument}
+                                fileInputRef={fileInputRef}
+                                onDownloadDocument={downloadDocument}
+                                downloadingDocumentId={
+                                    downloadingDocumentId
                                 }
-                                loading={
-                                    detailLoading
-                                }
-                                changingStatus={
-                                    changingStatus
-                                }
-                                onStatusChange={
-                                    updateStatus
-                                }
-                                onOpenComments={() => {
-                                    setCommentsOpen(
-                                        true
-                                    )
-
-                                    if (
-                                        selectedContract?.id
-                                    ) {
+                                onRefreshComments={() => {
+                                    if (selectedContract?.id) {
                                         fetchContractComments(
                                             selectedContract.id
                                         )
                                     }
                                 }}
-                                onDownloadDocument={
-                                    downloadDocument
-                                }
-                                downloadingDocumentId={
-                                    downloadingDocumentId
-                                }
+                                onRefreshActivity={() => {
+                                    if (selectedContract?.id) {
+                                        fetchContractActivity(
+                                            selectedContract.id
+                                        )
+                                    }
+                                }}
+                                onRefreshDocuments={() => {
+                                    if (selectedContract?.id) {
+                                        fetchContractDocuments(
+                                            selectedContract.id
+                                        )
+                                    }
+                                }}
                             />
                         </div>
                     </section>
                 )}
 
-                {error &&
-                    error !== 'NO_TOKEN' && (
-                        <div className="mt-5 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-300">
-                            {error}
-                        </div>
-                    )}
+                {error && error !== 'NO_TOKEN' && (
+                    <div className="mt-5 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-300">
+                        {error}
+                    </div>
+                )}
             </main>
 
+            {/* MOBILE DETAIL */}
             <AnimatePresence>
-                {mobileDetail &&
-                    selectedContract && (
-                        <motion.div
-                            initial={{
-                                opacity: 0,
-                                y: 20,
-                            }}
-                            animate={{
-                                opacity: 1,
-                                y: 0,
-                            }}
-                            exit={{
-                                opacity: 0,
-                                y: 20,
-                            }}
-                            className="fixed inset-0 z-50 overflow-y-auto bg-[#06080b] lg:hidden"
-                        >
-                            <div className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/[0.06] bg-[#06080b]/95 px-4 py-3 backdrop-blur-xl">
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setMobileDetail(
-                                            false
-                                        )
-                                    }
-                                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.025]"
-                                >
-                                    <ArrowLeft className="h-4 w-4 text-zinc-400" />
-                                </button>
+                {mobileDetail && selectedContract && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 20 }}
+                        className="fixed inset-0 z-50 overflow-y-auto bg-[#06080b] lg:hidden"
+                    >
+                        <div className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/[0.06] bg-[#06080b]/95 px-4 py-3 backdrop-blur-xl">
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setMobileDetail(false)
+                                }
+                                className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.025]"
+                            >
+                                <ArrowLeft className="h-4 w-4 text-zinc-400" />
+                            </button>
 
-                                <span className="text-sm font-medium text-white">
-                                    Contract Details
-                                </span>
+                            <span className="text-sm font-medium text-white">
+                                Contract Details
+                            </span>
 
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setMobileDetail(
-                                            false
-                                        )
-                                    }
-                                    className="ml-auto flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.025]"
-                                >
-                                    <X className="h-4 w-4 text-zinc-400" />
-                                </button>
-                            </div>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setMobileDetail(false)
+                                }
+                                className="ml-auto flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.025]"
+                            >
+                                <X className="h-4 w-4 text-zinc-400" />
+                            </button>
+                        </div>
 
-                            <div className="p-4">
-                                <ContractDetails
-                                    contract={
-                                        selectedContract
-                                    }
-                                    loading={
-                                        detailLoading
-                                    }
-                                    changingStatus={
-                                        changingStatus
-                                    }
-                                    onStatusChange={
-                                        updateStatus
-                                    }
-                                    onOpenComments={() => {
-                                        setCommentsOpen(
-                                            true
-                                        )
-
-                                        if (
+                        <div className="p-4">
+                            <ContractDetails
+                                contract={selectedContract}
+                                loading={detailLoading}
+                                activeTab={activeTab}
+                                onTabChange={setActiveTab}
+                                activityLoading={activityLoading}
+                                commentsLoading={commentsLoading}
+                                documentsLoading={documentsLoading}
+                                uploadingDocument={uploadingDocument}
+                                newComment={newComment}
+                                setNewComment={setNewComment}
+                                sendingComment={sendingComment}
+                                onSendComment={addComment}
+                                onUploadDocument={uploadDocument}
+                                fileInputRef={fileInputRef}
+                                onDownloadDocument={downloadDocument}
+                                downloadingDocumentId={
+                                    downloadingDocumentId
+                                }
+                                onRefreshComments={() => {
+                                    if (selectedContract.id) {
+                                        fetchContractComments(
                                             selectedContract.id
-                                        ) {
-                                            fetchContractComments(
-                                                selectedContract.id
-                                            )
-                                        }
-                                    }}
-                                    onDownloadDocument={
-                                        downloadDocument
+                                        )
                                     }
-                                    downloadingDocumentId={
-                                        downloadingDocumentId
+                                }}
+                                onRefreshActivity={() => {
+                                    if (selectedContract.id) {
+                                        fetchContractActivity(
+                                            selectedContract.id
+                                        )
                                     }
-                                />
-                            </div>
-                        </motion.div>
-                    )}
-            </AnimatePresence>
-
-            <AnimatePresence>
-                {commentsOpen &&
-                    selectedContract && (
-                        <CommentsModal
-                            contract={
-                                selectedContract
-                            }
-                            message={
-                                newComment
-                            }
-                            setMessage={
-                                setNewComment
-                            }
-                            sending={
-                                sendingComment
-                            }
-                            onClose={() =>
-                                setCommentsOpen(
-                                    false
-                                )
-                            }
-                            onSend={addComment}
-                        />
-                    )}
+                                }}
+                                onRefreshDocuments={() => {
+                                    if (selectedContract.id) {
+                                        fetchContractDocuments(
+                                            selectedContract.id
+                                        )
+                                    }
+                                }}
+                            />
+                        </div>
+                    </motion.div>
+                )}
             </AnimatePresence>
         </div>
     )
 }
 
+// ----------------------------- DETAILS -----------------------------
+
 function ContractDetails({
     contract,
     loading,
-    changingStatus,
-    onStatusChange,
-    onOpenComments,
+    activeTab,
+    onTabChange,
+    activityLoading,
+    commentsLoading,
+    documentsLoading,
+    uploadingDocument,
+    newComment,
+    setNewComment,
+    sendingComment,
+    onSendComment,
+    onUploadDocument,
+    fileInputRef,
     onDownloadDocument,
     downloadingDocumentId,
+    onRefreshComments,
+    onRefreshActivity,
+    onRefreshDocuments,
 }: {
     contract: Contract | null
     loading: boolean
-    changingStatus: boolean
-    onStatusChange: (
-        status: ContractStatus
-    ) => void
-    onOpenComments: () => void
-    onDownloadDocument: (
-        document: ContractDocument
-    ) => void
+    activeTab: DetailTab
+    onTabChange: (tab: DetailTab) => void
+    activityLoading: boolean
+    commentsLoading: boolean
+    documentsLoading: boolean
+    uploadingDocument: boolean
+    newComment: string
+    setNewComment: (value: string) => void
+    sendingComment: boolean
+    onSendComment: () => void
+    onUploadDocument: (file: File) => void
+    fileInputRef: React.MutableRefObject<HTMLInputElement | null>
+    onDownloadDocument: (document: ContractDocument) => void
     downloadingDocumentId: string
+    onRefreshComments: () => void
+    onRefreshActivity: () => void
+    onRefreshDocuments: () => void
 }) {
     if (!contract) {
         return (
@@ -1786,26 +1642,41 @@ function ContractDetails({
                         Select a contract
                     </p>
                     <p className="mt-1 text-xs text-zinc-700">
-                        Select a contract from the list to view its details.
+                        Select a contract from the list to view its
+                        details.
                     </p>
                 </div>
             </div>
         )
     }
 
+    const tabs: { id: DetailTab; label: string; count?: number }[] = [
+        { id: 'overview', label: 'Overview' },
+        {
+            id: 'activity',
+            label: 'Activity',
+            count: contract.activities.length,
+        },
+        {
+            id: 'comments',
+            label: 'Comments',
+            count: contract.comments.length,
+        },
+        {
+            id: 'documents',
+            label: 'Documents',
+            count: contract.documents.length,
+        },
+    ]
+
     return (
         <motion.div
             key={contract.id}
-            initial={{
-                opacity: 0,
-                y: 8,
-            }}
-            animate={{
-                opacity: 1,
-                y: 0,
-            }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
             className="space-y-5"
         >
+            {/* Header */}
             <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 sm:p-6">
                 <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                     <div className="flex min-w-0 gap-4">
@@ -1816,12 +1687,7 @@ function ContractDetails({
                                 <h2 className="text-xl font-semibold tracking-tight text-white">
                                     {contract.title}
                                 </h2>
-
-                                <StatusBadge
-                                    status={
-                                        contract.status
-                                    }
-                                />
+                                <StatusBadge status={contract.status} />
                             </div>
 
                             <p className="mt-1 text-sm text-zinc-500">
@@ -1837,17 +1703,12 @@ function ContractDetails({
                             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-zinc-500">
                                 <span className="inline-flex items-center gap-1.5">
                                     <Users className="h-3.5 w-3.5 text-zinc-600" />
-                                    {
-                                        contract.clientName
-                                    }
+                                    {contract.clientName}
                                 </span>
 
                                 <span className="inline-flex items-center gap-1.5">
                                     <CalendarDays className="h-3.5 w-3.5 text-zinc-600" />
-                                    Due{' '}
-                                    {formatDate(
-                                        contract.dueDate
-                                    )}
+                                    Due {formatDate(contract.dueDate)}
                                 </span>
 
                                 <span className="inline-flex items-center gap-1.5">
@@ -1862,55 +1723,7 @@ function ContractDetails({
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <PriorityBadge
-                            priority={
-                                contract.priority
-                            }
-                        />
-
-                        <div className="relative">
-                            <select
-                                value={
-                                    contract.status
-                                }
-                                disabled={
-                                    changingStatus
-                                }
-                                onChange={(event) =>
-                                    onStatusChange(
-                                        event
-                                            .target
-                                            .value as ContractStatus
-                                    )
-                                }
-                                className="h-9 rounded-lg border border-white/[0.06] bg-white/[0.025] px-2 text-[11px] text-zinc-300 outline-none focus:border-blue-400/30"
-                            >
-                                {STATUS_OPTIONS.map(
-                                    (
-                                        status
-                                    ) => (
-                                        <option
-                                            key={
-                                                status
-                                            }
-                                            value={
-                                                status
-                                            }
-                                            className="bg-[#111318]"
-                                        >
-                                            {status}
-                                        </option>
-                                    )
-                                )}
-                            </select>
-                        </div>
-
-                        <button
-                            type="button"
-                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.025] text-zinc-500 hover:text-white"
-                        >
-                            <MoreHorizontal className="h-4 w-4" />
-                        </button>
+                        <PriorityBadge priority={contract.priority} />
                     </div>
                 </div>
 
@@ -1934,115 +1747,69 @@ function ContractDetails({
                         <p className="text-[10px] uppercase tracking-wider text-zinc-700">
                             Assigned Lawyer
                         </p>
-
                         <p className="text-xs font-medium text-white">
-                            {
-                                contract
-                                    .assignedLawyer
-                                    .name
-                            }
+                            {contract.assignedLawyer.name}
                         </p>
                     </div>
 
                     <div className="ml-auto hidden items-center gap-2 text-[11px] text-zinc-600 sm:flex">
                         <Mail className="h-3.5 w-3.5" />
-                        {
-                            contract
-                                .assignedLawyer
-                                .email
-                        }
+                        {contract.assignedLawyer.email}
                     </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <button
-                    type="button"
-                    onClick={onOpenComments}
-                    className="flex items-center justify-center gap-2 rounded-xl border border-blue-400/20 bg-blue-400/10 px-3 py-3 text-xs font-medium text-blue-400 transition hover:bg-blue-400/15"
-                >
-                    <MessageSquare className="h-4 w-4" />
-                    Comments
-                </button>
-
-                <button
-                    type="button"
-                    onClick={() =>
-                        document
-                            .getElementById(
-                                'contract-documents'
-                            )
-                            ?.scrollIntoView({
-                                behavior: 'smooth',
-                            })
-                    }
-                    className="flex items-center justify-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-3 text-xs text-zinc-300 transition hover:bg-white/[0.05]"
-                >
-                    <FileText className="h-4 w-4" />
-                    Documents
-                </button>
-
-                <button
-                    type="button"
-                    onClick={() =>
-                        document
-                            .getElementById(
-                                'contract-timeline'
-                            )
-                            ?.scrollIntoView({
-                                behavior: 'smooth',
-                            })
-                    }
-                    className="flex items-center justify-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-3 text-xs text-zinc-300 transition hover:bg-white/[0.05]"
-                >
-                    <History className="h-4 w-4" />
-                    Activity
-                </button>
-
-                <button
-                    type="button"
-                    onClick={() =>
-                        onStatusChange(
-                            'Executed'
-                        )
-                    }
-                    disabled={
-                        changingStatus ||
-                        contract.status ===
-                        'Executed'
-                    }
-                    className="flex items-center justify-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-3 text-xs text-zinc-300 transition hover:bg-white/[0.05] disabled:opacity-40"
-                >
-                    <CheckCircle2 className="h-4 w-4" />
-                    Mark Executed
-                </button>
+            {/* Tabs */}
+            <div className="flex gap-1 overflow-x-auto rounded-xl border border-white/[0.06] bg-white/[0.02] p-1">
+                {tabs.map((tab) => {
+                    const isActive = activeTab === tab.id
+                    return (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => onTabChange(tab.id)}
+                            className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium transition ${isActive
+                                ? 'bg-blue-400/10 text-blue-400'
+                                : 'text-zinc-500 hover:bg-white/[0.03] hover:text-zinc-300'
+                                }`}
+                        >
+                            {tab.label}
+                            {typeof tab.count === 'number' && (
+                                <span
+                                    className={`rounded-md px-1.5 py-0.5 text-[10px] ${isActive
+                                        ? 'bg-blue-400/15 text-blue-300'
+                                        : 'bg-white/[0.05] text-zinc-500'
+                                        }`}
+                                >
+                                    {tab.count}
+                                </span>
+                            )}
+                        </button>
+                    )
+                })}
             </div>
 
-            <div className="grid gap-5 xl:grid-cols-2">
-                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5">
-                    <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.04]">
-                            <Users className="h-4 w-4 text-zinc-400" />
+            {/* Tab content */}
+            {activeTab === 'overview' && (
+                <div className="grid gap-5 xl:grid-cols-2">
+                    <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.04]">
+                                <Users className="h-4 w-4 text-zinc-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-semibold text-white">
+                                    Parties
+                                </h3>
+                                <p className="text-xs text-zinc-600">
+                                    Parties involved in this contract
+                                </p>
+                            </div>
                         </div>
 
-                        <div>
-                            <h3 className="text-sm font-semibold text-white">
-                                Parties
-                            </h3>
-
-                            <p className="text-xs text-zinc-600">
-                                Parties involved in this contract
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="mt-5 space-y-3">
-                        {contract.parties.length ? (
-                            contract.parties.map(
-                                (
-                                    party,
-                                    index
-                                ) => (
+                        <div className="mt-5 space-y-3">
+                            {contract.parties.length ? (
+                                contract.parties.map((party, index) => (
                                     <div
                                         key={`${party}-${index}`}
                                         className="flex items-center gap-3 rounded-xl border border-white/[0.05] bg-white/[0.02] p-3"
@@ -2050,59 +1817,124 @@ function ContractDetails({
                                         <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.05] bg-white/[0.035]">
                                             <Users className="h-3.5 w-3.5 text-zinc-500" />
                                         </div>
-
                                         <div>
                                             <p className="text-xs font-medium text-white">
-                                                {
-                                                    party
-                                                }
+                                                {party}
                                             </p>
-
                                             <p className="mt-1 text-[10px] text-zinc-600">
-                                                {index ===
-                                                    0
+                                                {index === 0
                                                     ? 'Client'
                                                     : 'Counterparty'}
                                             </p>
                                         </div>
                                     </div>
-                                )
-                            )
-                        ) : (
-                            <p className="text-xs text-zinc-600">
-                                No party information available.
-                            </p>
-                        )}
+                                ))
+                            ) : (
+                                <p className="text-xs text-zinc-600">
+                                    No party information available.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.04]">
+                                <FileText className="h-4 w-4 text-zinc-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-semibold text-white">
+                                    Snapshot
+                                </h3>
+                                <p className="text-xs text-zinc-600">
+                                    Quick contract metadata
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="mt-5 grid grid-cols-2 gap-3 text-xs">
+                            <MetaCell
+                                label="Status"
+                                value={contract.status}
+                            />
+                            <MetaCell
+                                label="Priority"
+                                value={contract.priority}
+                            />
+                            <MetaCell
+                                label="Type"
+                                value={contract.contractType || '—'}
+                            />
+                            <MetaCell
+                                label="Contract #"
+                                value={
+                                    contract.contractNumber || '—'
+                                }
+                            />
+                            <MetaCell
+                                label="Assigned"
+                                value={formatDate(
+                                    contract.assignedDate
+                                )}
+                            />
+                            <MetaCell
+                                label="Due"
+                                value={formatDate(contract.dueDate)}
+                            />
+                        </div>
                     </div>
                 </div>
+            )}
 
-                <div
-                    id="contract-timeline"
-                    className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5"
-                >
-                    <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.04]">
-                            <History className="h-4 w-4 text-zinc-400" />
+            {activeTab === 'activity' && (
+                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.04]">
+                                <History className="h-4 w-4 text-zinc-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-semibold text-white">
+                                    Contract Timeline
+                                </h3>
+                                <p className="text-xs text-zinc-600">
+                                    Live audit activity
+                                </p>
+                            </div>
                         </div>
 
-                        <div>
-                            <h3 className="text-sm font-semibold text-white">
-                                Contract Timeline
-                            </h3>
-
-                            <p className="text-xs text-zinc-600">
-                                Live audit activity
-                            </p>
-                        </div>
+                        <button
+                            type="button"
+                            onClick={onRefreshActivity}
+                            disabled={activityLoading}
+                            className="flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.025] px-2.5 py-1.5 text-[11px] text-zinc-400 hover:bg-white/[0.05] disabled:opacity-50"
+                        >
+                            <RefreshCw
+                                className={`h-3.5 w-3.5 ${activityLoading
+                                    ? 'animate-spin'
+                                    : ''
+                                    }`}
+                            />
+                            Refresh
+                        </button>
                     </div>
 
                     <div className="mt-5 space-y-4">
-                        {contract.activities.length ? (
+                        {activityLoading &&
+                            contract.activities.length === 0 ? (
+                            <div className="space-y-3">
+                                {Array.from({ length: 4 }).map(
+                                    (_, index) => (
+                                        <div
+                                            key={index}
+                                            className="h-14 animate-pulse rounded-xl bg-white/[0.03]"
+                                        />
+                                    )
+                                )}
+                            </div>
+                        ) : contract.activities.length ? (
                             contract.activities.map(
-                                (
-                                    activity,
-                                    index
-                                ) => (
+                                (activity, index) => (
                                     <div
                                         key={
                                             activity.id ||
@@ -2111,8 +1943,7 @@ function ContractDetails({
                                         className="relative flex gap-3"
                                     >
                                         {index <
-                                            contract
-                                                .activities
+                                            contract.activities
                                                 .length -
                                             1 && (
                                                 <div className="absolute left-[7px] top-5 h-full w-px bg-white/[0.06]" />
@@ -2124,15 +1955,10 @@ function ContractDetails({
 
                                         <div className="min-w-0">
                                             <p className="text-xs font-medium text-white">
-                                                {
-                                                    activity.action
-                                                }
+                                                {activity.action}
                                             </p>
-
                                             <p className="mt-1 text-[10px] text-zinc-600">
-                                                {
-                                                    activity.by
-                                                }
+                                                {activity.by}
                                                 {' • '}
                                                 {formatDate(
                                                     activity.timestamp,
@@ -2150,42 +1976,216 @@ function ContractDetails({
                         )}
                     </div>
                 </div>
-            </div>
+            )}
 
-            <div
-                id="contract-documents"
-                className="rounded-2xl border border-white/[0.08] bg-white/[0.025]"
-            >
-                <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
-                    <div>
-                        <h3 className="text-sm font-semibold text-white">
-                            Contract Documents
-                        </h3>
+            {activeTab === 'comments' && (
+                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025]">
+                    <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-400/10">
+                                <MessageSquare className="h-4 w-4 text-blue-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-semibold text-white">
+                                    Comments
+                                </h3>
+                                <p className="text-xs text-zinc-600">
+                                    Discussion thread on this contract
+                                </p>
+                            </div>
+                        </div>
 
-                        <p className="mt-1 text-xs text-zinc-600">
-                            Files returned by the contract documents API
-                        </p>
+                        <button
+                            type="button"
+                            onClick={onRefreshComments}
+                            disabled={commentsLoading}
+                            className="flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.025] px-2.5 py-1.5 text-[11px] text-zinc-400 hover:bg-white/[0.05] disabled:opacity-50"
+                        >
+                            <RefreshCw
+                                className={`h-3.5 w-3.5 ${commentsLoading
+                                    ? 'animate-spin'
+                                    : ''
+                                    }`}
+                            />
+                            Refresh
+                        </button>
                     </div>
 
-                    <span className="text-[10px] text-zinc-700">
-                        {contract.documents.length}{' '}
-                        file
-                        {contract.documents.length !==
-                            1
-                            ? 's'
-                            : ''}
-                    </span>
-                </div>
-
-                <div className="divide-y divide-white/[0.05]">
-                    {contract.documents.length ? (
-                        contract.documents.map(
-                            (document) => (
+                    <div className="max-h-[420px] space-y-3 overflow-y-auto p-5">
+                        {commentsLoading &&
+                            contract.comments.length === 0 ? (
+                            <div className="space-y-3">
+                                {Array.from({ length: 3 }).map(
+                                    (_, index) => (
+                                        <div
+                                            key={index}
+                                            className="h-20 animate-pulse rounded-xl bg-white/[0.03]"
+                                        />
+                                    )
+                                )}
+                            </div>
+                        ) : contract.comments.length ? (
+                            contract.comments.map((comment) => (
                                 <div
-                                    key={
-                                        document.id ||
-                                        document.key
+                                    key={comment.id}
+                                    className="rounded-xl border border-white/[0.05] bg-white/[0.025] p-4"
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p className="text-xs font-medium text-white">
+                                                {comment.authorName}
+                                            </p>
+                                            <p className="mt-1 text-[10px] text-zinc-700">
+                                                {comment.authorRole ||
+                                                    'User'}
+                                                {' • '}
+                                                {formatDate(
+                                                    comment.createdAt,
+                                                    true
+                                                )}
+                                            </p>
+                                        </div>
+                                        {comment.isInternal && (
+                                            <span className="rounded-md border border-amber-500/15 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-400">
+                                                Internal
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <p className="mt-3 whitespace-pre-wrap text-xs leading-6 text-zinc-400">
+                                        {comment.message}
+                                    </p>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="py-10 text-center">
+                                <MessageSquare className="mx-auto h-8 w-8 text-zinc-700" />
+                                <p className="mt-3 text-sm text-zinc-400">
+                                    No comments yet
+                                </p>
+                                <p className="mt-1 text-xs text-zinc-700">
+                                    Start the discussion below.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="border-t border-white/[0.06] p-4">
+                        <div className="flex gap-2">
+                            <textarea
+                                value={newComment}
+                                onChange={(e) =>
+                                    setNewComment(e.target.value)
+                                }
+                                rows={3}
+                                placeholder="Write a comment..."
+                                className="min-h-[86px] flex-1 resize-none rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5 text-xs text-white outline-none placeholder:text-zinc-700 focus:border-blue-400/30"
+                            />
+
+                            <button
+                                type="button"
+                                disabled={
+                                    sendingComment ||
+                                    !newComment.trim()
+                                }
+                                onClick={onSendComment}
+                                className="self-end rounded-xl bg-blue-600 px-4 py-3 text-xs font-medium text-white transition hover:bg-blue-500 disabled:opacity-40"
+                            >
+                                {sendingComment ? (
+                                    'Sending...'
+                                ) : (
+                                    <span className="flex items-center gap-1.5">
+                                        <Send className="h-3.5 w-3.5" />
+                                        Send
+                                    </span>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'documents' && (
+                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025]">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] px-5 py-4">
+                        <div>
+                            <h3 className="text-sm font-semibold text-white">
+                                Contract Documents
+                            </h3>
+                            <p className="mt-1 text-xs text-zinc-600">
+                                Files shared between client and lawyer
+                            </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={onRefreshDocuments}
+                                disabled={documentsLoading}
+                                className="flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.025] px-2.5 py-1.5 text-[11px] text-zinc-400 hover:bg-white/[0.05] disabled:opacity-50"
+                            >
+                                <RefreshCw
+                                    className={`h-3.5 w-3.5 ${documentsLoading
+                                        ? 'animate-spin'
+                                        : ''
+                                        }`}
+                                />
+                                Refresh
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    fileInputRef.current?.click()
+                                }
+                                disabled={uploadingDocument}
+                                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+                            >
+                                {uploadingDocument ? (
+                                    <>
+                                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                                        Uploading...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Upload className="h-3.5 w-3.5" />
+                                        Upload
+                                    </>
+                                )}
+                            </button>
+
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                className="hidden"
+                                onChange={(e) => {
+                                    const file =
+                                        e.target.files?.[0]
+                                    if (file) {
+                                        onUploadDocument(file)
                                     }
+                                }}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="divide-y divide-white/[0.05]">
+                        {documentsLoading &&
+                            contract.documents.length === 0 ? (
+                            <div className="space-y-2 p-4">
+                                {Array.from({ length: 3 }).map(
+                                    (_, index) => (
+                                        <div
+                                            key={index}
+                                            className="h-16 animate-pulse rounded-xl bg-white/[0.03]"
+                                        />
+                                    )
+                                )}
+                            </div>
+                        ) : contract.documents.length ? (
+                            contract.documents.map((document) => (
+                                <div
+                                    key={document.id || document.key}
                                     className="flex items-center gap-3 px-5 py-4 transition hover:bg-white/[0.015]"
                                 >
                                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.025]">
@@ -2194,213 +2194,77 @@ function ContractDetails({
 
                                     <div className="min-w-0 flex-1">
                                         <p className="truncate text-xs font-medium text-white">
-                                            {
-                                                document.name
-                                            }
+                                            {document.name}
                                         </p>
-
                                         <p className="mt-1 text-[10px] text-zinc-600">
-                                            {
-                                                document.type
-                                            }{' '}
-                                            •{' '}
-                                            {
-                                                document.size
-                                            }
+                                            {document.type} • {document.size}
                                             {document.category
                                                 ? ` • ${document.category}`
                                                 : ''}
+                                            {document.source
+                                                ? ` • ${document.source}`
+                                                : ''}
                                         </p>
+                                        {document.uploadedBy && (
+                                            <p className="mt-0.5 text-[10px] text-zinc-700">
+                                                Uploaded by{' '}
+                                                {document.uploadedBy}
+                                            </p>
+                                        )}
                                     </div>
 
                                     <button
                                         type="button"
                                         disabled={
-                                            !document.id
+                                            !document.id ||
+                                            downloadingDocumentId ===
+                                            document.id
                                         }
                                         onClick={() =>
-                                            onDownloadDocument(
-                                                document
-                                            )
+                                            onDownloadDocument(document)
                                         }
                                         className="rounded-lg p-2 text-zinc-600 hover:bg-white/[0.04] hover:text-white disabled:opacity-30"
                                     >
-                                        <Download className="h-4 w-4" />
+                                        {downloadingDocumentId ===
+                                            document.id ? (
+                                            <RefreshCw className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <Download className="h-4 w-4" />
+                                        )}
                                     </button>
                                 </div>
-                            )
-                        )
-                    ) : (
-                        <div className="py-12 text-center">
-                            <FileText className="mx-auto h-8 w-8 text-zinc-700" />
-                            <p className="mt-3 text-xs text-zinc-600">
-                                No documents attached to this contract.
-                            </p>
-                        </div>
-                    )}
+                            ))
+                        ) : (
+                            <div className="py-12 text-center">
+                                <FileText className="mx-auto h-8 w-8 text-zinc-700" />
+                                <p className="mt-3 text-xs text-zinc-600">
+                                    No documents attached to this
+                                    contract.
+                                </p>
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
         </motion.div>
     )
 }
 
-function CommentsModal({
-    contract,
-    message,
-    setMessage,
-    sending,
-    onClose,
-    onSend,
+function MetaCell({
+    label,
+    value,
 }: {
-    contract: Contract
-    message: string
-    setMessage: (
-        value: string
-    ) => void
-    sending: boolean
-    onClose: () => void
-    onSend: () => void
+    label: string
+    value: string
 }) {
     return (
-        <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-        >
-            <motion.div
-                initial={{
-                    opacity: 0,
-                    y: 12,
-                    scale: 0.98,
-                }}
-                animate={{
-                    opacity: 1,
-                    y: 0,
-                    scale: 1,
-                }}
-                className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0a0d11]"
-            >
-                <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-4">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-400/10">
-                        <MessageSquare className="h-4 w-4 text-blue-400" />
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-white">
-                            Contract Comments
-                        </p>
-                        <p className="truncate text-xs text-zinc-600">
-                            {contract.title}
-                        </p>
-                    </div>
-
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="rounded-lg p-2 text-zinc-500 hover:bg-white/[0.04] hover:text-white"
-                    >
-                        <X className="h-4 w-4" />
-                    </button>
-                </div>
-
-                <div className="min-h-0 flex-1 overflow-y-auto p-5">
-                    {contract.comments.length === 0 ? (
-                        <div className="py-12 text-center">
-                            <MessageSquare className="mx-auto h-8 w-8 text-zinc-700" />
-                            <p className="mt-3 text-sm text-zinc-400">
-                                No comments yet
-                            </p>
-                            <p className="mt-1 text-xs text-zinc-700">
-                                Start the discussion below.
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="space-y-3">
-                            {contract.comments.map(
-                                (
-                                    comment
-                                ) => (
-                                    <div
-                                        key={
-                                            comment.id
-                                        }
-                                        className="rounded-xl border border-white/[0.05] bg-white/[0.025] p-4"
-                                    >
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div>
-                                                <p className="text-xs font-medium text-white">
-                                                    {
-                                                        comment.authorName
-                                                    }
-                                                </p>
-                                                <p className="mt-1 text-[10px] text-zinc-700">
-                                                    {comment.authorRole ||
-                                                        'User'}
-                                                    {' • '}
-                                                    {formatDate(
-                                                        comment.createdAt,
-                                                        true
-                                                    )}
-                                                </p>
-                                            </div>
-
-                                            {comment.isInternal && (
-                                                <span className="rounded-md border border-amber-500/15 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-400">
-                                                    Internal
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        <p className="mt-3 whitespace-pre-wrap text-xs leading-6 text-zinc-400">
-                                            {
-                                                comment.message
-                                            }
-                                        </p>
-                                    </div>
-                                )
-                            )}
-                        </div>
-                    )}
-                </div>
-
-                <div className="border-t border-white/[0.06] p-4">
-                    <div className="flex gap-2">
-                        <textarea
-                            value={message}
-                            onChange={(event) =>
-                                setMessage(
-                                    event
-                                        .target
-                                        .value
-                                )
-                            }
-                            rows={3}
-                            placeholder="Write a comment..."
-                            className="min-h-[86px] flex-1 resize-none rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5 text-xs text-white outline-none placeholder:text-zinc-700 focus:border-blue-400/30"
-                        />
-
-                        <button
-                            type="button"
-                            disabled={
-                                sending ||
-                                !message.trim()
-                            }
-                            onClick={onSend}
-                            className="self-end rounded-xl bg-blue-600 px-4 py-3 text-xs font-medium text-white transition hover:bg-blue-500 disabled:opacity-40"
-                        >
-                            {sending ? (
-                                'Sending...'
-                            ) : (
-                                <span className="flex items-center gap-1.5">
-                                    <Send className="h-3.5 w-3.5" />
-                                    Send
-                                </span>
-                            )}
-                        </button>
-                    </div>
-                </div>
-            </motion.div>
-        </motion.div>
+        <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-zinc-600">
+                {label}
+            </p>
+            <p className="mt-1 truncate text-xs text-zinc-200">
+                {value || '—'}
+            </p>
+        </div>
     )
 }
