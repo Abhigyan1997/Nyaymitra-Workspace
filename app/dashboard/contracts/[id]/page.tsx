@@ -2,6 +2,8 @@
 
 "use client"
 
+import * as React from "react"
+
 import {
     useCallback,
     useEffect,
@@ -14,9 +16,13 @@ import {
     ArrowLeft,
     CalendarDays,
     Download,
+    FileText,
+    Loader2,
     MoreHorizontal,
     RefreshCw,
     ShieldCheck,
+    Trash2,
+    Upload,
 } from "lucide-react"
 
 import {
@@ -52,6 +58,12 @@ type PageState =
     | "not-found"
     | "error"
 
+type TabKey =
+    | "overview"
+    | "versions"
+    | "documents"
+    | "activity"
+
 type DetailComment = {
     _id?: string
     id?: string
@@ -60,9 +72,14 @@ type DetailComment = {
     text?: string
     content?: string
     createdAt?: string
+
     user?: unknown
     createdBy?: unknown
+    author?: unknown
+
+    authorRole?: string
     isInternal?: boolean
+    attachments?: unknown[]
 }
 
 type FinalFileType = "pdf" | "docx" | "signedPdf"
@@ -84,10 +101,40 @@ function isNotFoundError(error: unknown): boolean {
     )
 }
 
+/**
+ * Map the backend `ContractComment` shape into the looser
+ * `DetailComment` shape that the UI components read.
+ */
 function normalizeComments(
     comments: ContractComment[]
 ): DetailComment[] {
-    return comments as unknown as DetailComment[]
+    if (!Array.isArray(comments)) {
+        return []
+    }
+
+    return comments.map((c) => {
+        const author = c.author
+
+        return {
+            _id: c._id,
+            id: c._id,
+
+            message: c.message,
+            comment: c.message,
+            text: c.message,
+            content: c.message,
+
+            createdAt: c.createdAt,
+
+            author,
+            user: author,
+            createdBy: author,
+
+            authorRole: c.authorRole,
+            isInternal: c.isInternal,
+            attachments: c.attachments ?? [],
+        }
+    })
 }
 
 function normalizeActivities(
@@ -110,16 +157,6 @@ function normalizeActivities(
     }>
 }
 
-/**
- * A contract has a downloadable final document when at least
- * one of these populated fields is present:
- *
- *   currentDocument  → the working PDF (fileType: "pdf")
- *   signedDocument   → the executed PDF (fileType: "signedPdf")
- *
- * Fields may be a populated BusinessDocument object OR a string ID.
- * Both are valid — the backend resolves the ID.
- */
 function hasAnyFinalDocument(contract: Contract): boolean {
     const isPresent = (value: unknown): boolean => {
         if (!value) return false
@@ -138,16 +175,56 @@ function isAbsoluteUrl(value: string): boolean {
     return /^https?:\/\//i.test(value)
 }
 
+/**
+ * Best-effort human-readable file size.
+ */
+function formatBytes(bytes: number | undefined): string {
+    if (!bytes || bytes <= 0) return "—"
+
+    const units = ["B", "KB", "MB", "GB"]
+
+    let value = bytes
+    let unit = 0
+
+    while (value >= 1024 && unit < units.length - 1) {
+        value /= 1024
+        unit += 1
+    }
+
+    return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`
+}
+
+/**
+ * Pull a display name out of a BusinessDocument, tolerating
+ * partial shapes coming back from different endpoints.
+ */
+function getDocumentDisplayName(doc: {
+    name?: string
+    originalName?: string
+    fileName?: string
+}): string {
+    return (
+        doc.originalName ||
+        doc.fileName ||
+        doc.name ||
+        "Untitled document"
+    )
+}
+
+/**
+ * Best-effort size lookup on a partially-typed document.
+ */
+function getDocumentSize(doc: {
+    size?: number
+    fileSize?: number
+}): number | undefined {
+    return doc.size ?? doc.fileSize
+}
+
 /* -------------------------------------------------------------------------- */
 /* Final document download (R2)                                               */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Order matters:
- *  1. Prefer the signed/executed copy if present.
- *  2. Fall back to the working PDF.
- *  3. Finally try the DOCX source.
- */
 const FINAL_FILE_CANDIDATES: FinalFileType[] = [
     "signedPdf",
     "pdf",
@@ -170,16 +247,6 @@ function buildFinalFilename(
     return `contract-${contractId}-${suffix}.${ext}`
 }
 
-/**
- * Fetch an R2 object from a signed URL and force a browser save.
- *
- * We do NOT use window.open here:
- *   window.open() after an await is blocked by popup blockers.
- *
- * We do NOT send an Authorization header to R2:
- *   the signed URL is self-authorizing. Sending extra headers
- *   will invalidate the signature and R2 returns 403.
- */
 async function downloadFromR2(
     signedUrl: string,
     filename: string
@@ -208,8 +275,6 @@ async function downloadFromR2(
         a.click()
         a.remove()
     } finally {
-        // Free the blob URL after the browser has had time
-        // to start the download.
         setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
     }
 }
@@ -261,7 +326,6 @@ function FinalDocumentButton({
                 return
             } catch (err) {
                 lastError = err
-                // Try the next candidate.
             }
         }
 
@@ -304,6 +368,17 @@ function FinalDocumentButton({
 }
 
 /* -------------------------------------------------------------------------- */
+/* Tabs                                                                       */
+/* -------------------------------------------------------------------------- */
+
+const TAB_LABELS: Array<{ key: TabKey; label: string }> = [
+    { key: "overview", label: "Overview" },
+    { key: "versions", label: "Versions" },
+    { key: "documents", label: "Documents" },
+    { key: "activity", label: "Activity" },
+]
+
+/* -------------------------------------------------------------------------- */
 /* Page                                                                       */
 /* -------------------------------------------------------------------------- */
 
@@ -337,6 +412,17 @@ export default function ContractDetailPage({
 
     const [commentSubmitting, setCommentSubmitting] =
         useState(false)
+
+    const [tab, setTab] = useState<TabKey>("overview")
+
+    /**
+     * Document upload state (used by the Documents tab).
+     */
+    const [documentUploading, setDocumentUploading] =
+        useState(false)
+
+    const [documentError, setDocumentError] =
+        useState<string | null>(null)
 
     /* ---------------------------------------------------------------------- */
     /* Resolve route params                                                    */
@@ -499,12 +585,52 @@ export default function ContractDetailPage({
                     message
                 )
 
+            const normalized = normalizeComments([
+                createdComment as unknown as ContractComment,
+            ])
+
             setComments((current) => [
                 ...current,
-                createdComment as unknown as DetailComment,
+                ...normalized,
             ])
         } finally {
             setCommentSubmitting(false)
+        }
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Upload supporting document                                              */
+    /* ---------------------------------------------------------------------- */
+
+    const handleUploadDocument = async (file: File) => {
+        if (!contract) return
+
+        try {
+            setDocumentUploading(true)
+            setDocumentError(null)
+
+            await contractService.uploadSupportingDocument(
+                contract._id,
+                file,
+                "contract"
+            )
+
+            // Reload the contract so the newly attached document
+            // appears in `contract.supportingDocuments`.
+            await loadContract(contract._id, { silent: true })
+        } catch (uploadErr) {
+            console.error(
+                "Failed to upload supporting document:",
+                uploadErr
+            )
+
+            setDocumentError(
+                uploadErr instanceof Error
+                    ? uploadErr.message
+                    : "Failed to upload document."
+            )
+        } finally {
+            setDocumentUploading(false)
         }
     }
 
@@ -733,34 +859,31 @@ export default function ContractDetailPage({
                 {/* Tabs                                                        */}
                 {/* ---------------------------------------------------------- */}
 
-                <div className="mt-5 flex gap-1 overflow-x-auto border-b border-zinc-800">
-                    <button
-                        type="button"
-                        className="border-b-2 border-yellow-400 px-4 py-3 text-sm font-semibold text-white"
-                    >
-                        Overview
-                    </button>
+                <div
+                    role="tablist"
+                    aria-label="Contract sections"
+                    className="mt-5 flex gap-1 overflow-x-auto border-b border-zinc-800"
+                >
+                    {TAB_LABELS.map(({ key, label }) => {
+                        const isActive = tab === key
 
-                    <button
-                        type="button"
-                        className="px-4 py-3 text-sm font-medium text-zinc-500 transition hover:text-zinc-300"
-                    >
-                        Versions
-                    </button>
-
-                    <button
-                        type="button"
-                        className="px-4 py-3 text-sm font-medium text-zinc-500 transition hover:text-zinc-300"
-                    >
-                        Documents
-                    </button>
-
-                    <button
-                        type="button"
-                        className="px-4 py-3 text-sm font-medium text-zinc-500 transition hover:text-zinc-300"
-                    >
-                        Activity
-                    </button>
+                        return (
+                            <button
+                                key={key}
+                                type="button"
+                                role="tab"
+                                aria-selected={isActive}
+                                onClick={() => setTab(key)}
+                                className={
+                                    isActive
+                                        ? "border-b-2 border-yellow-400 px-4 py-3 text-sm font-semibold text-white"
+                                        : "border-b-2 border-transparent px-4 py-3 text-sm font-medium text-zinc-500 transition hover:text-zinc-300"
+                                }
+                            >
+                                {label}
+                            </button>
+                        )
+                    })}
                 </div>
 
                 {/* ---------------------------------------------------------- */}
@@ -768,25 +891,378 @@ export default function ContractDetailPage({
                 {/* ---------------------------------------------------------- */}
 
                 <div className="mt-5 flex flex-col gap-4">
-                    <ContractOverview contract={contract} />
+                    {tab === "overview" && (
+                        <>
+                            <ContractOverview contract={contract} />
 
-                    <div className="grid gap-4 lg:grid-cols-[1.45fr_1fr]">
-                        <ContractDocuments contract={contract} />
+                            <div className="grid gap-4 lg:grid-cols-[1.45fr_1fr]">
+                                <ContractDocuments contract={contract} />
 
-                        <ContractActivity
+                                <ContractActivity
+                                    contract={contract}
+                                    activities={activities}
+                                />
+                            </div>
+
+                            <CommentComposer
+                                comments={comments}
+                                onSubmit={handleAddComment}
+                                submitting={commentSubmitting}
+                            />
+                        </>
+                    )}
+
+                    {tab === "versions" && (
+                        <ContractVersionsTab
+                            contractId={contract._id}
+                        />
+                    )}
+
+                    {tab === "documents" && (
+                        <ContractDocumentsTab
                             contract={contract}
+                            uploading={documentUploading}
+                            error={documentError}
+                            onUpload={handleUploadDocument}
+                        />
+                    )}
+
+                    {tab === "activity" && (
+                        <ContractActivityTab
                             activities={activities}
                         />
-                    </div>
-
-                    <CommentComposer
-                        comments={comments}
-                        onSubmit={handleAddComment}
-                        submitting={commentSubmitting}
-                    />
+                    )}
                 </div>
             </div>
         </main>
+    )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Tab panels                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Versions tab — placeholder until you wire up a versions list endpoint.
+ */
+function ContractVersionsTab({
+    contractId,
+}: {
+    contractId: string
+}) {
+    return (
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm">
+            <h2 className="text-sm font-semibold text-white">
+                Versions
+            </h2>
+
+            <p className="mt-3 text-sm text-zinc-400">
+                Version history for this contract will appear here.
+            </p>
+
+            <p className="mt-2 text-xs text-zinc-600">
+                Contract ID: {contractId}
+            </p>
+        </section>
+    )
+}
+
+/**
+ * Documents tab.
+ *
+ * Shows existing supporting documents plus an uploader that runs
+ * the 3-step R2 flow through `contractService.uploadSupportingDocument`.
+ */
+function ContractDocumentsTab({
+    contract,
+    uploading,
+    error,
+    onUpload,
+}: {
+    contract: Contract
+    uploading: boolean
+    error: string | null
+    onUpload: (file: File) => Promise<void>
+}) {
+    const inputRef = React.useRef<HTMLInputElement | null>(null)
+
+    const [deletingId, setDeletingId] =
+        React.useState<string | null>(null)
+
+    const [downloadingId, setDownloadingId] =
+        React.useState<string | null>(null)
+
+    const [rowError, setRowError] =
+        React.useState<string | null>(null)
+
+    const documents = Array.isArray(
+        contract.supportingDocuments
+    )
+        ? contract.supportingDocuments
+        : []
+
+    const triggerFileDialog = () => {
+        if (uploading) return
+        inputRef.current?.click()
+    }
+
+    const handleFileChange = async (
+        event: React.ChangeEvent<HTMLInputElement>
+    ) => {
+        const file = event.target.files?.[0]
+
+        // Reset so picking the same file twice re-fires.
+        event.target.value = ""
+
+        if (!file) return
+
+        await onUpload(file)
+    }
+
+    const handleDelete = async (documentId: string) => {
+        if (!documentId || deletingId) return
+
+        const confirmed = window.confirm(
+            "Delete this document? This cannot be undone."
+        )
+
+        if (!confirmed) return
+
+        try {
+            setDeletingId(documentId)
+            setRowError(null)
+
+            await contractService.deleteSupportingDocument(
+                contract._id,
+                documentId
+            )
+
+            // Refresh the page so the list reflects the deletion.
+            window.location.reload()
+        } catch (deleteErr) {
+            console.error(
+                "Failed to delete document:",
+                deleteErr
+            )
+
+            setRowError(
+                deleteErr instanceof Error
+                    ? deleteErr.message
+                    : "Failed to delete document."
+            )
+        } finally {
+            setDeletingId(null)
+        }
+    }
+
+    const handleDownload = async (
+        documentId: string,
+        name: string
+    ) => {
+        if (!documentId || downloadingId) return
+
+        try {
+            setDownloadingId(documentId)
+            setRowError(null)
+
+            const result =
+                await contractService.getSupportingDocumentUrl(
+                    contract._id,
+                    documentId
+                )
+
+            if (!result?.url) {
+                throw new Error(
+                    "Backend did not return a download URL."
+                )
+            }
+
+            await downloadFromR2(result.url, name)
+        } catch (downloadErr) {
+            console.error(
+                "Failed to download document:",
+                downloadErr
+            )
+
+            setRowError(
+                downloadErr instanceof Error
+                    ? downloadErr.message
+                    : "Failed to download document."
+            )
+        } finally {
+            setDownloadingId(null)
+        }
+    }
+
+    return (
+        <div className="flex flex-col gap-4">
+            {/* ---------------------------------------------------- */}
+            {/* Uploader                                              */}
+            {/* ---------------------------------------------------- */}
+
+            <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h2 className="text-sm font-semibold text-white">
+                            Documents
+                        </h2>
+
+                        <p className="mt-1 text-xs text-zinc-500">
+                            Upload supporting files (PDF, DOC, DOCX, JPG, PNG, WEBP · up to 25 MB).
+                        </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <input
+                            ref={inputRef}
+                            type="file"
+                            className="hidden"
+                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,image/webp"
+                            onChange={handleFileChange}
+                            disabled={uploading}
+                        />
+
+                        <button
+                            type="button"
+                            onClick={triggerFileDialog}
+                            disabled={uploading}
+                            className="inline-flex items-center gap-2 rounded-xl bg-yellow-400 px-3 py-2.5 text-sm font-semibold text-black transition hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {uploading ? (
+                                <>
+                                    <Loader2 className="size-4 animate-spin" />
+                                    Uploading…
+                                </>
+                            ) : (
+                                <>
+                                    <Upload className="size-4" />
+                                    Upload document
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+
+                {error && (
+                    <p className="mt-3 rounded-xl border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-300">
+                        {error}
+                    </p>
+                )}
+
+                {rowError && (
+                    <p className="mt-3 rounded-xl border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-300">
+                        {rowError}
+                    </p>
+                )}
+            </section>
+
+            {/* ---------------------------------------------------- */}
+            {/* Existing supporting documents                         */}
+            {/* ---------------------------------------------------- */}
+
+            {documents.length > 0 && (
+                <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                        Supporting documents
+                    </h3>
+
+                    <ul className="mt-4 flex flex-col divide-y divide-zinc-800">
+                        {documents.map((doc) => {
+                            const docId = doc._id
+                            const displayName =
+                                getDocumentDisplayName(doc)
+                            const size = getDocumentSize(doc)
+
+                            const isDeleting =
+                                deletingId === docId
+                            const isDownloading =
+                                downloadingId === docId
+
+                            return (
+                                <li
+                                    key={docId}
+                                    className="flex items-center justify-between gap-3 py-3"
+                                >
+                                    <div className="flex min-w-0 items-center gap-3">
+                                        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-zinc-400">
+                                            <FileText className="size-4" />
+                                        </div>
+
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-medium text-zinc-100">
+                                                {displayName}
+                                            </p>
+
+                                            <p className="mt-0.5 text-xs text-zinc-500">
+                                                {formatBytes(size)}
+                                                {doc.mimeType
+                                                    ? ` · ${doc.mimeType}`
+                                                    : ""}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                void handleDownload(
+                                                    docId,
+                                                    displayName
+                                                )
+                                            }
+                                            disabled={isDownloading}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 px-2.5 py-1.5 text-xs font-medium text-zinc-300 transition hover:bg-zinc-900 hover:text-white disabled:opacity-50"
+                                        >
+                                            {isDownloading ? (
+                                                <Loader2 className="size-3.5 animate-spin" />
+                                            ) : (
+                                                <Download className="size-3.5" />
+                                            )}
+                                            Download
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                void handleDelete(docId)
+                                            }
+                                            disabled={isDeleting}
+                                            aria-label="Delete document"
+                                            className="inline-flex items-center justify-center rounded-lg border border-zinc-800 p-1.5 text-zinc-400 transition hover:border-red-900/60 hover:bg-red-950/40 hover:text-red-300 disabled:opacity-50"
+                                        >
+                                            {isDeleting ? (
+                                                <Loader2 className="size-3.5 animate-spin" />
+                                            ) : (
+                                                <Trash2 className="size-3.5" />
+                                            )}
+                                        </button>
+                                    </div>
+                                </li>
+                            )
+                        })}
+                    </ul>
+                </section>
+            )}
+        </div>
+    )
+}
+
+/**
+ * Activity tab — reuses the ContractActivity card.
+ */
+function ContractActivityTab({
+    activities,
+}: {
+    activities: ReturnType<typeof normalizeActivities>
+}) {
+    return (
+        <div className="flex flex-col gap-4">
+            <ContractActivity
+                contract={{} as Contract}
+                activities={activities}
+            />
+        </div>
     )
 }
 

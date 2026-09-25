@@ -16,12 +16,6 @@ const CONTRACTS_URL = `${API_ROOT}/contracts`;
 // AUTH
 // ============================================================
 
-/**
- * The Contracts service is intended to be used from Client
- * Components because the JWT is currently stored in localStorage.
- *
- * Do NOT call this service from a Server Component.
- */
 const getAuthToken = (): string | null => {
     if (typeof window === "undefined") {
         return null;
@@ -117,9 +111,6 @@ export type ContractRequestPriority =
 // CONTRACT TYPES
 // ============================================================
 
-/**
- * These values match the Contract schema.
- */
 export type ContractType =
     | "NDA"
     | "Employment Agreement"
@@ -173,6 +164,7 @@ export interface AuthUserReference {
     email?: string;
     role?: string;
     profilePhoto?: string;
+    avatar?: string;
 }
 
 export interface AssignedProfessional {
@@ -251,10 +243,6 @@ export interface ContractRequest {
 
     assignedProfessional?: AssignedProfessional | null;
 
-    /**
-     * Before conversion this is normally null.
-     * After conversion it can be an ID or populated Contract.
-     */
     contract?: string | Contract | null;
 
     expectedDeliveryDate?: string | null;
@@ -712,7 +700,6 @@ export interface ContractActivity {
 // ============================================================
 
 export interface DashboardStats {
-    // Request metrics
     totalRequests: number;
 
     pending: number;
@@ -727,7 +714,6 @@ export interface DashboardStats {
 
     cancelled: number;
 
-    // Priority metrics
     lowPriority: number;
 
     mediumPriority: number;
@@ -736,7 +722,6 @@ export interface DashboardStats {
 
     urgentPriority: number;
 
-    // Optional contract metrics
     activeContracts?: number;
 
     pendingReview?: number;
@@ -745,10 +730,8 @@ export interface DashboardStats {
 
     openRequests?: number;
 
-    // Recent requests
     recentRequests?: ContractRequest[];
 
-    // Some backend versions may return this
     totalContracts?: number;
 
     recentContracts?: Contract[];
@@ -769,6 +752,12 @@ export interface SignedUploadResponse {
     documentId?: string;
 
     expiresIn?: number;
+
+    /**
+     * Present on the final-file upload URL response.
+     * Echoes back the requested type: "pdf" | "docx" | "signedPdf".
+     */
+    fileType?: string;
 
     [key: string]: unknown;
 }
@@ -853,14 +842,6 @@ const handleResponse = async <T>(
         );
     }
 
-    /**
-     * Standard backend:
-     *
-     * {
-     *   success: true,
-     *   data: ...
-     * }
-     */
     if (
         result &&
         Object.prototype.hasOwnProperty.call(
@@ -871,14 +852,6 @@ const handleResponse = async <T>(
         return result.data as T;
     }
 
-    /**
-     * Some endpoints may return:
-     *
-     * {
-     *   success: true,
-     *   requests: [...]
-     * }
-     */
     return result as T;
 };
 
@@ -892,14 +865,6 @@ class ContractService {
     // CONTRACT REQUESTS
     // ==========================================================
 
-    /**
-     * Create a new contract request.
-     *
-     * Business identity and requestedBy are NOT sent
-     * from the frontend.
-     *
-     * Backend gets those from req.user.
-     */
     async createContractRequest(
         data: ContractRequestFormData
     ): Promise<ContractRequest> {
@@ -909,16 +874,11 @@ class ContractService {
             contractType: data.contractType,
 
             ...(data.description?.trim()
-                ? {
-                    description:
-                        data.description.trim(),
-                }
+                ? { description: data.description.trim() }
                 : {}),
 
             ...(data.priority
-                ? {
-                    priority: data.priority,
-                }
+                ? { priority: data.priority }
                 : {}),
 
             ...(data.expectedDeliveryDate
@@ -951,20 +911,6 @@ class ContractService {
         );
     }
 
-    /**
- * Upload a new contract document.
- *
- * Flow:
- * 1. Ask backend for a signed R2 upload URL
- * 2. Upload file directly to R2
- * 3. Tell backend upload is complete
- *
- * Backend is responsible for:
- * - business
- * - uploadedBy
- * - document record
- * - contract record
- */
     async uploadContract(formData: FormData): Promise<Contract> {
         const file = formData.get("file");
 
@@ -991,11 +937,6 @@ class ContractService {
 
         const size = file.size;
         const originalName = file.name;
-
-        // ==========================================================
-        // STEP 1
-        // Get signed R2 upload URL from backend
-        // ==========================================================
 
         const uploadUrlResponse = await fetch(
             `${CONTRACTS_URL}/upload-url`,
@@ -1042,20 +983,10 @@ class ContractService {
             );
         }
 
-        // ==========================================================
-        // STEP 2
-        // Upload directly to Cloudflare R2
-        // ==========================================================
-
         await this.uploadToSignedUrl(
             uploadData.uploadUrl,
             file
         );
-
-        // ==========================================================
-        // STEP 3
-        // Complete upload on backend
-        // ==========================================================
 
         const completeResponse = await fetch(
             `${CONTRACTS_URL}/upload/complete`,
@@ -1079,9 +1010,6 @@ class ContractService {
         );
     }
 
-    /**
-     * Get contract requests.
-     */
     async getContractRequests(params: {
         page?: number;
         limit?: number;
@@ -1152,35 +1080,6 @@ class ContractService {
             result
         );
 
-        /*
-         * Backend may return:
-         *
-         * {
-         *   success: true,
-         *   data: {
-         *     requests: [...],
-         *     pagination: {...}
-         *   }
-         * }
-         *
-         * OR:
-         *
-         * {
-         *   requests: [...],
-         *   pagination: {...}
-         * }
-         *
-         * OR:
-         *
-         * {
-         *   data: [...]
-         * }
-         *
-         * OR:
-         *
-         * [...]
-         */
-
         const payload = result?.data ?? result;
 
         if (Array.isArray(payload)) {
@@ -1215,13 +1114,6 @@ class ContractService {
     }
 
 
-    /**
-     * Get ONE contract request.
-     *
-     * IMPORTANT:
-     * This endpoint returns ContractRequest,
-     * NOT Contract.
-     */
     async getContractRequestById(
         requestId: string
     ): Promise<ContractRequest> {
@@ -1246,9 +1138,6 @@ class ContractService {
     }
 
 
-    /**
-     * Update contract request.
-     */
     async updateContractRequest(
         requestId: string,
         data: Partial<ContractRequestFormData>
@@ -1275,9 +1164,6 @@ class ContractService {
     }
 
 
-    /**
-     * Update request status.
-     */
     async updateContractRequestStatus(
         requestId: string,
         status: ContractRequestStatus
@@ -1293,9 +1179,7 @@ class ContractService {
             {
                 method: "PATCH",
                 headers: getHeaders(),
-                body: JSON.stringify({
-                    status,
-                }),
+                body: JSON.stringify({ status }),
             }
         );
 
@@ -1306,9 +1190,6 @@ class ContractService {
     }
 
 
-    /**
-     * Delete contract request.
-     */
     async deleteContractRequest(
         requestId: string
     ): Promise<void> {
@@ -1337,12 +1218,6 @@ class ContractService {
     // ACTUAL CONTRACTS
     // ==========================================================
 
-    /**
-     * Create an actual Contract.
-     *
-     * This should normally be used by your backend/admin/
-     * conversion workflow rather than the initial request modal.
-     */
     async createContract(
         data: {
             title: string;
@@ -1372,10 +1247,7 @@ class ContractService {
                 : {}),
 
             ...(data.description?.trim()
-                ? {
-                    description:
-                        data.description.trim(),
-                }
+                ? { description: data.description.trim() }
                 : {}),
         };
 
@@ -1395,18 +1267,6 @@ class ContractService {
     }
 
 
-    /**
-     * Get actual contracts.
-     *
-     * IMPORTANT:
-     * This is different from getContractRequests().
-     */
-    /**
-  * Get actual contracts.
-  *
-  * IMPORTANT:
-  * This is different from getContractRequests().
-  */
     async getContracts(
         params: {
             page?: number;
@@ -1428,9 +1288,6 @@ class ContractService {
             headers: getHeaders(),
         });
 
-        // Parse raw JSON directly — do NOT use handleResponse here,
-        // because it strips the pagination sibling and leaves us
-        // with only the array.
         let result: any = null;
 
         try {
@@ -1446,16 +1303,8 @@ class ContractService {
             );
         }
 
-        // Backend shapes we support:
-        //
-        // 1. { success, data: [...], pagination: {...} }   <-- YOUR CASE
-        // 2. { success, data: { contracts: [...], pagination: {...} } }
-        // 3. { success, data: { data: [...], pagination: {...} } }
-        // 4. [ ... ]
-
         const payload = result?.data ?? result;
 
-        // Case 1 / 4: data is directly an array
         if (Array.isArray(payload)) {
             return {
                 data: payload,
@@ -1469,7 +1318,6 @@ class ContractService {
             };
         }
 
-        // Case 2 / 3: data is an object
         const contracts = Array.isArray(payload?.contracts)
             ? payload.contracts
             : Array.isArray(payload?.data)
@@ -1491,11 +1339,6 @@ class ContractService {
         };
     }
 
-    /**
-     * Get ONE actual contract by Contract ID.
-     *
-     * DO NOT pass a ContractRequest ID here.
-     */
     async getContractById(
         contractId: string
     ): Promise<Contract> {
@@ -1520,9 +1363,6 @@ class ContractService {
     }
 
 
-    /**
-     * Update actual contract.
-     */
     async updateContract(
         contractId: string,
         data: ContractUpdateData
@@ -1549,9 +1389,6 @@ class ContractService {
     }
 
 
-    /**
-     * Update contract lifecycle status.
-     */
     async updateContractStatus(
         contractId: string,
         status: ContractStatus
@@ -1567,9 +1404,7 @@ class ContractService {
             {
                 method: "PATCH",
                 headers: getHeaders(),
-                body: JSON.stringify({
-                    status,
-                }),
+                body: JSON.stringify({ status }),
             }
         );
 
@@ -1578,9 +1413,6 @@ class ContractService {
             "Failed to update contract status"
         );
     }
-
-
-
 
 
     // ==========================================================
@@ -1643,38 +1475,26 @@ class ContractService {
         }
     ): Promise<ContractComment> {
         if (!contractId) {
-            throw new Error(
-                "Contract ID is required."
-            );
+            throw new Error("Contract ID is required.");
         }
 
-        const cleanMessage =
-            message.trim();
+        const cleanMessage = message.trim();
 
         if (!cleanMessage) {
-            throw new Error(
-                "Comment message is required."
-            );
+            throw new Error("Comment message is required.");
         }
 
         const payload = {
             message: cleanMessage,
 
-            isInternal:
-                options?.isInternal ?? false,
+            isInternal: options?.isInternal ?? false,
 
             ...(options?.versionId
-                ? {
-                    versionId:
-                        options.versionId,
-                }
+                ? { versionId: options.versionId }
                 : {}),
 
             ...(options?.attachmentIds?.length
-                ? {
-                    attachmentIds:
-                        options.attachmentIds,
-                }
+                ? { attachmentIds: options.attachmentIds }
                 : {}),
         };
 
@@ -1694,13 +1514,29 @@ class ContractService {
     }
 
 
+    /**
+     * GET /contracts/:id/comments
+     *
+     * Backend shape:
+     * {
+     *   success: true,
+     *   message: "...",
+     *   data: {
+     *     contract: { ... },
+     *     comments: [ ... ]
+     *   }
+     * }
+     *
+     * `handleResponse` returns `result.data`, i.e.:
+     *   { contract, comments }
+     *
+     * We return the `comments` array directly.
+     */
     async getComments(
         contractId: string
     ): Promise<ContractComment[]> {
         if (!contractId) {
-            throw new Error(
-                "Contract ID is required."
-            );
+            throw new Error("Contract ID is required.");
         }
 
         const response = await fetch(
@@ -1712,17 +1548,27 @@ class ContractService {
         );
 
         const result =
-            await handleResponse<any>(
-                response,
-                "Failed to fetch comments"
-            );
+            await handleResponse<
+                | { contract?: unknown; comments?: ContractComment[] }
+                | ContractComment[]
+            >(response, "Failed to fetch comments");
 
-        return (
-            result?.comments ||
-            result?.data ||
-            result ||
-            []
-        );
+        // Case A: { contract, comments }
+        if (
+            result &&
+            !Array.isArray(result) &&
+            Array.isArray((result as any).comments)
+        ) {
+            return (result as any).comments as ContractComment[];
+        }
+
+        // Case B: already an array
+        if (Array.isArray(result)) {
+            return result as ContractComment[];
+        }
+
+        // Fallback
+        return [];
     }
 
 
@@ -1730,10 +1576,6 @@ class ContractService {
     // SUPPORTING DOCUMENTS - R2
     // ==========================================================
 
-    /**
-     * Step 1:
-     * Get signed R2 upload URL.
-     */
     async getSupportingDocumentUploadUrl(
         contractId: string,
         data: {
@@ -1759,14 +1601,6 @@ class ContractService {
     }
 
 
-    /**
-     * Step 2:
-     * Upload directly to R2.
-     *
-     * IMPORTANT:
-     * Do not send Authorization header here.
-     * The signed URL itself authorizes the upload.
-     */
     async uploadToSignedUrl(
         uploadUrl: string,
         file: File
@@ -1798,10 +1632,6 @@ class ContractService {
     }
 
 
-    /**
-     * Step 3:
-     * Tell backend that R2 upload completed.
-     */
     async completeSupportingDocumentUpload(
         contractId: string,
         data: {
@@ -1829,8 +1659,94 @@ class ContractService {
 
 
     /**
-     * Get temporary/signed URL for a document.
+     * End-to-end supporting document upload.
+     *
+     * Runs the 3-step R2 flow so the UI doesn't have to:
+     *   1. Ask backend for a signed upload URL
+     *   2. PUT the file directly to R2
+     *   3. Tell backend the upload completed, receive the
+     *      created BusinessDocument
+     *
+     * The backend's upload-url endpoint returns the key under
+     * `storageKey`, so we fall back to `key` as well.
      */
+    async uploadSupportingDocument(
+        contractId: string,
+        file: File,
+        category: DocumentCategory = "contract"
+    ): Promise<BusinessDocument> {
+        if (!contractId) {
+            throw new Error("Contract ID is required.");
+        }
+
+        if (!file) {
+            throw new Error("File is required.");
+        }
+
+        const mimeType =
+            file.type || "application/octet-stream";
+
+        // ---------------------------------------------------------
+        // Step 1 — signed upload URL
+        // ---------------------------------------------------------
+
+        const uploadData =
+            await this.getSupportingDocumentUploadUrl(
+                contractId,
+                {
+                    fileName: file.name,
+                    mimeType,
+                    size: file.size,
+                    category,
+                }
+            );
+
+        const uploadUrl =
+            (uploadData as any)?.uploadUrl as
+            | string
+            | undefined;
+
+        const storageKey =
+            ((uploadData as any)?.storageKey ??
+                (uploadData as any)?.key) as
+            | string
+            | undefined;
+
+        if (!uploadUrl) {
+            throw new Error(
+                "Backend did not return a signed upload URL."
+            );
+        }
+
+        if (!storageKey) {
+            throw new Error(
+                "Backend did not return a storage key."
+            );
+        }
+
+        // ---------------------------------------------------------
+        // Step 2 — PUT the file directly to R2
+        // ---------------------------------------------------------
+
+        await this.uploadToSignedUrl(uploadUrl, file);
+
+        // ---------------------------------------------------------
+        // Step 3 — finalize on the backend
+        // ---------------------------------------------------------
+
+        return this.completeSupportingDocumentUpload(
+            contractId,
+            {
+                key: storageKey,
+                originalName: file.name,
+                mimeType,
+                size: file.size,
+                category,
+            }
+        );
+    }
+
+
     async getSupportingDocumentUrl(
         contractId: string,
         documentId: string
@@ -1843,16 +1759,28 @@ class ContractService {
             }
         );
 
-        return handleResponse<FileUrlResponse>(
+        const raw = await handleResponse<any>(
             response,
             "Failed to get document URL"
         );
+
+        // Backend returns `downloadUrl` for supporting documents
+        // but `url` for final files. Normalize both into `url`.
+        const url: string | undefined =
+            raw?.url ?? raw?.downloadUrl;
+
+        if (!url) {
+            throw new Error(
+                "Backend did not return a download URL."
+            );
+        }
+
+        return {
+            url,
+            expiresIn: raw?.expiresIn,
+        };
     }
 
-
-    /**
-     * Delete supporting document.
-     */
     async deleteSupportingDocument(
         contractId: string,
         documentId: string
@@ -1876,10 +1804,6 @@ class ContractService {
     // CONTRACT VERSIONS - R2
     // ==========================================================
 
-    /**
-     * Step 1:
-     * Get version upload URL.
-     */
     async getVersionUploadUrl(
         contractId: string,
         data: {
@@ -1904,10 +1828,6 @@ class ContractService {
     }
 
 
-    /**
-     * Step 2:
-     * Complete version upload.
-     */
     async completeVersionUpload(
         contractId: string,
         data: {
@@ -1934,9 +1854,6 @@ class ContractService {
     }
 
 
-    /**
-     * Get version document URL.
-     */
     async getVersionUrl(
         contractId: string,
         versionId: string
@@ -2101,9 +2018,7 @@ class ContractService {
         contractId: string
     ): Promise<ContractActivity[]> {
         if (!contractId) {
-            throw new Error(
-                "Contract ID is required."
-            );
+            throw new Error("Contract ID is required.");
         }
 
         const response = await fetch(
@@ -2120,12 +2035,20 @@ class ContractService {
                 "Failed to fetch contract activity"
             );
 
-        return (
-            result?.activities ||
-            result?.data ||
-            result ||
-            []
-        );
+        // Backend may wrap as { activities: [...] } inside data.
+        if (Array.isArray(result)) {
+            return result;
+        }
+
+        if (Array.isArray(result?.activities)) {
+            return result.activities;
+        }
+
+        if (Array.isArray(result?.data)) {
+            return result.data;
+        }
+
+        return [];
     }
 
 
