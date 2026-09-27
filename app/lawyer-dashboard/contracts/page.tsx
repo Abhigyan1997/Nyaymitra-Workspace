@@ -43,8 +43,11 @@ import {
  * GET    /lawyer/contracts/:contractId/comments
  * GET    /lawyer/contracts/:contractId/activity
  * GET    /lawyer/contracts/:contractId/documents
- * POST   /lawyer/contracts/:contractId/documents       (multipart upload)
- * GET    /lawyer/documents/:documentId/download
+ * GET    /lawyer/contracts/:contractId/documents/upload-url   <-- NEW
+ * POST   /lawyer/contracts/:contractId/documents               <-- saves R2 key
+ *
+ * R2 upload is direct from browser using the presigned URL returned
+ * by the upload-url endpoint.
  */
 
 const API_BASE =
@@ -95,6 +98,7 @@ interface ContractDocument {
     status?: string
     uploadedBy?: string
     source?: 'client' | 'lawyer' | 'system' | string
+    signedUrl?: string
 }
 
 interface Contract {
@@ -145,7 +149,12 @@ const PRIORITY_OPTIONS: ContractPriority[] = [
 
 function getToken() {
     if (typeof window === 'undefined') return null
-    return localStorage.getItem('token')
+    return (
+        localStorage.getItem('token') ||
+        localStorage.getItem('authToken') ||
+        localStorage.getItem('accessToken') ||
+        null
+    )
 }
 
 async function apiRequest<T>(
@@ -428,12 +437,6 @@ function mapContractSummary(item: any): Contract {
     }
 }
 
-/**
- * Merge API detail with a fallback (previous state) — but IMPORTANTLY,
- * do NOT wipe activities/comments/documents that were separately fetched.
- * Only fill them from the detail response if the detail response actually
- * contains them.
- */
 function mapContractDetail(
     item: any,
     fallback?: Contract
@@ -488,13 +491,12 @@ function mapContractDetail(
                 doc?.uploadedBy?.name ||
                 doc?.uploadedBy?.email,
             source: doc?.source || doc?.uploadedByRole,
+            signedUrl: doc?.signedUrl,
         })
     })
 
     const detailDocuments = Array.from(uniqueDocuments.values())
 
-    // Only use detail-provided documents if we didn't already have a
-    // separately-fetched document list from the documents endpoint.
     const documents =
         detailDocuments.length > 0
             ? detailDocuments
@@ -618,6 +620,7 @@ function mapDocument(item: any): ContractDocument {
             item?.uploadedBy?.name ||
             item?.uploadedBy?.email,
         source: item?.source || item?.uploadedByRole,
+        signedUrl: item?.signedUrl,
     }
 }
 
@@ -815,8 +818,6 @@ export default function LawyerContractPage() {
     }, [])
 
     // ----------------------- FETCH DETAIL -----------------------
-    // Preserves previously-loaded activity/comments/documents so the
-    // separate tab fetches aren't clobbered.
     const fetchContractDetail = useCallback(
         async (contractId: string) => {
             if (!contractId) return
@@ -832,7 +833,6 @@ export default function LawyerContractPage() {
 
                 setSelectedContract((current) => {
                     if (current?.id !== contractId) {
-                        // Different contract selected in the meantime
                         return mapContractDetail(detail, current || undefined)
                     }
                     return mapContractDetail(detail, current)
@@ -943,15 +943,12 @@ export default function LawyerContractPage() {
         fetchContracts()
     }, [fetchContracts])
 
-    // Fetch detail once when selected contract id changes, then
-    // lazily fetch tab data only when that tab is opened.
     useEffect(() => {
         if (!selectedContract?.id) return
         fetchContractDetail(selectedContract.id)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedContract?.id])
 
-    // Load tab-specific data on demand
     useEffect(() => {
         const id = selectedContract?.id
         if (!id) return
@@ -1065,25 +1062,74 @@ export default function LawyerContractPage() {
         }
     }
 
-    // ----------------------- UPLOAD DOCUMENT -----------------------
+    // ----------------------- UPLOAD DOCUMENT (R2) -----------------------
+    // STEP 1: Ask backend for a presigned R2 PUT URL + storageKey
+    // STEP 2: PUT the file directly to R2 using that URL
+    // STEP 3: POST the storageKey + metadata to the backend to save the row
     const uploadDocument = async (file: File) => {
         if (!file || !selectedContract?.id) return
 
         try {
             setUploadingDocument(true)
+            setError(null)
 
-            const form = new FormData()
-            form.append('document', file)
-            // Some backends expect `file` — send both keys to be safe.
-            form.append('file', file)
+            const contractId = selectedContract.id
 
+            // --- STEP 1: presign ---
+            const presign = await apiRequest<{
+                success: boolean
+                uploadUrl: string
+                storageKey: string
+                expiresIn?: number
+            }>(
+                `/lawyer/contracts/${encodeURIComponent(
+                    contractId
+                )}/documents/upload-url?fileName=${encodeURIComponent(
+                    file.name
+                )}&mimeType=${encodeURIComponent(
+                    file.type || 'application/octet-stream'
+                )}`
+            )
+
+            if (!presign?.uploadUrl || !presign?.storageKey) {
+                throw new Error(
+                    'Backend did not return an upload URL.'
+                )
+            }
+
+            // --- STEP 2: PUT to R2 (no auth header!) ---
+            const r2Res = await fetch(presign.uploadUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type':
+                        file.type || 'application/octet-stream',
+                },
+                body: file,
+            })
+
+            if (!r2Res.ok) {
+                throw new Error(
+                    `R2 upload failed (${r2Res.status})`
+                )
+            }
+
+            // --- STEP 3: save metadata ---
             await apiRequest<any>(
                 `/lawyer/contracts/${encodeURIComponent(
-                    selectedContract.id
+                    contractId
                 )}/documents`,
                 {
                     method: 'POST',
-                    body: form,
+                    body: JSON.stringify({
+                        storageKey: presign.storageKey,
+                        name: file.name,
+                        originalName: file.name,
+                        mimeType:
+                            file.type ||
+                            'application/octet-stream',
+                        size: file.size,
+                        category: 'other',
+                    }),
                 }
             )
 
@@ -1092,8 +1138,8 @@ export default function LawyerContractPage() {
             }
 
             await Promise.all([
-                fetchContractDocuments(selectedContract.id),
-                fetchContractActivity(selectedContract.id),
+                fetchContractDocuments(contractId),
+                fetchContractActivity(contractId),
             ])
         } catch (err) {
             const message =
@@ -1107,13 +1153,26 @@ export default function LawyerContractPage() {
     }
 
     // ----------------------- DOWNLOAD DOCUMENT -----------------------
+    // Each document in the GET /documents response already carries a
+    // short-lived `signedUrl` from the backend, so we can just open it.
     const downloadDocument = async (
         document: ContractDocument
     ) => {
-        if (!document.id) return
+        if (!document) return
 
         try {
-            setDownloadingDocumentId(document.id)
+            setDownloadingDocumentId(document.id || document.key || '')
+
+            if (document.signedUrl) {
+                window.open(
+                    document.signedUrl,
+                    '_blank',
+                    'noopener,noreferrer'
+                )
+                return
+            }
+
+            if (!document.id) return
 
             const response = await apiRequest<any>(
                 `/lawyer/documents/${encodeURIComponent(
@@ -1133,12 +1192,10 @@ export default function LawyerContractPage() {
                 return
             }
 
-            if (document.key) {
-                console.warn(
-                    'Download API returned no URL for document',
-                    document.id
-                )
-            }
+            console.warn(
+                'Download API returned no URL for document',
+                document.id
+            )
         } catch (err) {
             const message =
                 err instanceof Error
