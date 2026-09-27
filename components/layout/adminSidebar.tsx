@@ -3,17 +3,15 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
     BarChart3,
     Building2,
     Users,
-    UserRoundCheck,
     FileText,
     FileCheck,
     ClipboardList,
     Scale,
-    MessageCircle,
     HelpCircle,
     Settings,
     LogOut,
@@ -33,81 +31,94 @@ interface AdminUser {
     profilePhoto?: string
 }
 
-const navItems = [
-    {
-        label: 'Overview',
-        icon: BarChart3,
-        href: '/admin-dashboard',
-        badge: null,
-    },
-    {
-        label: 'Businesses',
-        icon: Building2,
-        href: '/admin-dashboard/business',
-        badge: null,
-    },
-    {
-        label: 'Lawyers',
-        icon: Scale,
-        href: '/admin-dashboard/lawyers',
-        badge: null,
-    },
-    {
-        label: 'Users',
-        icon: Users,
-        href: '/admin-dashboard/users',
-        badge: null,
-    },
-    {
-        label: 'Legal Requests',
-        icon: ClipboardList,
-        href: '/admin-dashboard/legal-requests',
-        badge: null,
-    },
-    {
-        label: 'Contracts',
-        icon: FileCheck,
-        href: '/admin-dashboard/contracts',
-        badge: null,
-    },
-    {
-        label: 'Compliance',
-        icon: ShieldCheck,
-        href: '/admin-dashboard/compliance',
-        badge: null,
-    },
-    {
-        label: 'Documents',
-        icon: FileText,
-        href: '/admin-dashboard/documents',
-        badge: null,
-    },
-    {
-        label: 'Consultations',
-        icon: BriefcaseBusiness,
-        href: '/admin-dashboard/consultations',
-        badge: null,
-    },
-    {
-        label: 'Support',
-        icon: HelpCircle,
-        href: '/admin-dashboard/support',
-        badge: null,
-    },
+type BadgeKey =
+    | 'contractRequests'
+    | 'unassigned'
+    | 'contracts'
+    | 'compliance'
+    | 'team'
+    | null
+
+interface NavItem {
+    label: string
+    icon: React.ComponentType<{ className?: string }>
+    href: string
+    badgeKey: BadgeKey
+}
+
+const navItems: NavItem[] = [
+    { label: 'Overview', icon: BarChart3, href: '/admin-dashboard', badgeKey: null },
+    { label: 'Businesses', icon: Building2, href: '/admin-dashboard/business', badgeKey: null },
+    { label: 'Lawyers', icon: Scale, href: '/admin-dashboard/lawyers', badgeKey: 'team' },
+    { label: 'Users', icon: Users, href: '/admin-dashboard/users', badgeKey: null },
+    { label: 'Legal Requests', icon: ClipboardList, href: '/admin-dashboard/legal-requests', badgeKey: 'contractRequests' },
+    { label: 'Contracts', icon: FileCheck, href: '/admin-dashboard/contracts', badgeKey: 'contracts' },
+    { label: 'Compliance', icon: ShieldCheck, href: '/admin-dashboard/compliance', badgeKey: 'compliance' },
+    { label: 'Documents', icon: FileText, href: '/admin-dashboard/documents', badgeKey: null },
+    { label: 'Consultations', icon: BriefcaseBusiness, href: '/admin-dashboard/consultations', badgeKey: null },
+    { label: 'Support', icon: HelpCircle, href: '/admin-dashboard/support', badgeKey: null },
 ]
 
 const bottomItems = [
-    {
-        label: 'Settings',
-        icon: Settings,
-        href: '/admin-dashboard/settings',
-    },
-    {
-        label: 'Logout',
-        icon: LogOut,
-        href: '/logout',
-    },
+    { label: 'Settings', icon: Settings, href: '/admin-dashboard/settings' },
+    { label: 'Logout', icon: LogOut, href: '/logout' },
 ]
+
+const API_BASE_URL = (
+    process.env.NEXT_PUBLIC_API_URL || 'https://nyaymitra-backend-production.up.railway.app/api/v1'
+).replace(/\/$/, '')
+
+function getAuthToken(): string {
+    if (typeof window === 'undefined') return ''
+    const direct =
+        localStorage.getItem('authToken') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem('accessToken') ||
+        localStorage.getItem('userToken')
+    if (direct) return direct
+
+    try {
+        const userStr = localStorage.getItem('user')
+        if (userStr) {
+            const user = JSON.parse(userStr)
+            if (user.token) return user.token
+            if (user.accessToken) return user.accessToken
+        }
+    } catch {
+        // ignore
+    }
+    return ''
+}
+
+interface BadgeProps {
+    count?: number
+    loading: boolean
+    active: boolean
+}
+
+function Badge({ count, loading, active }: BadgeProps) {
+    if (loading) {
+        return (
+            <span className="text-[10px] sm:text-xs text-muted-foreground opacity-60">
+                ·
+            </span>
+        )
+    }
+    if (!count) return null
+    return (
+        <motion.span
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+            className={`text-[10px] sm:text-xs font-bold px-1.5 sm:px-2 py-0.5 rounded-full flex-shrink-0 min-w-[20px] text-center ${active
+                ? 'bg-sidebar-primary-foreground text-sidebar-primary'
+                : 'bg-sidebar-accent text-sidebar-accent-foreground'
+                }`}
+        >
+            {count > 99 ? '99+' : count}
+        </motion.span>
+    )
+}
 
 interface AdminSidebarProps {
     onMenuClick?: () => void
@@ -125,9 +136,53 @@ export function AdminSidebar({
     const [user, setUser] = useState<AdminUser | null>(null)
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
+    const [badges, setBadges] = useState<Record<string, number>>({})
+    const [badgesLoading, setBadgesLoading] = useState(true)
+
+    // ---- Fetch badges ----
+    const fetchBadges = useCallback(async () => {
+        const token = getAuthToken()
+
+        try {
+            const res = await fetch(
+                `${API_BASE_URL}/dashboard/badges`,
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token
+                            ? { Authorization: `Bearer ${token}` }
+                            : {}),
+                    },
+                    cache: 'no-store',
+                }
+            )
+
+            if (!res.ok) {
+                throw new Error(
+                    `Badge fetch failed (${res.status})`
+                )
+            }
+
+            const json = await res.json()
+            setBadges(json?.data || {})
+        } catch (err) {
+            console.error('Failed to fetch badges:', err)
+            setBadges({})
+        } finally {
+            setBadgesLoading(false)
+        }
+    }, [])
+
+    useEffect(() => {
+        void fetchBadges()
+    }, [fetchBadges])
+
+    useEffect(() => {
+        void fetchBadges()
+    }, [pathname, fetchBadges])
+
     useEffect(() => {
         const storedUser = localStorage.getItem('user')
-
         if (storedUser) {
             try {
                 setUser(JSON.parse(storedUser))
@@ -137,32 +192,24 @@ export function AdminSidebar({
         }
     }, [])
 
-    // Close mobile menu on route change
     useEffect(() => {
         setIsMobileMenuOpen(false)
-
-        if (onClose) {
-            onClose()
-        }
+        if (onClose) onClose()
     }, [pathname, onClose])
 
     const isActive = (href: string) => {
         if (href === '/admin-dashboard') {
             return pathname === '/admin-dashboard'
         }
-
         return pathname.startsWith(href)
     }
 
     const getUserInitials = () => {
         if (!user?.fullName) return 'AD'
-
         const names = user.fullName.trim().split(' ')
-
         if (names.length === 1) {
             return names[0].charAt(0).toUpperCase()
         }
-
         return (
             names[0].charAt(0) +
             names[names.length - 1].charAt(0)
@@ -171,7 +218,6 @@ export function AdminSidebar({
 
     const getUserRole = () => {
         if (!user?.role) return 'Administrator'
-
         return (
             user.role.charAt(0).toUpperCase() +
             user.role.slice(1)
@@ -212,7 +258,6 @@ export function AdminSidebar({
                                         backgroundColor: '#FBBF24',
                                     }}
                                 />
-
                                 <p
                                     className="text-[10px] sm:text-xs font-medium uppercase tracking-wider truncate"
                                     style={{
@@ -236,49 +281,54 @@ export function AdminSidebar({
                 transition={{ delay: 0.15 }}
                 className="flex-1 p-2 sm:p-4 space-y-0.5 sm:space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-sidebar-accent scrollbar-track-transparent"
             >
-                {navItems.map((item, index) => (
-                    <motion.div
-                        key={item.href}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{
-                            delay: 0.15 + index * 0.05,
-                        }}
-                    >
-                        <Link
-                            href={item.href}
-                            className={`flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg transition-all duration-200 group ${isActive(item.href)
-                                ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20'
-                                : 'text-sidebar-foreground hover:bg-sidebar-accent/20'
-                                }`}
+                {navItems.map((item, index) => {
+                    const active = isActive(item.href)
+                    const count = item.badgeKey
+                        ? badges[item.badgeKey]
+                        : undefined
+
+                    return (
+                        <motion.div
+                            key={item.href}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{
+                                delay: 0.15 + index * 0.05,
+                            }}
                         >
-                            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                                <item.icon
-                                    className={`w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 ${isActive(item.href)
-                                        ? 'text-sidebar-primary-foreground'
-                                        : 'text-muted-foreground group-hover:text-sidebar-foreground'
-                                        }`}
-                                />
-
-                                <div className="min-w-0 flex-1">
-                                    <span className="font-semibold text-xs sm:text-sm block truncate">
-                                        {item.label}
-                                    </span>
+                            <Link
+                                href={item.href}
+                                className={`flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg transition-all duration-200 group ${active
+                                    ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20'
+                                    : 'text-sidebar-foreground hover:bg-sidebar-accent/20'
+                                    }`}
+                            >
+                                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                                    <item.icon
+                                        className={`w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 ${active
+                                            ? 'text-sidebar-primary-foreground'
+                                            : 'text-muted-foreground group-hover:text-sidebar-foreground'
+                                            }`}
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                        <span className="font-semibold text-xs sm:text-sm block truncate">
+                                            {item.label}
+                                        </span>
+                                    </div>
                                 </div>
-                            </div>
 
-                            {item.badge && (
-                                <motion.span
-                                    initial={{ scale: 0 }}
-                                    animate={{ scale: 1 }}
-                                    className="text-[10px] sm:text-xs font-bold px-1.5 sm:px-2 py-0.5 rounded-full flex-shrink-0"
-                                >
-                                    {item.badge}
-                                </motion.span>
-                            )}
-                        </Link>
-                    </motion.div>
-                ))}
+                                <Badge
+                                    count={count}
+                                    loading={
+                                        badgesLoading &&
+                                        !!item.badgeKey
+                                    }
+                                    active={active}
+                                />
+                            </Link>
+                        </motion.div>
+                    )
+                })}
             </motion.nav>
 
             {/* Bottom Items */}
@@ -295,7 +345,6 @@ export function AdminSidebar({
                         className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-sidebar-foreground hover:bg-sidebar-accent/20 transition-colors duration-200 group"
                     >
                         <item.icon className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground group-hover:text-sidebar-foreground" />
-
                         <span className="font-medium text-xs sm:text-sm">
                             {item.label}
                         </span>
@@ -311,7 +360,6 @@ export function AdminSidebar({
                 className="p-3 sm:p-4 border-t border-sidebar-border flex-shrink-0"
             >
                 <div className="flex items-center gap-2 sm:gap-3 px-1 sm:px-2">
-                    {/* Avatar */}
                     <div className="w-8 h-8 sm:w-10 sm:h-10 bg-sidebar-primary/20 rounded-full flex items-center justify-center flex-shrink-0 border-2 border-sidebar-primary/30">
                         {user?.profilePhoto ? (
                             <img
@@ -326,16 +374,13 @@ export function AdminSidebar({
                         )}
                     </div>
 
-                    {/* User Info */}
                     <div className="min-w-0 flex-1">
                         <p className="text-xs sm:text-sm font-medium text-sidebar-foreground truncate">
                             {user?.fullName || 'Administrator'}
                         </p>
-
                         <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
                             {getUserRole()}
                         </p>
-
                         {user?.email && (
                             <p className="text-[8px] sm:text-[10px] text-muted-foreground truncate mt-0.5">
                                 {user.email}
@@ -347,18 +392,13 @@ export function AdminSidebar({
         </>
     )
 
-    // Handle mobile toggle
     const toggleMobileMenu = () => {
         setIsMobileMenuOpen(!isMobileMenuOpen)
-
-        if (onMenuClick) {
-            onMenuClick()
-        }
+        if (onMenuClick) onMenuClick()
     }
 
     return (
         <>
-            {/* Mobile Menu Button */}
             <button
                 onClick={toggleMobileMenu}
                 className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-sidebar text-sidebar-foreground hover:bg-sidebar-accent/20 transition-colors duration-200"
@@ -371,7 +411,6 @@ export function AdminSidebar({
                 )}
             </button>
 
-            {/* Mobile Overlay */}
             <AnimatePresence>
                 {isMobileMenuOpen && (
                     <motion.div
@@ -384,7 +423,6 @@ export function AdminSidebar({
                 )}
             </AnimatePresence>
 
-            {/* Desktop Sidebar */}
             <motion.aside
                 initial={{ x: -250 }}
                 animate={{ x: 0 }}
@@ -394,7 +432,6 @@ export function AdminSidebar({
                 <SidebarContent />
             </motion.aside>
 
-            {/* Mobile Sidebar */}
             <AnimatePresence>
                 {isMobileMenuOpen && (
                     <motion.aside
@@ -414,7 +451,6 @@ export function AdminSidebar({
                 )}
             </AnimatePresence>
 
-            {/* Click outside to close */}
             {isMobileMenuOpen && (
                 <div
                     className="fixed inset-0 z-40 lg:hidden"

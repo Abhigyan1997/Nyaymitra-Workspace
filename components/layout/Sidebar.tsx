@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   BarChart3,
   FileText,
@@ -20,7 +20,7 @@ import {
   Scale,
   Menu,
   X,
-  Lock
+  Lock,
 } from 'lucide-react'
 
 interface User {
@@ -33,14 +33,28 @@ interface User {
   profilePhoto?: string
 }
 
-// Navigation items with dynamic badge support
-const navItems = [
-  { label: 'Overview', icon: BarChart3, href: '/dashboard', badge: null },
-  { label: 'LegalBox', icon: Lock, href: '/dashboard/documents', badge: null },
-  { label: 'Compliance', icon: CheckSquare, href: '/dashboard/compliance', badge: null },
-  { label: 'Contracts', icon: FileCheck, href: '/dashboard/contracts', badge: 'dynamic' }, // 'dynamic' indicates we'll fetch the count
-  { label: 'Legal Requests', icon: Briefcase, href: '/dashboard/legal-requests', badge: null },
-  { label: 'Team', icon: Users, href: '/dashboard/team', badge: null },
+type BadgeKey =
+  | 'documents'
+  | 'compliance'
+  | 'contracts'
+  | 'legalRequests'
+  | 'team'
+  | null
+
+interface NavItem {
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  href: string
+  badgeKey: BadgeKey
+}
+
+const navItems: NavItem[] = [
+  { label: 'Overview', icon: BarChart3, href: '/dashboard', badgeKey: null },
+  { label: 'LegalBox', icon: Lock, href: '/dashboard/documents', badgeKey: 'documents' },
+  { label: 'Compliance', icon: CheckSquare, href: '/dashboard/compliance', badgeKey: 'compliance' },
+  { label: 'Contracts', icon: FileCheck, href: '/dashboard/contracts', badgeKey: 'contracts' },
+  { label: 'Legal Requests', icon: Briefcase, href: '/dashboard/legal-requests', badgeKey: 'legalRequests' },
+  { label: 'Team', icon: Users, href: '/dashboard/team', badgeKey: 'team' },
 ]
 
 const bottomItems = [
@@ -49,71 +63,117 @@ const bottomItems = [
   { label: 'Logout', icon: LogOut, href: '/logout' },
 ]
 
+const API_BASE_URL = (
+  process.env.NEXT_PUBLIC_API_URL || 'https://nyaymitra-backend-production.up.railway.app/api/v1'
+).replace(/\/$/, '')
+
+function getAuthToken(): string {
+  if (typeof window === 'undefined') return ''
+  const direct =
+    localStorage.getItem('authToken') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('accessToken') ||
+    localStorage.getItem('userToken')
+  if (direct) return direct
+
+  try {
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+      const user = JSON.parse(userStr)
+      if (user.token) return user.token
+      if (user.accessToken) return user.accessToken
+    }
+  } catch {
+    // ignore
+  }
+  return ''
+}
+
+interface BadgeProps {
+  count?: number
+  loading: boolean
+  active: boolean
+}
+
+function Badge({ count, loading, active }: BadgeProps) {
+  if (loading) {
+    return (
+      <span className="text-xs text-muted-foreground opacity-60">
+        ·
+      </span>
+    )
+  }
+  if (!count) return null
+  return (
+    <motion.span
+      initial={{ scale: 0 }}
+      animate={{ scale: 1 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+      className={`text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center ${active
+        ? 'bg-sidebar-primary-foreground text-sidebar-primary'
+        : 'bg-sidebar-accent text-sidebar-accent-foreground'
+        }`}
+    >
+      {count > 99 ? '99+' : count}
+    </motion.span>
+  )
+}
+
 export function Sidebar() {
   const pathname = usePathname()
   const [user, setUser] = useState<User | null>(null)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
-  const [contractCount, setContractCount] = useState<number | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
 
-  // Get auth token
-  const getAuthToken = () => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('authToken') ||
-        localStorage.getItem('token') ||
-        localStorage.getItem('accessToken') ||
-        localStorage.getItem('userToken')
+  const [badges, setBadges] = useState<Record<string, number>>({})
+  const [badgesLoading, setBadgesLoading] = useState(true)
+  const [badgesError, setBadgesError] = useState('')
 
-      try {
-        const userStr = localStorage.getItem('user')
-        if (userStr) {
-          const user = JSON.parse(userStr)
-          if (user.token) return user.token
-          if (user.accessToken) return user.accessToken
-        }
-      } catch (e) {
-        // Ignore
+  // ---- Fetch badges from /dashboard/badges ----
+  const fetchBadges = useCallback(async () => {
+    const token = getAuthToken()
+
+    try {
+      setBadgesError('')
+
+      const res = await fetch(`${API_BASE_URL}/dashboard/badges`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        cache: 'no-store',
+      })
+
+      if (!res.ok) {
+        throw new Error(`Badge fetch failed (${res.status})`)
       }
-      return token || null
+
+      const json = await res.json()
+      // Expected shape: { success: true, role: 'business', data: { contracts: 4, ... } }
+      const data = json?.data || {}
+      setBadges(data)
+    } catch (err) {
+      console.error('Failed to fetch badges:', err)
+      setBadgesError(
+        err instanceof Error ? err.message : 'Failed to load badges'
+      )
+      setBadges({})
+    } finally {
+      setBadgesLoading(false)
     }
-    return null
-  }
-
-  // Fetch contract count
-  useEffect(() => {
-    const fetchContractCount = async () => {
-      try {
-        const token = getAuthToken()
-        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://nyaymitra-backend-production.up.railway.app/api/v1'
-
-        const response = await fetch(`${API_BASE_URL}/contracts/dashboard/stats`, {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token && { 'Authorization': `Bearer ${token}` }),
-          },
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch contract stats')
-        }
-
-        const result = await response.json()
-        const stats = result.data || result
-
-        // Get total contracts from stats
-        const total = stats.totalContracts || 0
-        setContractCount(total)
-      } catch (error) {
-        console.error('Failed to fetch contract count:', error)
-        setContractCount(0)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchContractCount()
   }, [])
 
+  // Initial fetch
+  useEffect(() => {
+    void fetchBadges()
+  }, [fetchBadges])
+
+  // Refresh on route change (so counts update after mutations)
+  useEffect(() => {
+    void fetchBadges()
+  }, [pathname, fetchBadges])
+
+  // Load user from localStorage
   useEffect(() => {
     const storedUser = localStorage.getItem('user')
     if (storedUser) {
@@ -137,28 +197,19 @@ export function Sidebar() {
     return pathname.startsWith(href)
   }
 
-  // Get user initials for avatar
   const getUserInitials = () => {
     if (!user?.fullName) return 'JD'
     const names = user.fullName.split(' ')
     if (names.length === 1) return names[0].charAt(0).toUpperCase()
-    return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase()
+    return (
+      names[0].charAt(0) +
+      names[names.length - 1].charAt(0)
+    ).toUpperCase()
   }
 
-  // Get user role with proper formatting
   const getUserRole = () => {
     if (!user?.role) return 'Partner'
     return user.role.charAt(0).toUpperCase() + user.role.slice(1)
-  }
-
-  // Get badge display value
-  const getBadgeValue = (badge: string | null | number) => {
-    if (badge === 'dynamic') {
-      if (isLoading) return '...'
-      if (contractCount === null || contractCount === 0) return null
-      return contractCount > 99 ? '99+' : contractCount.toString()
-    }
-    return badge
   }
 
   const SidebarContent = () => (
@@ -176,20 +227,29 @@ export function Sidebar() {
               <Scale className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight" style={{
-                color: '#FFFFFF',
-                fontFamily: 'Outfit',
-                letterSpacing: '-0.5px'
-              }}>
+              <h1
+                className="text-xl font-bold tracking-tight"
+                style={{
+                  color: '#FFFFFF',
+                  fontFamily: 'Outfit',
+                  letterSpacing: '-0.5px',
+                }}
+              >
                 NyayMitra
               </h1>
               <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#22C55E' }} />
-                <p className="text-xs font-medium uppercase tracking-wider" style={{
-                  color: '#A0A0A0',
-                  fontFamily: 'Outfit',
-                  letterSpacing: '0.05em'
-                }}>
+                <span
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ backgroundColor: '#22C55E' }}
+                />
+                <p
+                  className="text-xs font-medium uppercase tracking-wider"
+                  style={{
+                    color: '#A0A0A0',
+                    fontFamily: 'Outfit',
+                    letterSpacing: '0.05em',
+                  }}
+                >
                   Business
                 </p>
               </div>
@@ -206,7 +266,10 @@ export function Sidebar() {
         className="flex-1 p-4 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-sidebar-accent scrollbar-track-transparent"
       >
         {navItems.map((item, index) => {
-          const badgeValue = getBadgeValue(item.badge)
+          const active = isActive(item.href)
+          const count = item.badgeKey
+            ? badges[item.badgeKey]
+            : undefined
 
           return (
             <motion.div
@@ -217,33 +280,28 @@ export function Sidebar() {
             >
               <Link
                 href={item.href}
-                className={`flex items-center justify-between px-4 py-2.5 rounded-lg transition-all duration-200 group ${isActive(item.href)
+                className={`flex items-center justify-between px-4 py-2.5 rounded-lg transition-all duration-200 group ${active
                   ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20'
                   : 'text-sidebar-foreground hover:bg-sidebar-accent/20'
                   }`}
               >
                 <div className="flex items-center gap-3">
                   <item.icon
-                    className={`w-5 h-5 ${isActive(item.href)
+                    className={`w-5 h-5 ${active
                       ? 'text-sidebar-primary-foreground'
                       : 'text-muted-foreground group-hover:text-sidebar-foreground'
                       }`}
                   />
-                  <span className="font-semibold text-sm">{item.label}</span>
+                  <span className="font-semibold text-sm">
+                    {item.label}
+                  </span>
                 </div>
-                {badgeValue && (
-                  <motion.span
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                    className={`text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center ${isActive(item.href)
-                      ? 'bg-sidebar-primary-foreground text-sidebar-primary'
-                      : 'bg-sidebar-accent text-sidebar-accent-foreground'
-                      }`}
-                  >
-                    {badgeValue}
-                  </motion.span>
-                )}
+
+                <Badge
+                  count={count}
+                  loading={badgesLoading && !!item.badgeKey}
+                  active={active}
+                />
               </Link>
             </motion.div>
           )
@@ -311,7 +369,11 @@ export function Sidebar() {
         className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-sidebar text-sidebar-foreground hover:bg-sidebar-accent/20 transition-colors duration-200"
         aria-label="Toggle menu"
       >
-        {isMobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        {isMobileOpen ? (
+          <X className="w-6 h-6" />
+        ) : (
+          <Menu className="w-6 h-6" />
+        )}
       </button>
 
       {/* Mobile Overlay */}
@@ -327,7 +389,7 @@ export function Sidebar() {
         )}
       </AnimatePresence>
 
-      {/* Desktop Sidebar - Always visible on large screens */}
+      {/* Desktop Sidebar */}
       <motion.aside
         initial={{ x: -250 }}
         animate={{ x: 0 }}
@@ -337,7 +399,7 @@ export function Sidebar() {
         <SidebarContent />
       </motion.aside>
 
-      {/* Mobile Sidebar - Slide in from left */}
+      {/* Mobile Sidebar */}
       <AnimatePresence>
         {isMobileOpen && (
           <motion.aside
