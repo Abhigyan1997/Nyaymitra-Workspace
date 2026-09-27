@@ -1,7 +1,9 @@
 'use client'
 
 import {
+    useCallback,
     useEffect,
+    useRef,
     useState,
 } from 'react'
 
@@ -12,6 +14,10 @@ import {
     Loader2,
     Download,
     ExternalLink,
+    Upload,
+    X,
+    CheckCircle2,
+    AlertCircle,
 } from 'lucide-react'
 
 import { useParams, useRouter } from 'next/navigation'
@@ -135,9 +141,7 @@ export default function LegalRequestDetailPage() {
 
     const [commentsError, setCommentsError] = useState('')
 
-    const requestId = String(
-        params.requestId || ''
-    )
+    const requestId = String(params.requestId || '')
 
     const [request, setRequest] =
         useState<LegalRequest | null>(null)
@@ -150,6 +154,16 @@ export default function LegalRequestDetailPage() {
 
     const [error, setError] =
         useState('')
+
+    // ---- Upload state ----
+    const fileInputRef = useRef<HTMLInputElement | null>(null)
+    const [uploading, setUploading] = useState(false)
+    const [uploadError, setUploadError] = useState('')
+    const [uploadSuccess, setUploadSuccess] = useState('')
+    const [uploadProgress, setUploadProgress] = useState<
+        number | null
+    >(null)
+
     const fetchComments = async () => {
         try {
             setCommentsLoading(true)
@@ -206,6 +220,50 @@ export default function LegalRequestDetailPage() {
         }
     }
 
+    const fetchAttachments = useCallback(async () => {
+        try {
+            const token = getToken()
+
+            const response = await fetch(
+                `${API_BASE_URL}/legal-requests/${requestId}/attachments`,
+                {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token
+                            ? {
+                                Authorization:
+                                    `Bearer ${token}`,
+                            }
+                            : {}),
+                    },
+                    cache: 'no-store',
+                }
+            )
+
+            const result = await response.json()
+
+            if (!response.ok) {
+                throw new Error(
+                    result?.message ||
+                    'Failed to fetch attachments.'
+                )
+            }
+
+            setAttachments(
+                Array.isArray(result?.data)
+                    ? result.data
+                    : []
+            )
+        } catch (error) {
+            console.error(
+                'Fetch attachments error:',
+                error
+            )
+            setAttachments([])
+        }
+    }, [requestId])
+
     useEffect(() => {
         if (!requestId) return
 
@@ -253,35 +311,6 @@ export default function LegalRequestDetailPage() {
                     requestResult
                 )
 
-                // Attachments
-                const attachmentResponse =
-                    await fetch(
-                        `${API_BASE_URL}/legal-requests/${requestId}/attachments`,
-                        {
-                            method: 'GET',
-                            headers,
-                            cache: 'no-store',
-                        }
-                    )
-
-                const attachmentResult =
-                    await attachmentResponse.json()
-
-                if (!attachmentResponse.ok) {
-                    throw new Error(
-                        attachmentResult?.message ||
-                        'Failed to fetch attachments.'
-                    )
-                }
-
-                setAttachments(
-                    Array.isArray(
-                        attachmentResult?.data
-                    )
-                        ? attachmentResult.data
-                        : []
-                )
-
                 // Comments
                 const commentResponse =
                     await fetch(
@@ -308,6 +337,9 @@ export default function LegalRequestDetailPage() {
                         ? commentResult.data
                         : []
                 )
+
+                // Attachments
+                await fetchAttachments()
             } catch (error) {
                 console.error(
                     'Legal request detail error:',
@@ -326,7 +358,7 @@ export default function LegalRequestDetailPage() {
         }
 
         void loadPage()
-    }, [requestId])
+    }, [requestId, fetchAttachments])
 
     const addComment = async () => {
         const message = commentText.trim()
@@ -393,6 +425,127 @@ export default function LegalRequestDetailPage() {
             )
         } finally {
             setCommentPosting(false)
+        }
+    }
+
+    // ---- Upload document (multer on backend) ----
+    // POST /legal-requests/:id/attachments
+    // multipart/form-data with field name "file"
+    const uploadDocument = async (file: File) => {
+        if (!file || !requestId) return
+
+        const MAX_MB = 25
+        if (file.size > MAX_MB * 1024 * 1024) {
+            setUploadError(
+                `File is too large. Max ${MAX_MB} MB allowed.`
+            )
+            return
+        }
+
+        try {
+            setUploading(true)
+            setUploadError('')
+            setUploadSuccess('')
+            setUploadProgress(0)
+
+            const token = getToken()
+
+            const formData = new FormData()
+            formData.append('file', file)
+
+            // Use XHR so we get upload progress events
+            await new Promise<void>((resolve, reject) => {
+                const xhr = new XMLHttpRequest()
+
+                xhr.open(
+                    'POST',
+                    `${API_BASE_URL}/legal-requests/${encodeURIComponent(
+                        requestId
+                    )}/attachments`
+                )
+
+                if (token) {
+                    xhr.setRequestHeader(
+                        'Authorization',
+                        `Bearer ${token}`
+                    )
+                }
+
+                xhr.upload.onprogress = (event) => {
+                    if (event.lengthComputable) {
+                        const pct = Math.round(
+                            (event.loaded / event.total) * 100
+                        )
+                        setUploadProgress(pct)
+                    }
+                }
+
+                xhr.onload = () => {
+                    if (
+                        xhr.status >= 200 &&
+                        xhr.status < 300
+                    ) {
+                        resolve()
+                    } else {
+                        let message = `Upload failed (${xhr.status})`
+                        try {
+                            const parsed = JSON.parse(
+                                xhr.responseText
+                            )
+                            message =
+                                parsed?.message || message
+                        } catch {
+                            // ignore
+                        }
+                        reject(new Error(message))
+                    }
+                }
+
+                xhr.onerror = () =>
+                    reject(new Error('Network error'))
+
+                xhr.send(formData)
+            })
+
+            setUploadProgress(100)
+            setUploadSuccess(
+                `"${file.name}" uploaded successfully.`
+            )
+
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ''
+            }
+
+            await fetchAttachments()
+
+            setTimeout(() => {
+                setUploadSuccess('')
+                setUploadProgress(null)
+            }, 3000)
+        } catch (error) {
+            console.error(
+                'Upload document error:',
+                error
+            )
+
+            setUploadError(
+                error instanceof Error
+                    ? error.message
+                    : 'Failed to upload document.'
+            )
+
+            setUploadProgress(null)
+        } finally {
+            setUploading(false)
+        }
+    }
+
+    const handleFileSelect = (
+        event: React.ChangeEvent<HTMLInputElement>
+    ) => {
+        const file = event.target.files?.[0]
+        if (file) {
+            void uploadDocument(file)
         }
     }
 
@@ -536,7 +689,7 @@ export default function LegalRequestDetailPage() {
 
                 {/* Attachments */}
                 <section className="mt-6 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <h2 className="text-sm font-semibold">
                                 Supporting Documents
@@ -548,21 +701,114 @@ export default function LegalRequestDetailPage() {
                             </p>
                         </div>
 
-                        <span className="text-xs text-slate-600">
-                            {attachments.length}{' '}
-                            file
-                            {attachments.length !== 1
-                                ? 's'
-                                : ''}
-                        </span>
+                        <div className="flex items-center gap-3">
+                            <span className="text-xs text-slate-600">
+                                {attachments.length}{' '}
+                                file
+                                {attachments.length !== 1
+                                    ? 's'
+                                    : ''}
+                            </span>
+
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    fileInputRef.current?.click()
+                                }
+                                disabled={uploading}
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-amber-400 px-3 py-2 text-xs font-semibold text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {uploading ? (
+                                    <>
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        Uploading...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Upload className="h-3.5 w-3.5" />
+                                        Upload Document
+                                    </>
+                                )}
+                            </button>
+
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                className="hidden"
+                                onChange={handleFileSelect}
+                            />
+                        </div>
                     </div>
+
+                    {/* Upload progress */}
+                    {uploadProgress !== null && (
+                        <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/[0.04] p-3">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="flex min-w-0 items-center gap-2">
+                                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-amber-400" />
+                                    <p className="truncate text-xs text-amber-200">
+                                        Uploading document...
+                                    </p>
+                                </div>
+                                <span className="shrink-0 text-xs font-medium text-amber-300">
+                                    {uploadProgress}%
+                                </span>
+                            </div>
+
+                            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.05]">
+                                <div
+                                    className="h-full rounded-full bg-amber-400 transition-all duration-200"
+                                    style={{
+                                        width: `${uploadProgress}%`,
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {uploadSuccess && (
+                        <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.05] p-3 text-xs text-emerald-300">
+                            <CheckCircle2 className="h-4 w-4 shrink-0" />
+                            <span className="flex-1">
+                                {uploadSuccess}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setUploadSuccess('')
+                                }
+                                className="rounded p-0.5 hover:bg-white/[0.05]"
+                            >
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        </div>
+                    )}
+
+                    {uploadError && (
+                        <div className="mt-4 flex items-center gap-2 rounded-xl border border-red-400/20 bg-red-400/[0.05] p-3 text-xs text-red-300">
+                            <AlertCircle className="h-4 w-4 shrink-0" />
+                            <span className="flex-1">
+                                {uploadError}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setUploadError('')
+                                }
+                                className="rounded p-0.5 hover:bg-white/[0.05]"
+                            >
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        </div>
+                    )}
 
                     {attachments.length === 0 ? (
                         <div className="mt-5 rounded-xl border border-white/[0.05] bg-white/[0.015] p-8 text-center">
                             <FileText className="mx-auto h-7 w-7 text-slate-700" />
 
                             <p className="mt-3 text-xs text-slate-600">
-                                No attachments found.
+                                No attachments yet. Upload
+                                the first document.
                             </p>
                         </div>
                     ) : (
@@ -639,6 +885,7 @@ export default function LegalRequestDetailPage() {
                         </div>
                     )}
                 </section>
+
                 {/* Comments */}
                 <section className="mt-6 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">
                     <div>
@@ -658,7 +905,6 @@ export default function LegalRequestDetailPage() {
                         </div>
                     )}
 
-                    {/* Comment list */}
                     <div className="mt-5 space-y-3">
                         {commentsLoading ? (
                             <div className="flex items-center justify-center py-8">
@@ -722,7 +968,6 @@ export default function LegalRequestDetailPage() {
                         )}
                     </div>
 
-                    {/* Add comment */}
                     <div className="mt-5 border-t border-white/[0.06] pt-5">
                         <textarea
                             value={commentText}
