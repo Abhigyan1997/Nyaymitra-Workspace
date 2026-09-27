@@ -19,10 +19,12 @@ import {
     FileText,
     Loader2,
     MoreHorizontal,
+    Pencil,
     RefreshCw,
     ShieldCheck,
     Trash2,
     Upload,
+    X,
 } from "lucide-react"
 
 import {
@@ -40,6 +42,9 @@ import {
     type ContractActivity as ApiContractActivity,
     type ContractComment,
     type ContractRequest,
+    type ContractType,
+    type ContractPriority,
+    type ContractStatus,
 } from "@/lib/services/contract.service"
 
 import {
@@ -84,6 +89,69 @@ type DetailComment = {
 
 type FinalFileType = "pdf" | "docx" | "signedPdf"
 
+interface EditFormState {
+    title: string
+    contractType: ContractType | ""
+    counterpartyName: string
+    counterpartyCompany: string
+    counterpartyEmail: string
+    counterpartyPhone: string
+    counterpartyAddress: string
+    description: string
+    priority: ContractPriority | ""
+    status: ContractStatus | ""
+    effectiveDate: string
+    expiryDate: string
+    renewalDate: string
+    contractValue: string
+    currency: string
+}
+
+/* -------------------------------------------------------------------------- */
+/* Constants                                                                  */
+/* -------------------------------------------------------------------------- */
+
+const CONTRACT_TYPE_OPTIONS: ContractType[] = [
+    "NDA",
+    "Employment Agreement",
+    "Vendor Agreement",
+    "Service Agreement",
+    "Consulting Agreement",
+    "Partnership Agreement",
+    "Shareholder Agreement",
+    "Lease Agreement",
+    "MSA",
+    "SLA",
+    "Privacy Policy",
+    "Terms & Conditions",
+    "Website Policy",
+    "Founders Agreement",
+    "Investment Agreement",
+    "Custom Contract",
+    "Other",
+]
+
+const PRIORITY_OPTIONS: ContractPriority[] = [
+    "Low",
+    "Medium",
+    "High",
+    "Urgent",
+]
+
+const STATUS_OPTIONS: ContractStatus[] = [
+    "Draft",
+    "Internal Review",
+    "Client Review",
+    "Revision Requested",
+    "Approved",
+    "Pending Signature",
+    "Executed",
+    "Active",
+    "Expired",
+    "Terminated",
+    "Archived",
+]
+
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -101,10 +169,6 @@ function isNotFoundError(error: unknown): boolean {
     )
 }
 
-/**
- * Map the backend `ContractComment` shape into the looser
- * `DetailComment` shape that the UI components read.
- */
 function normalizeComments(
     comments: ContractComment[]
 ): DetailComment[] {
@@ -175,9 +239,6 @@ function isAbsoluteUrl(value: string): boolean {
     return /^https?:\/\//i.test(value)
 }
 
-/**
- * Best-effort human-readable file size.
- */
 function formatBytes(bytes: number | undefined): string {
     if (!bytes || bytes <= 0) return "—"
 
@@ -194,10 +255,6 @@ function formatBytes(bytes: number | undefined): string {
     return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`
 }
 
-/**
- * Pull a display name out of a BusinessDocument, tolerating
- * partial shapes coming back from different endpoints.
- */
 function getDocumentDisplayName(doc: {
     name?: string
     originalName?: string
@@ -211,14 +268,85 @@ function getDocumentDisplayName(doc: {
     )
 }
 
-/**
- * Best-effort size lookup on a partially-typed document.
- */
 function getDocumentSize(doc: {
     size?: number
     fileSize?: number
 }): number | undefined {
     return doc.size ?? doc.fileSize
+}
+
+function toDateInputValue(value?: string | null): string {
+    if (!value) return ""
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return ""
+    return d.toISOString().slice(0, 10)
+}
+
+function extractCounterparty(raw: unknown): {
+    name: string
+    company: string
+    email: string
+    phone: string
+    address: string
+} {
+    if (!raw) {
+        return {
+            name: "",
+            company: "",
+            email: "",
+            phone: "",
+            address: "",
+        }
+    }
+
+    if (typeof raw === "string") {
+        return {
+            name: raw,
+            company: "",
+            email: "",
+            phone: "",
+            address: "",
+        }
+    }
+
+    const obj = raw as Record<string, unknown>
+
+    return {
+        name: String(obj.name ?? ""),
+        company: String(obj.company ?? ""),
+        email: String(obj.email ?? ""),
+        phone: String(obj.phone ?? ""),
+        address: String(obj.address ?? ""),
+    }
+}
+
+function buildEditForm(contract: Contract): EditFormState {
+    const cp = extractCounterparty(
+        (contract as unknown as Record<string, unknown>)
+            .counterparty
+    )
+
+    return {
+        title: contract.title ?? "",
+        contractType: contract.contractType ?? "",
+        counterpartyName: cp.name,
+        counterpartyCompany: cp.company,
+        counterpartyEmail: cp.email,
+        counterpartyPhone: cp.phone,
+        counterpartyAddress: cp.address,
+        description: contract.description ?? "",
+        priority: contract.priority ?? "Medium",
+        status: contract.status ?? "Draft",
+        effectiveDate: toDateInputValue(contract.effectiveDate),
+        expiryDate: toDateInputValue(contract.expiryDate),
+        renewalDate: toDateInputValue(contract.renewalDate),
+        contractValue:
+            contract.contractValue !== undefined &&
+                contract.contractValue !== null
+                ? String(contract.contractValue)
+                : "",
+        currency: contract.currency ?? "INR",
+    }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -368,6 +496,446 @@ function FinalDocumentButton({
 }
 
 /* -------------------------------------------------------------------------- */
+/* Edit modal                                                                 */
+/* -------------------------------------------------------------------------- */
+
+function ContractEditModal({
+    contract,
+    onClose,
+    onSaved,
+}: {
+    contract: Contract
+    onClose: () => void
+    onSaved: (updated: Contract) => void
+}) {
+    const [form, setForm] = React.useState<EditFormState>(() =>
+        buildEditForm(contract)
+    )
+
+    const [saving, setSaving] = React.useState(false)
+    const [error, setError] = React.useState<string | null>(null)
+
+    const update = <K extends keyof EditFormState>(
+        key: K,
+        value: EditFormState[K]
+    ) => {
+        setForm((current) => ({
+            ...current,
+            [key]: value,
+        }))
+    }
+
+    const handleSubmit = async (
+        event: React.FormEvent<HTMLFormElement>
+    ) => {
+        event.preventDefault()
+
+        if (!form.counterpartyName.trim()) {
+            setError("Counterparty name is required.")
+            return
+        }
+
+        try {
+            setSaving(true)
+            setError(null)
+
+            const payload = {
+                title: form.title.trim() || undefined,
+                contractType: form.contractType || undefined,
+                description: form.description,
+                priority: form.priority || undefined,
+                status: form.status || undefined,
+                effectiveDate: form.effectiveDate || null,
+                expiryDate: form.expiryDate || null,
+                renewalDate: form.renewalDate || null,
+                contractValue: form.contractValue
+                    ? Number(form.contractValue)
+                    : undefined,
+                currency: form.currency || undefined,
+                counterparty: {
+                    name: form.counterpartyName.trim(),
+                    company:
+                        form.counterpartyCompany.trim() || undefined,
+                    email:
+                        form.counterpartyEmail.trim() || undefined,
+                    phone:
+                        form.counterpartyPhone.trim() || undefined,
+                    address:
+                        form.counterpartyAddress.trim() || undefined,
+                },
+            }
+
+            const updated =
+                await contractService.updateContract(
+                    contract._id,
+                    payload
+                )
+
+            onSaved(updated)
+            onClose()
+        } catch (err) {
+            console.error("Update contract error:", err)
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to update contract."
+            )
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm"
+            onClick={onClose}
+        >
+            <div
+                className="my-8 w-full max-w-2xl rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="flex items-start justify-between border-b border-zinc-800 px-5 py-5">
+                    <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-yellow-400">
+                            Edit Contract
+                        </p>
+
+                        <h2 className="mt-2 truncate text-lg font-semibold text-white">
+                            {contract.title}
+                        </h2>
+
+                        <p className="mt-1 text-xs text-zinc-500">
+                            {contract.contractNumber}
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-900 hover:text-white"
+                    >
+                        <X className="size-5" />
+                    </button>
+                </div>
+
+                {/* Form */}
+                <form
+                    onSubmit={handleSubmit}
+                    className="space-y-5 p-5"
+                >
+                    <EditField label="Title">
+                        <input
+                            value={form.title}
+                            onChange={(e) =>
+                                update("title", e.target.value)
+                            }
+                            className="edit-input"
+                        />
+                    </EditField>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <EditField label="Contract type">
+                            <select
+                                value={form.contractType}
+                                onChange={(e) =>
+                                    update(
+                                        "contractType",
+                                        e.target.value as
+                                        | ContractType
+                                        | ""
+                                    )
+                                }
+                                className="edit-input"
+                            >
+                                <option value="">Select type</option>
+                                {CONTRACT_TYPE_OPTIONS.map((t) => (
+                                    <option key={t} value={t}>
+                                        {t}
+                                    </option>
+                                ))}
+                            </select>
+                        </EditField>
+
+                        <EditField label="Priority">
+                            <select
+                                value={form.priority}
+                                onChange={(e) =>
+                                    update(
+                                        "priority",
+                                        e.target.value as
+                                        | ContractPriority
+                                        | ""
+                                    )
+                                }
+                                className="edit-input"
+                            >
+                                <option value="">Select priority</option>
+                                {PRIORITY_OPTIONS.map((p) => (
+                                    <option key={p} value={p}>
+                                        {p}
+                                    </option>
+                                ))}
+                            </select>
+                        </EditField>
+
+                        <EditField label="Status">
+                            <select
+                                value={form.status}
+                                onChange={(e) =>
+                                    update(
+                                        "status",
+                                        e.target.value as
+                                        | ContractStatus
+                                        | ""
+                                    )
+                                }
+                                className="edit-input"
+                            >
+                                <option value="">Select status</option>
+                                {STATUS_OPTIONS.map((s) => (
+                                    <option key={s} value={s}>
+                                        {s}
+                                    </option>
+                                ))}
+                            </select>
+                        </EditField>
+
+                        <EditField label="Contract value">
+                            <input
+                                type="number"
+                                min={0}
+                                value={form.contractValue}
+                                onChange={(e) =>
+                                    update(
+                                        "contractValue",
+                                        e.target.value
+                                    )
+                                }
+                                className="edit-input"
+                            />
+                        </EditField>
+
+                        <EditField label="Currency">
+                            <input
+                                value={form.currency}
+                                onChange={(e) =>
+                                    update("currency", e.target.value)
+                                }
+                                className="edit-input"
+                            />
+                        </EditField>
+
+                        <EditField label="Effective date">
+                            <input
+                                type="date"
+                                value={form.effectiveDate}
+                                onChange={(e) =>
+                                    update(
+                                        "effectiveDate",
+                                        e.target.value
+                                    )
+                                }
+                                className="edit-input"
+                            />
+                        </EditField>
+
+                        <EditField label="Expiry date">
+                            <input
+                                type="date"
+                                value={form.expiryDate}
+                                onChange={(e) =>
+                                    update(
+                                        "expiryDate",
+                                        e.target.value
+                                    )
+                                }
+                                className="edit-input"
+                            />
+                        </EditField>
+
+                        <EditField label="Renewal date">
+                            <input
+                                type="date"
+                                value={form.renewalDate}
+                                onChange={(e) =>
+                                    update(
+                                        "renewalDate",
+                                        e.target.value
+                                    )
+                                }
+                                className="edit-input"
+                            />
+                        </EditField>
+                    </div>
+
+                    {/* Counterparty section */}
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                            Counterparty
+                        </p>
+
+                        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                            <EditField label="Name *">
+                                <input
+                                    value={form.counterpartyName}
+                                    onChange={(e) =>
+                                        update(
+                                            "counterpartyName",
+                                            e.target.value
+                                        )
+                                    }
+                                    required
+                                    className="edit-input"
+                                />
+                            </EditField>
+
+                            <EditField label="Company">
+                                <input
+                                    value={form.counterpartyCompany}
+                                    onChange={(e) =>
+                                        update(
+                                            "counterpartyCompany",
+                                            e.target.value
+                                        )
+                                    }
+                                    className="edit-input"
+                                />
+                            </EditField>
+
+                            <EditField label="Email">
+                                <input
+                                    type="email"
+                                    value={form.counterpartyEmail}
+                                    onChange={(e) =>
+                                        update(
+                                            "counterpartyEmail",
+                                            e.target.value
+                                        )
+                                    }
+                                    className="edit-input"
+                                />
+                            </EditField>
+
+                            <EditField label="Phone">
+                                <input
+                                    value={form.counterpartyPhone}
+                                    onChange={(e) =>
+                                        update(
+                                            "counterpartyPhone",
+                                            e.target.value
+                                        )
+                                    }
+                                    className="edit-input"
+                                />
+                            </EditField>
+
+                            <div className="sm:col-span-2">
+                                <EditField label="Address">
+                                    <input
+                                        value={form.counterpartyAddress}
+                                        onChange={(e) =>
+                                            update(
+                                                "counterpartyAddress",
+                                                e.target.value
+                                            )
+                                        }
+                                        className="edit-input"
+                                    />
+                                </EditField>
+                            </div>
+                        </div>
+                    </div>
+
+                    <EditField label="Description">
+                        <textarea
+                            rows={4}
+                            value={form.description}
+                            onChange={(e) =>
+                                update("description", e.target.value)
+                            }
+                            className="edit-input resize-none"
+                        />
+                    </EditField>
+
+                    {error && (
+                        <div className="rounded-xl border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-300">
+                            {error}
+                        </div>
+                    )}
+
+                    <div className="flex justify-end gap-2 pt-2">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            disabled={saving}
+                            className="rounded-xl border border-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white disabled:opacity-40"
+                        >
+                            Cancel
+                        </button>
+
+                        <button
+                            type="submit"
+                            disabled={saving}
+                            className="inline-flex items-center gap-2 rounded-xl bg-yellow-400 px-4 py-2.5 text-sm font-semibold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {saving ? (
+                                <>
+                                    <Loader2 className="size-4 animate-spin" />
+                                    Saving…
+                                </>
+                            ) : (
+                                <>Save changes</>
+                            )}
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            {/* Scoped styles for the edit form */}
+            <style jsx>{`
+                :global(.edit-input) {
+                    width: 100%;
+                    height: 2.5rem;
+                    padding: 0 0.75rem;
+                    border-radius: 0.75rem;
+                    border: 1px solid rgb(39 39 42);
+                    background: rgb(24 24 27);
+                    color: white;
+                    font-size: 0.875rem;
+                    outline: none;
+                }
+                :global(textarea.edit-input) {
+                    height: auto;
+                    padding: 0.5rem 0.75rem;
+                    line-height: 1.5;
+                }
+                :global(.edit-input:focus) {
+                    border-color: rgb(250 204 21 / 0.4);
+                }
+            `}</style>
+        </div>
+    )
+}
+
+function EditField({
+    label,
+    children,
+}: {
+    label: string
+    children: React.ReactNode
+}) {
+    return (
+        <label className="block">
+            <span className="mb-1.5 block text-[11px] font-medium text-zinc-400">
+                {label}
+            </span>
+            {children}
+        </label>
+    )
+}
+
+/* -------------------------------------------------------------------------- */
 /* Tabs                                                                       */
 /* -------------------------------------------------------------------------- */
 
@@ -415,14 +983,14 @@ export default function ContractDetailPage({
 
     const [tab, setTab] = useState<TabKey>("overview")
 
-    /**
-     * Document upload state (used by the Documents tab).
-     */
     const [documentUploading, setDocumentUploading] =
         useState(false)
 
     const [documentError, setDocumentError] =
         useState<string | null>(null)
+
+    // Inline edit modal state
+    const [editOpen, setEditOpen] = useState(false)
 
     /* ---------------------------------------------------------------------- */
     /* Resolve route params                                                    */
@@ -615,8 +1183,6 @@ export default function ContractDetailPage({
                 "contract"
             )
 
-            // Reload the contract so the newly attached document
-            // appears in `contract.supportingDocuments`.
             await loadContract(contract._id, { silent: true })
         } catch (uploadErr) {
             console.error(
@@ -632,6 +1198,14 @@ export default function ContractDetailPage({
         } finally {
             setDocumentUploading(false)
         }
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* After edit save                                                         */
+    /* ---------------------------------------------------------------------- */
+
+    const handleContractSaved = (updated: Contract) => {
+        setContract(updated)
     }
 
     /* ---------------------------------------------------------------------- */
@@ -736,10 +1310,6 @@ export default function ContractDetailPage({
     return (
         <main className="contracts-theme min-h-screen bg-black text-zinc-100">
             <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 lg:px-8">
-                {/* ---------------------------------------------------------- */}
-                {/* Top bar                                                     */}
-                {/* ---------------------------------------------------------- */}
-
                 <div className="flex items-center justify-between">
                     <Link
                         href="/dashboard/contracts"
@@ -773,10 +1343,6 @@ export default function ContractDetailPage({
                     </div>
                 </div>
 
-                {/* ---------------------------------------------------------- */}
-                {/* Header                                                      */}
-                {/* ---------------------------------------------------------- */}
-
                 <header className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm sm:p-7">
                     <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                         <div>
@@ -802,6 +1368,15 @@ export default function ContractDetailPage({
                         </div>
 
                         <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setEditOpen(true)}
+                                className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 px-3 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
+                            >
+                                <Pencil className="size-4" />
+                                Edit
+                            </button>
+
                             <FinalDocumentButton
                                 contractId={contract._id}
                                 hasDocument={hasAnyFinalDocument(
@@ -855,10 +1430,6 @@ export default function ContractDetailPage({
                     </div>
                 </header>
 
-                {/* ---------------------------------------------------------- */}
-                {/* Tabs                                                        */}
-                {/* ---------------------------------------------------------- */}
-
                 <div
                     role="tablist"
                     aria-label="Contract sections"
@@ -885,10 +1456,6 @@ export default function ContractDetailPage({
                         )
                     })}
                 </div>
-
-                {/* ---------------------------------------------------------- */}
-                {/* Content                                                     */}
-                {/* ---------------------------------------------------------- */}
 
                 <div className="mt-5 flex flex-col gap-4">
                     {tab === "overview" && (
@@ -934,6 +1501,15 @@ export default function ContractDetailPage({
                     )}
                 </div>
             </div>
+
+            {/* Inline edit modal */}
+            {editOpen && (
+                <ContractEditModal
+                    contract={contract}
+                    onClose={() => setEditOpen(false)}
+                    onSaved={handleContractSaved}
+                />
+            )}
         </main>
     )
 }
@@ -942,9 +1518,6 @@ export default function ContractDetailPage({
 /* Tab panels                                                                 */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Versions tab — placeholder until you wire up a versions list endpoint.
- */
 function ContractVersionsTab({
     contractId,
 }: {
@@ -967,12 +1540,6 @@ function ContractVersionsTab({
     )
 }
 
-/**
- * Documents tab.
- *
- * Shows existing supporting documents plus an uploader that runs
- * the 3-step R2 flow through `contractService.uploadSupportingDocument`.
- */
 function ContractDocumentsTab({
     contract,
     uploading,
@@ -1011,7 +1578,6 @@ function ContractDocumentsTab({
     ) => {
         const file = event.target.files?.[0]
 
-        // Reset so picking the same file twice re-fires.
         event.target.value = ""
 
         if (!file) return
@@ -1037,7 +1603,6 @@ function ContractDocumentsTab({
                 documentId
             )
 
-            // Refresh the page so the list reflects the deletion.
             window.location.reload()
         } catch (deleteErr) {
             console.error(
@@ -1096,10 +1661,6 @@ function ContractDocumentsTab({
 
     return (
         <div className="flex flex-col gap-4">
-            {/* ---------------------------------------------------- */}
-            {/* Uploader                                              */}
-            {/* ---------------------------------------------------- */}
-
             <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -1155,10 +1716,6 @@ function ContractDocumentsTab({
                     </p>
                 )}
             </section>
-
-            {/* ---------------------------------------------------- */}
-            {/* Existing supporting documents                         */}
-            {/* ---------------------------------------------------- */}
 
             {documents.length > 0 && (
                 <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm">
@@ -1248,9 +1805,6 @@ function ContractDocumentsTab({
     )
 }
 
-/**
- * Activity tab — reuses the ContractActivity card.
- */
 function ContractActivityTab({
     activities,
 }: {

@@ -6,7 +6,7 @@
 
 const API_ROOT =
     process.env.NEXT_PUBLIC_API_URL ||
-    "https://nyaymitra-backend-production.up.railway.app/api/v1";
+    "http://localhost:5000/api/v1";
 
 const CONTRACT_REQUESTS_URL = `${API_ROOT}/contracts/requests`;
 const CONTRACTS_URL = `${API_ROOT}/contracts`;

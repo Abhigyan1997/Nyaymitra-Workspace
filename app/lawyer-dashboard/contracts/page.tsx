@@ -22,12 +22,14 @@ import {
     History,
     Mail,
     MessageSquare,
+    Pencil,
     RefreshCw,
     Search,
     Send,
     Upload,
     Users,
     X,
+    Loader2,
 } from 'lucide-react'
 
 /**
@@ -39,15 +41,13 @@ import {
  * Live APIs used:
  * GET    /lawyer/contracts
  * GET    /lawyer/contracts/:contractId
+ * PATCH  /lawyer/contracts/:contractId              <-- edit
  * POST   /lawyer/contracts/:contractId/comments
  * GET    /lawyer/contracts/:contractId/comments
  * GET    /lawyer/contracts/:contractId/activity
  * GET    /lawyer/contracts/:contractId/documents
- * GET    /lawyer/contracts/:contractId/documents/upload-url   <-- NEW
- * POST   /lawyer/contracts/:contractId/documents               <-- saves R2 key
- *
- * R2 upload is direct from browser using the presigned URL returned
- * by the upload-url endpoint.
+ * GET    /lawyer/contracts/:contractId/documents/upload-url
+ * POST   /lawyer/contracts/:contractId/documents
  */
 
 const API_BASE =
@@ -126,6 +126,24 @@ interface Contract {
     raw?: any
 }
 
+interface EditFormState {
+    title: string
+    contractType: string
+    description: string
+    priority: ContractPriority | ''
+    status: ContractStatus | ''
+    counterpartyName: string
+    counterpartyCompany: string
+    counterpartyEmail: string
+    counterpartyPhone: string
+    counterpartyAddress: string
+    contractValue: string
+    currency: string
+    effectiveDate: string
+    expiryDate: string
+    renewalDate: string
+}
+
 const STATUS_OPTIONS: ContractStatus[] = [
     'Draft',
     'Internal Review',
@@ -145,6 +163,26 @@ const PRIORITY_OPTIONS: ContractPriority[] = [
     'Medium',
     'High',
     'Urgent',
+]
+
+const CONTRACT_TYPE_OPTIONS = [
+    'NDA',
+    'Employment Agreement',
+    'Vendor Agreement',
+    'Service Agreement',
+    'Consulting Agreement',
+    'Partnership Agreement',
+    'Shareholder Agreement',
+    'Lease Agreement',
+    'MSA',
+    'SLA',
+    'Privacy Policy',
+    'Terms & Conditions',
+    'Website Policy',
+    'Founders Agreement',
+    'Investment Agreement',
+    'Custom Contract',
+    'Other',
 ]
 
 function getToken() {
@@ -387,6 +425,78 @@ function formatFileSize(size: any) {
     }
 
     return `${(numericSize / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function toDateInputValue(value?: string | null): string {
+    if (!value) return ''
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return ''
+    return d.toISOString().slice(0, 10)
+}
+
+function extractCounterparty(raw: unknown): {
+    name: string
+    company: string
+    email: string
+    phone: string
+    address: string
+} {
+    if (!raw) {
+        return {
+            name: '',
+            company: '',
+            email: '',
+            phone: '',
+            address: '',
+        }
+    }
+
+    if (typeof raw === 'string') {
+        return {
+            name: raw,
+            company: '',
+            email: '',
+            phone: '',
+            address: '',
+        }
+    }
+
+    const obj = raw as Record<string, unknown>
+
+    return {
+        name: String(obj.name ?? ''),
+        company: String(obj.company ?? ''),
+        email: String(obj.email ?? ''),
+        phone: String(obj.phone ?? ''),
+        address: String(obj.address ?? ''),
+    }
+}
+
+function buildEditForm(contract: Contract): EditFormState {
+    const raw = contract.raw || {}
+    const cp = extractCounterparty(raw.counterparty)
+
+    return {
+        title: contract.title ?? '',
+        contractType: contract.contractType ?? '',
+        description: contract.description ?? '',
+        priority: contract.priority ?? 'Medium',
+        status: contract.status ?? 'Draft',
+        counterpartyName: cp.name,
+        counterpartyCompany: cp.company,
+        counterpartyEmail: cp.email,
+        counterpartyPhone: cp.phone,
+        counterpartyAddress: cp.address,
+        contractValue:
+            raw.contractValue !== undefined &&
+                raw.contractValue !== null
+                ? String(raw.contractValue)
+                : '',
+        currency: raw.currency ?? 'INR',
+        effectiveDate: toDateInputValue(raw.effectiveDate),
+        expiryDate: toDateInputValue(raw.expiryDate),
+        renewalDate: toDateInputValue(raw.renewalDate),
+    }
 }
 
 function mapContractSummary(item: any): Contract {
@@ -749,6 +859,485 @@ function LoadingState() {
 
 type DetailTab = 'overview' | 'activity' | 'comments' | 'documents'
 
+/* -------------------------------------------------------------------------- */
+/* Edit modal                                                                 */
+/* -------------------------------------------------------------------------- */
+
+function ContractEditModal({
+    contract,
+    onClose,
+    onSaved,
+}: {
+    contract: Contract
+    onClose: () => void
+    onSaved: (updated: Contract) => void
+}) {
+    const [form, setForm] = useState<EditFormState>(() =>
+        buildEditForm(contract)
+    )
+    const [saving, setSaving] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+
+    const update = <K extends keyof EditFormState>(
+        key: K,
+        value: EditFormState[K]
+    ) => {
+        setForm((current) => ({ ...current, [key]: value }))
+    }
+
+    const handleSubmit = async (
+        event: React.FormEvent<HTMLFormElement>
+    ) => {
+        event.preventDefault()
+
+        if (!form.counterpartyName.trim()) {
+            setError('Counterparty name is required.')
+            return
+        }
+
+        try {
+            setSaving(true)
+            setError(null)
+
+            const currentStatus = contract.status
+            const statusChanged =
+                form.status && form.status !== currentStatus
+
+            // 1. Update all the fields EXCEPT status
+            const detailsPayload: Record<string, unknown> = {
+                title: form.title.trim() || undefined,
+                contractType: form.contractType.trim() || undefined,
+                description: form.description,
+                priority: form.priority || undefined,
+                contractValue: form.contractValue
+                    ? Number(form.contractValue)
+                    : undefined,
+                currency: form.currency || undefined,
+                effectiveDate: form.effectiveDate || null,
+                expiryDate: form.expiryDate || null,
+                renewalDate: form.renewalDate || null,
+                counterparty: {
+                    name: form.counterpartyName.trim(),
+                    company:
+                        form.counterpartyCompany.trim() || '',
+                    email:
+                        form.counterpartyEmail.trim() || '',
+                    phone:
+                        form.counterpartyPhone.trim() || '',
+                    address:
+                        form.counterpartyAddress.trim() || '',
+                },
+            }
+
+            const detailsResponse = await apiRequest<any>(
+                `/lawyer/contracts/${encodeURIComponent(
+                    contract.id
+                )}`,
+                {
+                    method: 'PATCH',
+                    body: JSON.stringify(detailsPayload),
+                }
+            )
+
+            let updatedRaw = extractObject(detailsResponse)
+
+            // 2. If the status changed, hit the status endpoint
+            if (statusChanged && form.status) {
+                const statusResponse = await apiRequest<any>(
+                    `/lawyer/contracts/${encodeURIComponent(
+                        contract.id
+                    )}/status`,
+                    {
+                        method: 'PATCH',
+                        body: JSON.stringify({
+                            status: form.status,
+                        }),
+                    }
+                )
+
+                const statusRaw = extractObject(statusResponse)
+
+                // Merge — prefer the newest server payload
+                if (statusRaw && typeof statusRaw === 'object') {
+                    updatedRaw = {
+                        ...(updatedRaw || {}),
+                        ...statusRaw,
+                    }
+                }
+            }
+
+            onSaved(
+                mapContractDetail(updatedRaw || {}, contract)
+            )
+            onClose()
+        } catch (err) {
+            console.error('Update contract error:', err)
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : 'Failed to update contract.'
+            )
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    return (
+        <div
+            className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm"
+            onClick={onClose}
+        >
+            <div
+                className="my-8 w-full max-w-2xl rounded-2xl border border-white/[0.08] bg-[#0b0d10] shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex items-start justify-between border-b border-white/[0.06] px-5 py-5">
+                    <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-400">
+                            Edit Contract
+                        </p>
+                        <h2 className="mt-2 truncate text-lg font-semibold text-white">
+                            {contract.title}
+                        </h2>
+                        <p className="mt-1 text-xs text-zinc-600">
+                            {contract.contractNumber}
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-lg p-2 text-zinc-500 hover:bg-white/[0.04] hover:text-white"
+                    >
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
+
+                <form
+                    onSubmit={handleSubmit}
+                    className="space-y-5 p-5"
+                >
+                    <EditField label="Title">
+                        <input
+                            value={form.title}
+                            onChange={(e) =>
+                                update('title', e.target.value)
+                            }
+                            className="edit-input"
+                        />
+                    </EditField>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <EditField label="Contract type">
+                            <select
+                                value={form.contractType}
+                                onChange={(e) =>
+                                    update(
+                                        'contractType',
+                                        e.target.value
+                                    )
+                                }
+                                className="edit-input"
+                            >
+                                <option value="">
+                                    Select type
+                                </option>
+                                {CONTRACT_TYPE_OPTIONS.map((t) => (
+                                    <option key={t} value={t}>
+                                        {t}
+                                    </option>
+                                ))}
+                            </select>
+                        </EditField>
+
+                        <EditField label="Priority">
+                            <select
+                                value={form.priority}
+                                onChange={(e) =>
+                                    update(
+                                        'priority',
+                                        e.target
+                                            .value as ContractPriority
+                                    )
+                                }
+                                className="edit-input"
+                            >
+                                <option value="">
+                                    Select priority
+                                </option>
+                                {PRIORITY_OPTIONS.map((p) => (
+                                    <option key={p} value={p}>
+                                        {p}
+                                    </option>
+                                ))}
+                            </select>
+                        </EditField>
+
+                        <EditField label="Status">
+                            <select
+                                value={form.status}
+                                onChange={(e) =>
+                                    update(
+                                        'status',
+                                        e.target
+                                            .value as ContractStatus
+                                    )
+                                }
+                                className="edit-input"
+                            >
+                                <option value="">
+                                    Select status
+                                </option>
+                                {STATUS_OPTIONS.map((s) => (
+                                    <option key={s} value={s}>
+                                        {s}
+                                    </option>
+                                ))}
+                            </select>
+                        </EditField>
+
+                        <EditField label="Contract value">
+                            <input
+                                type="number"
+                                min={0}
+                                value={form.contractValue}
+                                onChange={(e) =>
+                                    update(
+                                        'contractValue',
+                                        e.target.value
+                                    )
+                                }
+                                className="edit-input"
+                            />
+                        </EditField>
+
+                        <EditField label="Currency">
+                            <input
+                                value={form.currency}
+                                onChange={(e) =>
+                                    update(
+                                        'currency',
+                                        e.target.value
+                                    )
+                                }
+                                className="edit-input"
+                            />
+                        </EditField>
+
+                        <EditField label="Effective date">
+                            <input
+                                type="date"
+                                value={form.effectiveDate}
+                                onChange={(e) =>
+                                    update(
+                                        'effectiveDate',
+                                        e.target.value
+                                    )
+                                }
+                                className="edit-input"
+                            />
+                        </EditField>
+
+                        <EditField label="Expiry date">
+                            <input
+                                type="date"
+                                value={form.expiryDate}
+                                onChange={(e) =>
+                                    update(
+                                        'expiryDate',
+                                        e.target.value
+                                    )
+                                }
+                                className="edit-input"
+                            />
+                        </EditField>
+
+                        <EditField label="Renewal date">
+                            <input
+                                type="date"
+                                value={form.renewalDate}
+                                onChange={(e) =>
+                                    update(
+                                        'renewalDate',
+                                        e.target.value
+                                    )
+                                }
+                                className="edit-input"
+                            />
+                        </EditField>
+                    </div>
+
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                            Counterparty
+                        </p>
+
+                        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                            <EditField label="Name *">
+                                <input
+                                    value={form.counterpartyName}
+                                    onChange={(e) =>
+                                        update(
+                                            'counterpartyName',
+                                            e.target.value
+                                        )
+                                    }
+                                    required
+                                    className="edit-input"
+                                />
+                            </EditField>
+
+                            <EditField label="Company">
+                                <input
+                                    value={form.counterpartyCompany}
+                                    onChange={(e) =>
+                                        update(
+                                            'counterpartyCompany',
+                                            e.target.value
+                                        )
+                                    }
+                                    className="edit-input"
+                                />
+                            </EditField>
+
+                            <EditField label="Email">
+                                <input
+                                    type="email"
+                                    value={form.counterpartyEmail}
+                                    onChange={(e) =>
+                                        update(
+                                            'counterpartyEmail',
+                                            e.target.value
+                                        )
+                                    }
+                                    className="edit-input"
+                                />
+                            </EditField>
+
+                            <EditField label="Phone">
+                                <input
+                                    value={form.counterpartyPhone}
+                                    onChange={(e) =>
+                                        update(
+                                            'counterpartyPhone',
+                                            e.target.value
+                                        )
+                                    }
+                                    className="edit-input"
+                                />
+                            </EditField>
+
+                            <div className="sm:col-span-2">
+                                <EditField label="Address">
+                                    <input
+                                        value={form.counterpartyAddress}
+                                        onChange={(e) =>
+                                            update(
+                                                'counterpartyAddress',
+                                                e.target.value
+                                            )
+                                        }
+                                        className="edit-input"
+                                    />
+                                </EditField>
+                            </div>
+                        </div>
+                    </div>
+
+                    <EditField label="Description">
+                        <textarea
+                            rows={4}
+                            value={form.description}
+                            onChange={(e) =>
+                                update(
+                                    'description',
+                                    e.target.value
+                                )
+                            }
+                            className="edit-input resize-none"
+                        />
+                    </EditField>
+
+                    {error && (
+                        <div className="rounded-xl border border-red-400/20 bg-red-400/[0.05] px-3 py-2 text-xs text-red-300">
+                            {error}
+                        </div>
+                    )}
+
+                    <div className="flex justify-end gap-2 pt-2">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            disabled={saving}
+                            className="rounded-xl border border-white/[0.08] px-4 py-2.5 text-xs font-medium text-zinc-400 hover:bg-white/[0.04] hover:text-white disabled:opacity-40"
+                        >
+                            Cancel
+                        </button>
+
+                        <button
+                            type="submit"
+                            disabled={saving}
+                            className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-xs font-semibold text-white hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {saving ? (
+                                <>
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    Saving...
+                                </>
+                            ) : (
+                                <>Save Changes</>
+                            )}
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <style jsx>{`
+                :global(.edit-input) {
+                    width: 100%;
+                    height: 2.5rem;
+                    padding: 0 0.75rem;
+                    border-radius: 0.75rem;
+                    border: 1px solid rgba(255, 255, 255, 0.08);
+                    background: #101318;
+                    color: white;
+                    font-size: 0.875rem;
+                    outline: none;
+                }
+                :global(textarea.edit-input) {
+                    height: auto;
+                    padding: 0.5rem 0.75rem;
+                    line-height: 1.5;
+                }
+                :global(.edit-input:focus) {
+                    border-color: rgba(96, 165, 250, 0.4);
+                }
+            `}</style>
+        </div>
+    )
+}
+
+function EditField({
+    label,
+    children,
+}: {
+    label: string
+    children: React.ReactNode
+}) {
+    return (
+        <label className="block">
+            <span className="mb-1.5 block text-[11px] font-medium text-zinc-400">
+                {label}
+            </span>
+            {children}
+        </label>
+    )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Page                                                                       */
+/* -------------------------------------------------------------------------- */
+
 export default function LawyerContractPage() {
     const [contracts, setContracts] = useState<Contract[]>([])
     const [selectedContract, setSelectedContract] =
@@ -781,6 +1370,9 @@ export default function LawyerContractPage() {
     const [downloadingDocumentId, setDownloadingDocumentId] =
         useState('')
     const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+    // Edit modal
+    const [editOpen, setEditOpen] = useState(false)
 
     // ----------------------- FETCH LIST -----------------------
     const fetchContracts = useCallback(async () => {
@@ -833,7 +1425,10 @@ export default function LawyerContractPage() {
 
                 setSelectedContract((current) => {
                     if (current?.id !== contractId) {
-                        return mapContractDetail(detail, current || undefined)
+                        return mapContractDetail(
+                            detail,
+                            current || undefined
+                        )
                     }
                     return mapContractDetail(detail, current)
                 })
@@ -1062,10 +1657,7 @@ export default function LawyerContractPage() {
         }
     }
 
-    // ----------------------- UPLOAD DOCUMENT (R2) -----------------------
-    // STEP 1: Ask backend for a presigned R2 PUT URL + storageKey
-    // STEP 2: PUT the file directly to R2 using that URL
-    // STEP 3: POST the storageKey + metadata to the backend to save the row
+    // ----------------------- UPLOAD DOCUMENT -----------------------
     const uploadDocument = async (file: File) => {
         if (!file || !selectedContract?.id) return
 
@@ -1075,7 +1667,6 @@ export default function LawyerContractPage() {
 
             const contractId = selectedContract.id
 
-            // --- STEP 1: presign ---
             const presign = await apiRequest<{
                 success: boolean
                 uploadUrl: string
@@ -1097,7 +1688,6 @@ export default function LawyerContractPage() {
                 )
             }
 
-            // --- STEP 2: PUT to R2 (no auth header!) ---
             const r2Res = await fetch(presign.uploadUrl, {
                 method: 'PUT',
                 headers: {
@@ -1113,7 +1703,6 @@ export default function LawyerContractPage() {
                 )
             }
 
-            // --- STEP 3: save metadata ---
             await apiRequest<any>(
                 `/lawyer/contracts/${encodeURIComponent(
                     contractId
@@ -1153,8 +1742,6 @@ export default function LawyerContractPage() {
     }
 
     // ----------------------- DOWNLOAD DOCUMENT -----------------------
-    // Each document in the GET /documents response already carries a
-    // short-lived `signedUrl` from the backend, so we can just open it.
     const downloadDocument = async (
         document: ContractDocument
     ) => {
@@ -1204,6 +1791,20 @@ export default function LawyerContractPage() {
             setError(message)
         } finally {
             setDownloadingDocumentId('')
+        }
+    }
+
+    // ----------------------- AFTER EDIT SAVE -----------------------
+    const handleContractSaved = (updated: Contract) => {
+        setSelectedContract(updated)
+        setContracts((current) =>
+            current.map((c) =>
+                c.id === updated.id ? updated : c
+            )
+        )
+        // Refresh activity to reflect the edit
+        if (updated.id) {
+            void fetchContractActivity(updated.id)
         }
     }
 
@@ -1529,6 +2130,7 @@ export default function LawyerContractPage() {
                                 downloadingDocumentId={
                                     downloadingDocumentId
                                 }
+                                onEdit={() => setEditOpen(true)}
                                 onRefreshComments={() => {
                                     if (selectedContract?.id) {
                                         fetchContractComments(
@@ -1617,6 +2219,7 @@ export default function LawyerContractPage() {
                                 downloadingDocumentId={
                                     downloadingDocumentId
                                 }
+                                onEdit={() => setEditOpen(true)}
                                 onRefreshComments={() => {
                                     if (selectedContract.id) {
                                         fetchContractComments(
@@ -1643,11 +2246,22 @@ export default function LawyerContractPage() {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* EDIT MODAL */}
+            {editOpen && selectedContract && (
+                <ContractEditModal
+                    contract={selectedContract}
+                    onClose={() => setEditOpen(false)}
+                    onSaved={handleContractSaved}
+                />
+            )}
         </div>
     )
 }
 
-// ----------------------------- DETAILS -----------------------------
+/* -------------------------------------------------------------------------- */
+/* ContractDetails (extended with Edit button)                                */
+/* -------------------------------------------------------------------------- */
 
 function ContractDetails({
     contract,
@@ -1666,6 +2280,7 @@ function ContractDetails({
     fileInputRef,
     onDownloadDocument,
     downloadingDocumentId,
+    onEdit,
     onRefreshComments,
     onRefreshActivity,
     onRefreshDocuments,
@@ -1686,6 +2301,7 @@ function ContractDetails({
     fileInputRef: React.MutableRefObject<HTMLInputElement | null>
     onDownloadDocument: (document: ContractDocument) => void
     downloadingDocumentId: string
+    onEdit: () => void
     onRefreshComments: () => void
     onRefreshActivity: () => void
     onRefreshDocuments: () => void
@@ -1733,7 +2349,6 @@ function ContractDetails({
             animate={{ opacity: 1, y: 0 }}
             className="space-y-5"
         >
-            {/* Header */}
             <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 sm:p-6">
                 <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                     <div className="flex min-w-0 gap-4">
@@ -1780,6 +2395,15 @@ function ContractDetails({
                     </div>
 
                     <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={onEdit}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-white/[0.08] hover:text-white"
+                        >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Edit
+                        </button>
+
                         <PriorityBadge priority={contract.priority} />
                     </div>
                 </div>
@@ -1816,7 +2440,6 @@ function ContractDetails({
                 </div>
             </div>
 
-            {/* Tabs */}
             <div className="flex gap-1 overflow-x-auto rounded-xl border border-white/[0.06] bg-white/[0.02] p-1">
                 {tabs.map((tab) => {
                     const isActive = activeTab === tab.id
@@ -1846,7 +2469,6 @@ function ContractDetails({
                 })}
             </div>
 
-            {/* Tab content */}
             {activeTab === 'overview' && (
                 <div className="grid gap-5 xl:grid-cols-2">
                     <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5">
