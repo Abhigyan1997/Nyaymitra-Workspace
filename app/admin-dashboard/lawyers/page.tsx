@@ -43,9 +43,6 @@ import {
     StatusBadge,
 } from '@/components/admin/AdminUI'
 
-// ----------------------------------------------------------------
-// Status filter options
-// ----------------------------------------------------------------
 type StatusFilter = 'all' | 'active' | 'pending' | 'suspended' | 'inactive'
 
 const STATUS_OPTIONS: { label: string; value: StatusFilter }[] = [
@@ -61,27 +58,21 @@ const PAGE_LIMIT = 20
 export default function AdminLawyersPage() {
     const router = useRouter()
 
-    // Data
     const [lawyers, setLawyers] = useState<Lawyer[]>([])
     const [total, setTotal] = useState(0)
     const [totalPages, setTotalPages] = useState(0)
 
-    // UI state
     const [loading, setLoading] = useState(true)
     const [refreshing, setRefreshing] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [actionId, setActionId] = useState<string | null>(null)
     const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
 
-    // Filters
     const [search, setSearch] = useState('')
     const [debouncedSearch, setDebouncedSearch] = useState('')
     const [status, setStatus] = useState<StatusFilter>('all')
     const [page, setPage] = useState(1)
 
-    // ----------------------------------------------------------------
-    // Debounce search
-    // ----------------------------------------------------------------
     useEffect(() => {
         const t = setTimeout(() => {
             setDebouncedSearch(search.trim())
@@ -90,9 +81,6 @@ export default function AdminLawyersPage() {
         return () => clearTimeout(t)
     }, [search])
 
-    // ----------------------------------------------------------------
-    // Load lawyers
-    // ----------------------------------------------------------------
     const loadLawyers = useCallback(
         async (opts?: { silent?: boolean }) => {
             try {
@@ -115,7 +103,12 @@ export default function AdminLawyersPage() {
                 setTotal(pag.total || raw.length)
                 setTotalPages(
                     pag.pages ||
-                    Math.max(1, Math.ceil((pag.total || raw.length) / PAGE_LIMIT))
+                    Math.max(
+                        1,
+                        Math.ceil(
+                            (pag.total || raw.length) / PAGE_LIMIT
+                        )
+                    )
                 )
             } catch (err) {
                 if (err instanceof ApiError && err.status === 401) {
@@ -123,7 +116,9 @@ export default function AdminLawyersPage() {
                     return
                 }
                 setError(
-                    err instanceof Error ? err.message : 'Failed to load lawyers.'
+                    err instanceof Error
+                        ? err.message
+                        : 'Failed to load lawyers.'
                 )
             } finally {
                 setLoading(false)
@@ -137,7 +132,6 @@ export default function AdminLawyersPage() {
         loadLawyers()
     }, [loadLawyers])
 
-    // Close menu on click-away
     useEffect(() => {
         const onClick = () => setMenuOpenId(null)
         if (menuOpenId) {
@@ -146,21 +140,44 @@ export default function AdminLawyersPage() {
         }
     }, [menuOpenId])
 
-    // ----------------------------------------------------------------
-    // Derived stats (from currently loaded page)
-    // ----------------------------------------------------------------
     const pageStats = useMemo(() => {
         return {
             total,
             active: lawyers.filter((l) => l.status === 'active').length,
             pending: lawyers.filter((l) => l.status === 'pending').length,
-            suspended: lawyers.filter((l) => l.status === 'suspended').length,
+            suspended: lawyers.filter((l) => l.status === 'suspended')
+                .length,
         }
     }, [lawyers, total])
 
-    // ----------------------------------------------------------------
-    // Actions
-    // ----------------------------------------------------------------
+    const goToLawyer = useCallback(
+        (id: string | undefined, fallback?: Lawyer) => {
+            let target = id
+            if (!target && fallback?.raw) {
+                target =
+                    fallback.raw._id ||
+                    fallback.raw.id ||
+                    fallback.raw.userId?._id ||
+                    (typeof fallback.raw.userId === 'string'
+                        ? fallback.raw.userId
+                        : '') ||
+                    fallback.raw.userInfo?._id ||
+                    fallback.raw.lawyerDetails?._id
+            }
+
+            if (!target || target === 'undefined' || target === '') {
+                console.warn(
+                    '[goToLawyer] Missing id, cannot navigate. Lawyer:',
+                    fallback
+                )
+                return
+            }
+
+            router.push(`/admin-dashboard/lawyers/${target}`)
+        },
+        [router]
+    )
+
     const handleVerify = async (id: string) => {
         try {
             setActionId(id)
@@ -201,20 +218,19 @@ export default function AdminLawyersPage() {
         }
     }
 
-    // ----------------------------------------------------------------
-    // Render
-    // ----------------------------------------------------------------
     if (error && !loading && lawyers.length === 0) {
         return (
             <div className="min-h-full p-6 lg:p-8">
-                <ErrorState message={error} onRetry={() => loadLawyers()} />
+                <ErrorState
+                    message={error}
+                    onRetry={() => loadLawyers()}
+                />
             </div>
         )
     }
 
     return (
         <div className="min-h-full text-white">
-            {/* Header */}
             <div className="border-b border-white/[0.05] bg-black/40 backdrop-blur-md">
                 <div className="mx-auto max-w-7xl px-6 py-6 lg:px-8">
                     <div className="flex items-start justify-between gap-4">
@@ -229,14 +245,17 @@ export default function AdminLawyersPage() {
                                 Lawyers
                             </h1>
                             <p className="mt-2 text-sm text-gray-500">
-                                Verify, suspend, and manage every lawyer on the platform.
+                                Verify, suspend, and manage every lawyer
+                                on the platform.
                             </p>
                         </div>
 
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={() =>
-                                    router.push('/admin-dashboard/lawyers/new')
+                                    router.push(
+                                        '/admin-dashboard/lawyers/new'
+                                    )
                                 }
                                 className="hidden rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-black transition hover:bg-amber-400 sm:flex sm:items-center sm:gap-2"
                             >
@@ -245,7 +264,9 @@ export default function AdminLawyersPage() {
                             </button>
 
                             <button
-                                onClick={() => loadLawyers({ silent: true })}
+                                onClick={() =>
+                                    loadLawyers({ silent: true })
+                                }
                                 disabled={refreshing}
                                 className="rounded-lg border border-white/10 bg-white/[0.04] p-2 transition hover:bg-white/[0.08] disabled:opacity-50"
                             >
@@ -260,7 +281,6 @@ export default function AdminLawyersPage() {
             </div>
 
             <main className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-                {/* Stats */}
                 <div className="mb-8">
                     <StatStrip
                         items={[
@@ -283,7 +303,6 @@ export default function AdminLawyersPage() {
                     />
                 </div>
 
-                {/* Filters + search */}
                 <AdminCard className="mb-6">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <SearchInput
@@ -302,7 +321,6 @@ export default function AdminLawyersPage() {
                     </div>
                 </AdminCard>
 
-                {/* List */}
                 <AdminCard className="overflow-hidden p-0">
                     {loading ? (
                         <div className="p-6">
@@ -321,42 +339,59 @@ export default function AdminLawyersPage() {
                     ) : (
                         <>
                             <div className="divide-y divide-white/[0.04]">
-                                {/* Table header (desktop) */}
                                 <div className="hidden grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_90px_90px_90px_110px_140px] items-center gap-4 px-6 py-3 text-[11px] font-medium uppercase tracking-wider text-gray-500 lg:grid">
                                     <span>Lawyer</span>
                                     <span>Specialization</span>
-                                    <span className="text-center">Clients</span>
-                                    <span className="text-center">Work</span>
-                                    <span className="text-center">Contracts</span>
-                                    <span className="text-center">Status</span>
-                                    <span className="text-right">Actions</span>
+                                    <span className="text-center">
+                                        Clients
+                                    </span>
+                                    <span className="text-center">
+                                        Work
+                                    </span>
+                                    <span className="text-center">
+                                        Contracts
+                                    </span>
+                                    <span className="text-center">
+                                        Status
+                                    </span>
+                                    <span className="text-right">
+                                        Actions
+                                    </span>
                                 </div>
 
                                 {lawyers.map((l, index) => (
                                     <motion.div
-                                        key={l.id}
+                                        key={
+                                            l.id ||
+                                            `lawyer-row-${index}`
+                                        }
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
-                                        transition={{ delay: index * 0.02 }}
+                                        transition={{
+                                            delay: index * 0.02,
+                                        }}
                                         className="grid grid-cols-1 items-center gap-4 px-6 py-4 transition hover:bg-white/[0.02] lg:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_90px_90px_90px_110px_140px]"
                                     >
-                                        {/* Lawyer identity */}
                                         <button
                                             onClick={() =>
-                                                router.push(`/admin-dashboard/lawyers/${l.id}`)
+                                                goToLawyer(l.id, l)
                                             }
                                             className="flex min-w-0 items-center gap-3 text-left"
                                         >
                                             <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-amber-500/15">
                                                 {l.profilePhoto ? (
                                                     <img
-                                                        src={l.profilePhoto}
+                                                        src={
+                                                            l.profilePhoto
+                                                        }
                                                         alt={l.fullName}
                                                         className="h-10 w-10 rounded-full object-cover"
                                                     />
                                                 ) : (
                                                     <span className="text-xs font-bold text-amber-400">
-                                                        {getInitials(l.fullName)}
+                                                        {getInitials(
+                                                            l.fullName
+                                                        )}
                                                     </span>
                                                 )}
                                             </div>
@@ -381,28 +416,33 @@ export default function AdminLawyersPage() {
                                             </div>
                                         </button>
 
-                                        {/* Specialization */}
                                         <div className="flex flex-wrap gap-1">
                                             {l.specialization.length ? (
-                                                l.specialization.slice(0, 2).map((s) => (
-                                                    <span
-                                                        key={s}
-                                                        className="rounded-md border border-white/[0.06] bg-white/[0.03] px-2 py-0.5 text-[11px] text-gray-300"
-                                                    >
-                                                        {s}
-                                                    </span>
-                                                ))
+                                                l.specialization
+                                                    .slice(0, 2)
+                                                    .map((s, i) => (
+                                                        <span
+                                                            key={`${s}-${i}`}
+                                                            className="rounded-md border border-white/[0.06] bg-white/[0.03] px-2 py-0.5 text-[11px] text-gray-300"
+                                                        >
+                                                            {s}
+                                                        </span>
+                                                    ))
                                             ) : (
-                                                <span className="text-xs text-gray-600">—</span>
-                                            )}
-                                            {l.specialization.length > 2 && (
-                                                <span className="text-[11px] text-gray-500">
-                                                    +{l.specialization.length - 2}
+                                                <span className="text-xs text-gray-600">
+                                                    —
                                                 </span>
                                             )}
+                                            {l.specialization.length >
+                                                2 && (
+                                                    <span className="text-[11px] text-gray-500">
+                                                        +
+                                                        {l.specialization
+                                                            .length - 2}
+                                                    </span>
+                                                )}
                                         </div>
 
-                                        {/* Clients */}
                                         <div className="flex items-center justify-between lg:justify-center">
                                             <span className="text-xs text-gray-500 lg:hidden">
                                                 Clients
@@ -413,7 +453,6 @@ export default function AdminLawyersPage() {
                                             </div>
                                         </div>
 
-                                        {/* Work */}
                                         <div className="flex items-center justify-between lg:justify-center">
                                             <span className="text-xs text-gray-500 lg:hidden">
                                                 Open Work
@@ -424,7 +463,6 @@ export default function AdminLawyersPage() {
                                             </div>
                                         </div>
 
-                                        {/* Contracts */}
                                         <div className="flex items-center justify-between lg:justify-center">
                                             <span className="text-xs text-gray-500 lg:hidden">
                                                 Contracts
@@ -435,19 +473,19 @@ export default function AdminLawyersPage() {
                                             </div>
                                         </div>
 
-                                        {/* Status */}
                                         <div className="flex items-center justify-between lg:justify-center">
                                             <span className="text-xs text-gray-500 lg:hidden">
                                                 Status
                                             </span>
-                                            <StatusBadge status={l.status} />
+                                            <StatusBadge
+                                                status={l.status}
+                                            />
                                         </div>
 
-                                        {/* Actions */}
                                         <div className="flex items-center justify-end gap-2">
                                             <button
                                                 onClick={() =>
-                                                    router.push(`/admin-dashboard/lawyers/${l.id}`)
+                                                    goToLawyer(l.id, l)
                                                 }
                                                 className="flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-gray-300 transition hover:border-amber-400/30 hover:text-amber-400"
                                             >
@@ -460,10 +498,15 @@ export default function AdminLawyersPage() {
                                                     onClick={(e) => {
                                                         e.stopPropagation()
                                                         setMenuOpenId(
-                                                            menuOpenId === l.id ? null : l.id
+                                                            menuOpenId ===
+                                                                l.id
+                                                                ? null
+                                                                : l.id
                                                         )
                                                     }}
-                                                    disabled={actionId === l.id}
+                                                    disabled={
+                                                        actionId === l.id
+                                                    }
                                                     className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-1.5 text-gray-400 transition hover:bg-white/[0.06] disabled:opacity-40"
                                                 >
                                                     <MoreVertical className="h-3.5 w-3.5" />
@@ -471,49 +514,69 @@ export default function AdminLawyersPage() {
 
                                                 {menuOpenId === l.id && (
                                                     <div
-                                                        onClick={(e) => e.stopPropagation()}
+                                                        onClick={(e) =>
+                                                            e.stopPropagation()
+                                                        }
                                                         className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-lg border border-white/[0.08] bg-slate-950 shadow-xl"
                                                     >
-                                                        {l.status !== 'active' && (
-                                                            <button
-                                                                onClick={() =>
-                                                                    l.status === 'pending'
-                                                                        ? handleVerify(l.id)
-                                                                        : handleActivate(l.id)
-                                                                }
-                                                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-green-400 transition hover:bg-white/[0.04]"
-                                                            >
-                                                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                                                {l.status === 'pending'
-                                                                    ? 'Verify & Activate'
-                                                                    : 'Activate'}
-                                                            </button>
-                                                        )}
+                                                        {l.status !==
+                                                            'active' && (
+                                                                <button
+                                                                    onClick={() =>
+                                                                        l.status ===
+                                                                            'pending'
+                                                                            ? handleVerify(
+                                                                                l.id
+                                                                            )
+                                                                            : handleActivate(
+                                                                                l.id
+                                                                            )
+                                                                    }
+                                                                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-green-400 transition hover:bg-white/[0.04]"
+                                                                >
+                                                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                                                    {l.status ===
+                                                                        'pending'
+                                                                        ? 'Verify & Activate'
+                                                                        : 'Activate'}
+                                                                </button>
+                                                            )}
 
-                                                        {l.status !== 'suspended' && (
-                                                            <button
-                                                                onClick={() => handleSuspend(l.id)}
-                                                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-400 transition hover:bg-white/[0.04]"
-                                                            >
-                                                                <Ban className="h-3.5 w-3.5" />
-                                                                Suspend
-                                                            </button>
-                                                        )}
+                                                        {l.status !==
+                                                            'suspended' && (
+                                                                <button
+                                                                    onClick={() =>
+                                                                        handleSuspend(
+                                                                            l.id
+                                                                        )
+                                                                    }
+                                                                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-400 transition hover:bg-white/[0.04]"
+                                                                >
+                                                                    <Ban className="h-3.5 w-3.5" />
+                                                                    Suspend
+                                                                </button>
+                                                            )}
 
-                                                        {l.status === 'suspended' && (
-                                                            <button
-                                                                onClick={() => handleActivate(l.id)}
-                                                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-blue-400 transition hover:bg-white/[0.04]"
-                                                            >
-                                                                <Play className="h-3.5 w-3.5" />
-                                                                Reactivate
-                                                            </button>
-                                                        )}
+                                                        {l.status ===
+                                                            'suspended' && (
+                                                                <button
+                                                                    onClick={() =>
+                                                                        handleActivate(
+                                                                            l.id
+                                                                        )
+                                                                    }
+                                                                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-blue-400 transition hover:bg-white/[0.04]"
+                                                                >
+                                                                    <Play className="h-3.5 w-3.5" />
+                                                                    Reactivate
+                                                                </button>
+                                                            )}
 
                                                         <button
                                                             onClick={() =>
-                                                                router.push(
-                                                                    `/admin-dashboard/lawyers/${l.id}`
+                                                                goToLawyer(
+                                                                    l.id,
+                                                                    l
                                                                 )
                                                             }
                                                             className="flex w-full items-center gap-2 border-t border-white/[0.04] px-3 py-2 text-left text-xs text-gray-400 transition hover:bg-white/[0.04]"

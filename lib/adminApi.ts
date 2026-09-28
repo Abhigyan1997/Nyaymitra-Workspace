@@ -4,29 +4,41 @@
 // CONFIG
 // =================================================================
 
-export const API_BASE =
-    process.env.NEXT_PUBLIC_API_URL || 'https://nyaymitra-backend-production.up.railway.app/api/v1'
+export const API_BASE = (
+    process.env.NEXT_PUBLIC_API_URL ||
+    'https://nyaymitra-backend-production.up.railway.app/api/v1'
+).replace(/\/$/, '')
 
 // =================================================================
-// ENDPOINT MAP — edit here if your backend paths change
+// ENDPOINT MAP
 // =================================================================
 
 export const ENDPOINTS = {
+    // ---------- Admin ----------
+    admin: {
+        profile: '/admin/settings/profile',
+    },
+
     // ---------- Lawyers ----------
     lawyers: {
-        list: '/lawyer/all',                          // GET   ?page&limit&search&status
-        stats: '/lawyer/stats',                   // GET
-        detail: (id: string) => `/lawyer/details/${id}`,  // GET
-        verify: (id: string) => `/lawyer/${id}/verify`,     // PATCH
-        suspend: (id: string) => `/lawyer/${id}/suspend`,   // PATCH
-        activate: (id: string) => `/lawyer/${id}/activate`, // PATCH
+        list: '/lawyer/all',
+        stats: '/lawyer/stats',
+        detail: (id: string) => `/lawyer/details/${id}`,
+        verify: (id: string) => `/lawyer/${id}/verify`,
+        suspend: (id: string) => `/lawyer/${id}/suspend`,
+        activate: (id: string) => `/lawyer/${id}/activate`,
+
+        // Admin-scoped related data
+        work: (id: string) => `/admin/lawyers/${id}/work`,
+        contracts: (id: string) => `/admin/lawyers/${id}/contracts`,
+        compliance: (id: string) => `/admin/lawyers/${id}/compliance`,
     },
 
     // ---------- Businesses ----------
     businesses: {
-        list: '/business',                          // GET
-        stats: '/business/stats',                   // GET
-        detail: (id: string) => `/business/${id}`,  // GET
+        list: '/business',
+        stats: '/business/stats',
+        detail: (id: string) => `/business/${id}`,
         verify: (id: string) => `/business/${id}/verify`,
         suspend: (id: string) => `/business/${id}/suspend`,
         activate: (id: string) => `/business/${id}/activate`,
@@ -34,52 +46,52 @@ export const ENDPOINTS = {
 
     // ---------- Contracts ----------
     contracts: {
-        list: '/contracts',                          // GET
-        stats: '/contracts/dashboard/stats',         // GET
-        detail: (id: string) => `/contracts/${id}`,  // GET
+        list: '/contracts',
+        stats: '/contracts/dashboard/stats',
+        detail: (id: string) => `/contracts/${id}`,
         approve: (id: string) => `/contracts/${id}/approve`,
         reject: (id: string) => `/contracts/${id}/reject`,
     },
 
     // ---------- Compliance ----------
     compliance: {
-        list: '/compliance',                          // GET
-        stats: '/compliance/stats',                   // GET
-        detail: (id: string) => `/compliance/${id}`,  // GET
+        list: '/compliance',
+        stats: '/compliance/stats',
+        detail: (id: string) => `/compliance/${id}`,
         resolve: (id: string) => `/compliance/${id}/resolve`,
     },
 
     // ---------- Legal Work ----------
     work: {
-        list: '/lawyer-works/work',                   // GET
-        stats: '/lawyer-works/stats',                 // GET
+        list: '/lawyer-works/work',
+        stats: '/lawyer-works/stats',
         detail: (id: string) => `/lawyer-works/work/${id}`,
     },
 
     // ---------- Documents ----------
     documents: {
-        list: '/documents',                           // GET
-        detail: (id: string) => `/documents/${id}`,   // GET
+        list: '/documents',
+        detail: (id: string) => `/documents/${id}`,
     },
 
-    // ---------- Team (admin users) ----------
+    // ---------- Team ----------
     team: {
-        list: '/team',                                // GET
-        stats: '/team/stats',                         // GET
-        detail: (id: string) => `/team/${id}`,        // GET
-        invite: '/team/invite',                       // POST
+        list: '/team',
+        stats: '/team/stats',
+        detail: (id: string) => `/team/${id}`,
+        invite: '/team/invite',
     },
 
     // ---------- Alerts ----------
     alerts: {
-        list: '/alerts',                              // GET
-        stats: '/alerts/stats',                       // GET
+        list: '/alerts',
+        stats: '/alerts/stats',
         resolve: (id: string) => `/alerts/${id}/resolve`,
     },
 
     // ---------- Messages ----------
     messages: {
-        threads: '/messages/threads',                 // GET
+        threads: '/messages/threads',
         thread: (id: string) => `/messages/threads/${id}`,
         send: (id: string) => `/messages/threads/${id}/send`,
     },
@@ -327,7 +339,6 @@ export type Lawyer = {
     verified: boolean
     createdAt?: string
 
-    // Extended fields
     bio?: string
     city?: string
     state?: string
@@ -357,6 +368,7 @@ export type Lawyer = {
 
     raw?: any
 }
+
 export type Business = {
     id: string
     companyName: string
@@ -440,87 +452,128 @@ export type AlertItem = {
     raw?: any
 }
 
+// ---------- Admin Profile ----------
+
+export interface AdminProfile {
+    _id: string
+    userId?: string
+    fullName: string
+    email: string
+    phone: string
+    profilePhoto: string
+    avatar: string
+    role: string
+    accountStatus: string
+    createdAt?: string
+    updatedAt?: string
+}
+
+export interface UpdateAdminProfilePayload {
+    fullName: string
+    phone: string
+}
+
 // =================================================================
 // NORMALIZERS
 // =================================================================
 
-// lib/adminApi.ts
-
 export function normalizeLawyer(item: any): Lawyer {
-    // Handle { success, lawyer: {...} } wrapper OR a bare lawyer object
     const l = item?.lawyer || item?.data?.lawyer || item?.data || item
 
     const user = l?.userInfo || {}
+    const details = l?.lawyerDetails || {}
     const stats = l?.stats || {}
 
-    const id = String(l?._id || l?.id || user?._id || '')
+    const id = String(
+        l?._id ||
+        l?.id ||
+        l?.userId?._id ||
+        (typeof l?.userId === 'string' ? l.userId : '') ||
+        user?._id ||
+        user?.userId ||
+        details?._id ||
+        details?.userId ||
+        ''
+    )
 
     const specialization =
         (Array.isArray(l?.specialization) && l.specialization) ||
         (Array.isArray(l?.specializations) && l.specializations) ||
+        (Array.isArray(details?.specialization) &&
+            details.specialization) ||
         []
 
     const practiceAreas =
         (Array.isArray(l?.practiceAreas) && l.practiceAreas) ||
         (Array.isArray(l?.courtType) && l.courtType) ||
+        (Array.isArray(details?.practiceAreas) &&
+            details.practiceAreas) ||
         []
 
     const accountStatus =
         l?.accountStatus ||
+        details?.accountStatus ||
         (l?.isDeleted ? 'inactive' : 'active')
 
+    const merged = { ...l, ...details }
+
     return {
-        // ---------- Core ----------
         id,
         fullName:
-            user?.fullName || l?.fullName || 'Unnamed Lawyer',
-        email: user?.email || l?.email || '',
-        phone: user?.phone || l?.phone || '',
+            user?.fullName ||
+            merged?.fullName ||
+            'Unnamed Lawyer',
+        email: user?.email || merged?.email || '',
+        phone: user?.phone || merged?.phone || '',
         profilePhoto:
-            l?.profilePhoto ||
+            merged?.profilePhoto ||
             user?.profilePhoto ||
             user?.profileImage ||
             undefined,
         specialization,
         practiceAreas,
-        experience: Number(l?.experience ?? 0) || undefined,
-        barCouncilId: l?.barCouncilId,
+        experience: Number(merged?.experience ?? 0) || undefined,
+        barCouncilId: merged?.barCouncilId,
         activeClients:
-            Number(stats.activeClients ?? l?.activeClients ?? 0) || 0,
-        openWork: Number(stats.openWork ?? l?.openWork ?? 0) || 0,
+            Number(stats.activeClients ?? merged?.activeClients ?? 0) || 0,
+        openWork: Number(stats.openWork ?? merged?.openWork ?? 0) || 0,
         contracts:
-            Number(stats.contracts ?? l?.contracts ?? 0) || 0,
+            Number(stats.contracts ?? merged?.contracts ?? 0) || 0,
         status: String(accountStatus).toLowerCase(),
-        verified: l?.kycStatus === 'verified',
-        createdAt: l?.createdAt,
+        verified: merged?.kycStatus === 'verified',
+        createdAt: merged?.createdAt,
 
-        // ---------- Extended fields from your backend ----------
-        bio: l?.bio,
-        city: l?.city,
-        state: l?.state,
-        accountStatus: l?.accountStatus,
-        kycStatus: l?.kycStatus,
-        availabilityStatus: l?.status,     // 'online' | 'offline'
-        isPremium: Boolean(l?.isPremium),
-        verifiedByPlatform: Boolean(l?.verifiedByPlatform),
-        payoutVerified: Boolean(l?.payoutVerified),
-        consultationFee: Number(l?.consultationFee ?? 0) || undefined,
+        bio: merged?.bio,
+        city: merged?.city,
+        state: merged?.state,
+        accountStatus: merged?.accountStatus,
+        kycStatus: merged?.kycStatus,
+        availabilityStatus: merged?.status,
+        isPremium: Boolean(merged?.isPremium),
+        verifiedByPlatform: Boolean(merged?.verifiedByPlatform),
+        payoutVerified: Boolean(merged?.payoutVerified),
+        consultationFee:
+            Number(merged?.consultationFee ?? 0) || undefined,
         consultationDurationMinutes:
-            Number(l?.consultationDurationMinutes ?? 0) || undefined,
-        consultationCount: Number(l?.consultationCount ?? 0) || 0,
-        averageRating: Number(l?.averageRating ?? 0) || 0,
-        totalReviews: Number(l?.totalReviews ?? 0) || 0,
-        profileViews: Number(l?.profileViews ?? 0) || 0,
-        languagesSpoken: Array.isArray(l?.languagesSpoken)
-            ? l.languagesSpoken
+            Number(merged?.consultationDurationMinutes ?? 0) ||
+            undefined,
+        consultationCount:
+            Number(merged?.consultationCount ?? 0) || 0,
+        averageRating: Number(merged?.averageRating ?? 0) || 0,
+        totalReviews: Number(merged?.totalReviews ?? 0) || 0,
+        profileViews: Number(merged?.profileViews ?? 0) || 0,
+        languagesSpoken: Array.isArray(merged?.languagesSpoken)
+            ? merged.languagesSpoken
             : [],
-        courtType: Array.isArray(l?.courtType) ? l.courtType : [],
-        consultationModes: l?.consultationModes,
+        courtType: Array.isArray(merged?.courtType)
+            ? merged.courtType
+            : [],
+        consultationModes: merged?.consultationModes,
         maxBookingsPerDay:
-            Number(l?.maxBookingsPerDay ?? 0) || undefined,
+            Number(merged?.maxBookingsPerDay ?? 0) || undefined,
         advanceNoticeHours:
-            Number(l?.advanceNoticeHours ?? 0) || undefined,
-        userId: l?.userId,
+            Number(merged?.advanceNoticeHours ?? 0) || undefined,
+        userId: merged?.userId,
 
         raw: l,
     }
@@ -567,9 +620,7 @@ export function normalizeBusiness(item: any): Business {
                 0
             ) || 0,
         openWork:
-            Number(
-                item?.stats?.openWork ?? item?.openWork ?? 0
-            ) || 0,
+            Number(item?.stats?.openWork ?? item?.openWork ?? 0) || 0,
         status:
             details?.status ||
             item?.status ||
@@ -581,54 +632,68 @@ export function normalizeBusiness(item: any): Business {
 }
 
 export function normalizeContract(item: any): Contract {
+    const c = item?.contract || item?.item || item
+
     return {
-        id: getId(item),
-        title: item?.title || item?.name || 'Untitled contract',
-        client: getBusinessName(item),
+        id: String(c?._id || c?.id || ''),
+        title: c?.title || c?.name || 'Untitled contract',
+        client: getBusinessName(c) || getBusinessName(item),
         lawyer:
-            item?.lawyer?.userInfo?.fullName ||
+            c?.lawyer?.userInfo?.fullName ||
+            c?.lawyer?.fullName ||
+            c?.assignedProfessional?.fullName ||
+            c?.assignedLawyer?.fullName ||
             item?.lawyer?.fullName ||
-            item?.assignedLawyer?.fullName ||
             undefined,
-        status: item?.status,
+        status: c?.status,
         dueDate:
-            item?.expiryDate ||
-            item?.renewalDate ||
-            item?.effectiveDate ||
-            item?.dueDate,
-        createdAt: item?.createdAt,
+            c?.expiryDate ||
+            c?.renewalDate ||
+            c?.effectiveDate ||
+            c?.dueDate,
+        createdAt: c?.createdAt,
         raw: item,
     }
 }
 
 export function normalizeCompliance(item: any): ComplianceItem {
+    const c = item?.compliance || item?.item || item
+
     return {
-        id: getId(item),
-        name: item?.name || item?.title || 'Compliance item',
-        client: getBusinessName(item),
-        status: item?.status,
-        priority: item?.priority,
-        dueDate: item?.dueDate,
-        description: item?.description,
+        id: String(c?._id || c?.id || ''),
+        name:
+            c?.name ||
+            c?.title ||
+            c?.complianceName ||
+            'Compliance item',
+        client: getBusinessName(c) || getBusinessName(item),
+        status: c?.status,
+        priority: c?.priority,
+        dueDate: c?.dueDate || c?.deadline,
+        description: c?.description,
         raw: item,
     }
 }
 
 export function normalizeWork(item: any): WorkItem {
+    const w = item?.work || item?.item || item
+
     return {
-        id: getId(item),
-        title: item?.title || 'Work item',
-        type: item?.workType || item?.sourceType || 'Task',
-        client: getBusinessName(item),
+        id: String(w?._id || w?.id || ''),
+        title: w?.title || w?.name || 'Work item',
+        type: w?.workType || w?.sourceType || 'Task',
+        client: getBusinessName(w) || getBusinessName(item),
         lawyer:
-            item?.assignedTo?.userInfo?.fullName ||
-            item?.assignedTo?.fullName ||
+            w?.assignedTo?.userInfo?.fullName ||
+            w?.assignedTo?.fullName ||
+            w?.lawyer?.fullName ||
+            w?.lawyer?.userInfo?.fullName ||
             item?.lawyer?.fullName ||
             undefined,
-        status: item?.status,
-        priority: item?.priority,
-        dueDate: item?.dueDate,
-        description: item?.description,
+        status: w?.status,
+        priority: w?.priority,
+        dueDate: w?.dueDate || w?.deadline || w?.expectedDeliveryDate,
+        description: w?.description,
         raw: item,
     }
 }
@@ -690,7 +755,36 @@ function buildQuery(params: Record<string, any>) {
     return q ? `?${q}` : ''
 }
 
+function unwrap<T>(result: any): T {
+    if (result && typeof result === 'object' && 'success' in result) {
+        if (result.success === false) {
+            throw new ApiError(
+                result.message || 'Request failed',
+                400
+            )
+        }
+        if ('data' in result) return result.data as T
+    }
+    return result as T
+}
+
 export const adminApi = {
+    // ---------------- Admin Profile ----------------
+    getAdminProfile: async (): Promise<AdminProfile> => {
+        const res = await apiFetch<any>(ENDPOINTS.admin.profile)
+        return unwrap<AdminProfile>(res)
+    },
+
+    updateAdminProfile: async (
+        payload: UpdateAdminProfilePayload
+    ): Promise<AdminProfile> => {
+        const res = await apiFetch<any>(ENDPOINTS.admin.profile, {
+            method: 'PATCH',
+            body: payload,
+        })
+        return unwrap<AdminProfile>(res)
+    },
+
     // ---------------- Lawyers ----------------
     listLawyers: (params: {
         page?: number
@@ -714,6 +808,35 @@ export const adminApi = {
     activateLawyer: (id: string) =>
         apiFetch<any>(ENDPOINTS.lawyers.activate(id), { method: 'PATCH' }),
 
+    // ---- Lawyer-scoped related data (admin) ----
+    lawyerWork: (
+        id: string,
+        params?: { page?: number; limit?: number }
+    ) =>
+        apiFetch<any>(
+            `${ENDPOINTS.lawyers.work(id)}${buildQuery(params || {})}`
+        ),
+
+    lawyerContracts: (
+        id: string,
+        params?: { page?: number; limit?: number }
+    ) =>
+        apiFetch<any>(
+            `${ENDPOINTS.lawyers.contracts(id)}${buildQuery(
+                params || {}
+            )}`
+        ),
+
+    lawyerCompliance: (
+        id: string,
+        params?: { page?: number; limit?: number }
+    ) =>
+        apiFetch<any>(
+            `${ENDPOINTS.lawyers.compliance(id)}${buildQuery(
+                params || {}
+            )}`
+        ),
+
     // ---------------- Businesses ----------------
     listBusinesses: (params: {
         page?: number
@@ -721,7 +844,9 @@ export const adminApi = {
         search?: string
         status?: string
     }) =>
-        apiFetch<any>(`${ENDPOINTS.businesses.list}${buildQuery(params)}`),
+        apiFetch<any>(
+            `${ENDPOINTS.businesses.list}${buildQuery(params)}`
+        ),
 
     businessStats: () => apiFetch<any>(ENDPOINTS.businesses.stats),
 
@@ -732,10 +857,14 @@ export const adminApi = {
         apiFetch<any>(ENDPOINTS.businesses.verify(id), { method: 'PATCH' }),
 
     suspendBusiness: (id: string) =>
-        apiFetch<any>(ENDPOINTS.businesses.suspend(id), { method: 'PATCH' }),
+        apiFetch<any>(ENDPOINTS.businesses.suspend(id), {
+            method: 'PATCH',
+        }),
 
     activateBusiness: (id: string) =>
-        apiFetch<any>(ENDPOINTS.businesses.activate(id), { method: 'PATCH' }),
+        apiFetch<any>(ENDPOINTS.businesses.activate(id), {
+            method: 'PATCH',
+        }),
 
     // ---------------- Contracts ----------------
     listContracts: (params: {
@@ -752,10 +881,14 @@ export const adminApi = {
         apiFetch<any>(ENDPOINTS.contracts.detail(id)),
 
     approveContract: (id: string) =>
-        apiFetch<any>(ENDPOINTS.contracts.approve(id), { method: 'PATCH' }),
+        apiFetch<any>(ENDPOINTS.contracts.approve(id), {
+            method: 'PATCH',
+        }),
 
     rejectContract: (id: string) =>
-        apiFetch<any>(ENDPOINTS.contracts.reject(id), { method: 'PATCH' }),
+        apiFetch<any>(ENDPOINTS.contracts.reject(id), {
+            method: 'PATCH',
+        }),
 
     // ---------------- Compliance ----------------
     listCompliance: (params: {
@@ -765,7 +898,9 @@ export const adminApi = {
         status?: string
         priority?: string
     }) =>
-        apiFetch<any>(`${ENDPOINTS.compliance.list}${buildQuery(params)}`),
+        apiFetch<any>(
+            `${ENDPOINTS.compliance.list}${buildQuery(params)}`
+        ),
 
     complianceStats: () => apiFetch<any>(ENDPOINTS.compliance.stats),
 
@@ -773,7 +908,9 @@ export const adminApi = {
         apiFetch<any>(ENDPOINTS.compliance.detail(id)),
 
     resolveCompliance: (id: string) =>
-        apiFetch<any>(ENDPOINTS.compliance.resolve(id), { method: 'PATCH' }),
+        apiFetch<any>(ENDPOINTS.compliance.resolve(id), {
+            method: 'PATCH',
+        }),
 
     // ---------------- Work ----------------
     listWork: (params: {
@@ -797,14 +934,19 @@ export const adminApi = {
         search?: string
         category?: string
     }) =>
-        apiFetch<any>(`${ENDPOINTS.documents.list}${buildQuery(params)}`),
+        apiFetch<any>(
+            `${ENDPOINTS.documents.list}${buildQuery(params)}`
+        ),
 
     documentDetail: (id: string) =>
         apiFetch<any>(ENDPOINTS.documents.detail(id)),
 
     // ---------------- Team ----------------
-    listTeam: (params: { page?: number; limit?: number; search?: string }) =>
-        apiFetch<any>(`${ENDPOINTS.team.list}${buildQuery(params)}`),
+    listTeam: (params: {
+        page?: number
+        limit?: number
+        search?: string
+    }) => apiFetch<any>(`${ENDPOINTS.team.list}${buildQuery(params)}`),
 
     teamStats: () => apiFetch<any>(ENDPOINTS.team.stats),
 
@@ -837,7 +979,9 @@ export const adminApi = {
 
     // ---------------- Messages ----------------
     listThreads: (params: { page?: number; limit?: number }) =>
-        apiFetch<any>(`${ENDPOINTS.messages.threads}${buildQuery(params)}`),
+        apiFetch<any>(
+            `${ENDPOINTS.messages.threads}${buildQuery(params)}`
+        ),
 
     getThread: (id: string) =>
         apiFetch<any>(ENDPOINTS.messages.thread(id)),
@@ -859,7 +1003,21 @@ export const adminApi = {
 }
 
 // =================================================================
-// BADGE COUNTS (for sidebar) — one round-trip helper
+// STANDALONE EXPORTS
+// =================================================================
+
+export const getAdminProfile = async (): Promise<AdminProfile> => {
+    return adminApi.getAdminProfile()
+}
+
+export const updateAdminProfile = async (
+    payload: UpdateAdminProfilePayload
+): Promise<AdminProfile> => {
+    return adminApi.updateAdminProfile(payload)
+}
+
+// =================================================================
+// BADGE COUNTS (for sidebar)
 // =================================================================
 
 export async function fetchSidebarBadges(): Promise<
@@ -871,11 +1029,31 @@ export async function fetchSidebarBadges(): Promise<
     const results: Record<string, number | null> = {}
 
     const jobs: Array<[string, string, string]> = [
-        ['/admin-dashboard/lawyers', ENDPOINTS.lawyers.stats, 'totalLawyers'],
-        ['/admin-dashboard/businesses', ENDPOINTS.businesses.stats, 'totalBusinesses'],
-        ['/admin-dashboard/contracts', ENDPOINTS.contracts.stats, 'totalContracts'],
-        ['/admin-dashboard/compliance', ENDPOINTS.compliance.stats, 'totalCompliance'],
-        ['/admin-dashboard/alerts', ENDPOINTS.alerts.stats, 'totalAlerts'],
+        [
+            '/admin-dashboard/lawyers',
+            ENDPOINTS.lawyers.stats,
+            'totalLawyers',
+        ],
+        [
+            '/admin-dashboard/businesses',
+            ENDPOINTS.businesses.stats,
+            'totalBusinesses',
+        ],
+        [
+            '/admin-dashboard/contracts',
+            ENDPOINTS.contracts.stats,
+            'totalContracts',
+        ],
+        [
+            '/admin-dashboard/compliance',
+            ENDPOINTS.compliance.stats,
+            'totalCompliance',
+        ],
+        [
+            '/admin-dashboard/alerts',
+            ENDPOINTS.alerts.stats,
+            'totalAlerts',
+        ],
     ]
 
     await Promise.all(

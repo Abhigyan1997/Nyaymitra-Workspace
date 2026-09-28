@@ -3,7 +3,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
 import {
     Scale,
     ArrowLeft,
@@ -12,7 +11,6 @@ import {
     Phone,
     MapPin,
     Briefcase,
-    Users,
     FileText,
     Shield,
     CheckCircle2,
@@ -24,8 +22,6 @@ import {
     Star,
     Eye,
     Crown,
-    Video,
-    MessageCircle,
     Building2,
     Languages,
     CreditCard,
@@ -87,9 +83,29 @@ export default function AdminLawyerDetailPage() {
     const [actionId, setActionId] = useState<string | null>(null)
     const [tab, setTab] = useState<Tab>('overview')
 
+    // Per-tab loading + "already fetched" flags
+    const [tabLoading, setTabLoading] = useState<{
+        work: boolean
+        contracts: boolean
+        compliance: boolean
+    }>({ work: false, contracts: false, compliance: false })
+
+    const [tabLoaded, setTabLoaded] = useState<{
+        work: boolean
+        contracts: boolean
+        compliance: boolean
+    }>({ work: false, contracts: false, compliance: false })
+
+    // ==================================================
+    // Load lawyer detail
+    // ==================================================
     const load = useCallback(
         async (opts?: { silent?: boolean }) => {
-            if (!id) return
+            if (!id || id === 'undefined' || id === '') {
+                setError('Invalid lawyer id in URL.')
+                setLoading(false)
+                return
+            }
 
             try {
                 if (opts?.silent) setRefreshing(true)
@@ -99,55 +115,23 @@ export default function AdminLawyerDetailPage() {
 
                 const detailResponse = await adminApi.lawyerDetail(id)
 
-                // Your backend returns { success: true, lawyer: {...} }
                 const lawyerRaw =
                     detailResponse?.lawyer ||
+                    detailResponse?.data?.lawyer ||
                     detailResponse?.data ||
                     detailResponse
 
                 setRaw(lawyerRaw)
                 setLawyer(normalizeLawyer(lawyerRaw))
-
-                // Related data (best-effort — silently ignore failures)
-                const [workRes, contractRes, complianceRes] =
-                    await Promise.allSettled([
-                        adminApi.listWork({
-                            page: 1,
-                            limit: 50,
-                            search: lawyerRaw?.fullName || undefined,
-                        }),
-                        adminApi.listContracts({
-                            page: 1,
-                            limit: 50,
-                            search: lawyerRaw?.fullName || undefined,
-                        }),
-                        adminApi.listCompliance({
-                            page: 1,
-                            limit: 50,
-                            search: lawyerRaw?.fullName || undefined,
-                        }),
-                    ])
-
-                if (workRes.status === 'fulfilled') {
-                    setWork(getArray<any>(workRes.value).map(normalizeWork))
-                }
-                if (contractRes.status === 'fulfilled') {
-                    setContracts(
-                        getArray<any>(contractRes.value).map(normalizeContract)
-                    )
-                }
-                if (complianceRes.status === 'fulfilled') {
-                    setCompliance(
-                        getArray<any>(complianceRes.value).map(normalizeCompliance)
-                    )
-                }
             } catch (err) {
                 if (err instanceof ApiError && err.status === 401) {
                     router.push('/signin')
                     return
                 }
                 setError(
-                    err instanceof Error ? err.message : 'Failed to load lawyer.'
+                    err instanceof Error
+                        ? err.message
+                        : 'Failed to load lawyer.'
                 )
             } finally {
                 setLoading(false)
@@ -161,6 +145,70 @@ export default function AdminLawyerDetailPage() {
         load()
     }, [load])
 
+    // Reset tab caches when the lawyer id changes
+    useEffect(() => {
+        setTabLoaded({
+            work: false,
+            contracts: false,
+            compliance: false,
+        })
+        setWork([])
+        setContracts([])
+        setCompliance([])
+    }, [id])
+
+    // ==================================================
+    // Lazy-load a single tab
+    // ==================================================
+    const loadTab = useCallback(
+        async (
+            which: 'work' | 'contracts' | 'compliance',
+            force = false
+        ) => {
+            if (!id || id === 'undefined' || id === '') return
+            if (!force && tabLoaded[which]) return
+
+            setTabLoading((prev) => ({ ...prev, [which]: true }))
+
+            try {
+                if (which === 'work') {
+                    const res = await adminApi.lawyerWork(id, {
+                        page: 1,
+                        limit: 50,
+                    })
+                    setWork(getArray<any>(res).map(normalizeWork))
+                } else if (which === 'contracts') {
+                    const res = await adminApi.lawyerContracts(id, {
+                        page: 1,
+                        limit: 50,
+                    })
+                    setContracts(
+                        getArray<any>(res).map(normalizeContract)
+                    )
+                } else {
+                    const res = await adminApi.lawyerCompliance(id, {
+                        page: 1,
+                        limit: 50,
+                    })
+                    setCompliance(
+                        getArray<any>(res).map(normalizeCompliance)
+                    )
+                }
+
+                setTabLoaded((prev) => ({ ...prev, [which]: true }))
+            } catch (err) {
+                // Non-fatal — the tab will show the empty state.
+                console.warn(`[lawyer/${which}] fetch failed:`, err)
+            } finally {
+                setTabLoading((prev) => ({ ...prev, [which]: false }))
+            }
+        },
+        [id, tabLoaded]
+    )
+
+    // ==================================================
+    // Actions
+    // ==================================================
     const handleVerify = async () => {
         if (!id) return
         try {
@@ -201,6 +249,16 @@ export default function AdminLawyerDetailPage() {
         }
     }
 
+    const handleRefreshAll = async () => {
+        await load({ silent: true })
+        if (tab !== 'overview') {
+            await loadTab(tab, true)
+        }
+    }
+
+    // ==================================================
+    // Derived
+    // ==================================================
     const location = useMemo(() => {
         const parts = [lawyer?.city, lawyer?.state].filter(Boolean)
         return parts.length ? parts.join(', ') : null
@@ -228,13 +286,17 @@ export default function AdminLawyerDetailPage() {
         )
     }
 
+    // ==================================================
+    // Render
+    // ==================================================
     return (
         <div className="min-h-full text-white">
-            {/* Header */}
             <div className="border-b border-white/[0.05] bg-black/40 backdrop-blur-md">
                 <div className="mx-auto max-w-7xl px-6 py-6 lg:px-8">
                     <button
-                        onClick={() => router.push('/admin-dashboard/lawyers')}
+                        onClick={() =>
+                            router.push('/admin-dashboard/lawyers')
+                        }
                         className="mb-4 flex items-center gap-2 text-xs text-gray-500 transition hover:text-amber-400"
                     >
                         <ArrowLeft className="h-3.5 w-3.5" />
@@ -262,7 +324,9 @@ export default function AdminLawyerDetailPage() {
                                             />
                                         ) : (
                                             <span className="text-2xl font-bold text-amber-400">
-                                                {getInitials(lawyer.fullName)}
+                                                {getInitials(
+                                                    lawyer.fullName
+                                                )}
                                             </span>
                                         )}
                                     </div>
@@ -303,30 +367,35 @@ export default function AdminLawyerDetailPage() {
                                         {lawyer.experience ? (
                                             <span className="flex items-center gap-1.5">
                                                 <Clock className="h-3.5 w-3.5" />
-                                                {lawyer.experience} yrs experience
+                                                {lawyer.experience} yrs
+                                                experience
                                             </span>
                                         ) : null}
                                         {lawyer.createdAt && (
                                             <span className="flex items-center gap-1.5">
                                                 <Calendar className="h-3.5 w-3.5" />
-                                                Joined {formatDate(lawyer.createdAt)}
+                                                Joined{' '}
+                                                {formatDate(
+                                                    lawyer.createdAt
+                                                )}
                                             </span>
                                         )}
                                     </div>
 
-                                    {/* Badges row */}
                                     <div className="mt-4 flex flex-wrap items-center gap-2">
-                                        {/* Account status */}
-                                        <StatusBadge status={lawyer.accountStatus} />
+                                        <StatusBadge
+                                            status={lawyer.accountStatus}
+                                        />
 
-                                        {/* KYC */}
                                         {lawyer.kycStatus && (
                                             <span
-                                                className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium ${lawyer.kycStatus === 'verified'
-                                                        ? 'border-green-500/20 bg-green-500/10 text-green-400'
-                                                        : lawyer.kycStatus === 'pending'
-                                                            ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
-                                                            : 'border-red-500/20 bg-red-500/10 text-red-400'
+                                                className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium ${lawyer.kycStatus ===
+                                                    'verified'
+                                                    ? 'border-green-500/20 bg-green-500/10 text-green-400'
+                                                    : lawyer.kycStatus ===
+                                                        'pending'
+                                                        ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+                                                        : 'border-red-500/20 bg-red-500/10 text-red-400'
                                                     }`}
                                             >
                                                 <CheckCircle2 className="h-3 w-3" />
@@ -334,25 +403,27 @@ export default function AdminLawyerDetailPage() {
                                             </span>
                                         )}
 
-                                        {/* Availability */}
                                         {lawyer.availabilityStatus && (
                                             <span
-                                                className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium ${lawyer.availabilityStatus === 'online'
-                                                        ? 'border-green-500/20 bg-green-500/10 text-green-400'
-                                                        : 'border-gray-500/20 bg-gray-500/10 text-gray-400'
+                                                className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium ${lawyer.availabilityStatus ===
+                                                    'online'
+                                                    ? 'border-green-500/20 bg-green-500/10 text-green-400'
+                                                    : 'border-gray-500/20 bg-gray-500/10 text-gray-400'
                                                     }`}
                                             >
                                                 <span
-                                                    className={`h-1.5 w-1.5 rounded-full ${lawyer.availabilityStatus === 'online'
-                                                            ? 'bg-green-400'
-                                                            : 'bg-gray-500'
+                                                    className={`h-1.5 w-1.5 rounded-full ${lawyer.availabilityStatus ===
+                                                        'online'
+                                                        ? 'bg-green-400'
+                                                        : 'bg-gray-500'
                                                         }`}
                                                 />
-                                                {lawyer.availabilityStatus}
+                                                {
+                                                    lawyer.availabilityStatus
+                                                }
                                             </span>
                                         )}
 
-                                        {/* Premium */}
                                         {lawyer.isPremium && (
                                             <span className="inline-flex items-center gap-1 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-400">
                                                 <Crown className="h-3 w-3" />
@@ -360,7 +431,6 @@ export default function AdminLawyerDetailPage() {
                                             </span>
                                         )}
 
-                                        {/* Verified by platform */}
                                         {lawyer.verifiedByPlatform && (
                                             <span className="inline-flex items-center gap-1 rounded-lg border border-blue-500/20 bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-400">
                                                 <CheckCircle2 className="h-3 w-3" />
@@ -368,7 +438,6 @@ export default function AdminLawyerDetailPage() {
                                             </span>
                                         )}
 
-                                        {/* Payout */}
                                         {lawyer.payoutVerified && (
                                             <span className="inline-flex items-center gap-1 rounded-lg border border-green-500/20 bg-green-500/10 px-2 py-1 text-xs font-medium text-green-400">
                                                 <CreditCard className="h-3 w-3" />
@@ -377,23 +446,23 @@ export default function AdminLawyerDetailPage() {
                                         )}
                                     </div>
 
-                                    {/* Specialization chips */}
                                     {lawyer.specialization.length > 0 && (
                                         <div className="mt-3 flex flex-wrap gap-2">
-                                            {lawyer.specialization.map((s) => (
-                                                <span
-                                                    key={s}
-                                                    className="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-xs text-amber-400"
-                                                >
-                                                    {s}
-                                                </span>
-                                            ))}
+                                            {lawyer.specialization.map(
+                                                (s, i) => (
+                                                    <span
+                                                        key={`${s}-${i}`}
+                                                        className="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-xs text-amber-400"
+                                                    >
+                                                        {s}
+                                                    </span>
+                                                )
+                                            )}
                                         </div>
                                     )}
                                 </div>
                             </div>
 
-                            {/* Actions */}
                             <div className="flex items-center gap-2">
                                 {!isActive && (
                                     <button
@@ -418,12 +487,14 @@ export default function AdminLawyerDetailPage() {
                                 )}
 
                                 <button
-                                    onClick={() => load({ silent: true })}
+                                    onClick={handleRefreshAll}
                                     disabled={refreshing}
                                     className="rounded-lg border border-white/10 bg-white/[0.04] p-2 transition hover:bg-white/[0.08] disabled:opacity-50"
                                 >
                                     <RefreshCw
-                                        className={`h-5 w-5 text-gray-400 ${refreshing ? 'animate-spin' : ''
+                                        className={`h-5 w-5 text-gray-400 ${refreshing
+                                            ? 'animate-spin'
+                                            : ''
                                             }`}
                                     />
                                 </button>
@@ -434,7 +505,6 @@ export default function AdminLawyerDetailPage() {
             </div>
 
             <main className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-                {/* Stats */}
                 <div className="mb-8">
                     <StatStrip
                         items={[
@@ -450,7 +520,9 @@ export default function AdminLawyerDetailPage() {
                                 label: 'Rating',
                                 value:
                                     lawyer?.averageRating != null
-                                        ? `${lawyer.averageRating.toFixed(1)}★ (${lawyer.totalReviews})`
+                                        ? `${lawyer.averageRating.toFixed(
+                                            1
+                                        )}★ (${lawyer.totalReviews})`
                                         : '—',
                             },
                             {
@@ -469,10 +541,15 @@ export default function AdminLawyerDetailPage() {
                     {TABS.map((t) => (
                         <button
                             key={t.value}
-                            onClick={() => setTab(t.value)}
+                            onClick={() => {
+                                setTab(t.value)
+                                if (t.value !== 'overview') {
+                                    loadTab(t.value)
+                                }
+                            }}
                             className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tab === t.value
-                                    ? 'bg-amber-500/15 text-amber-400'
-                                    : 'text-gray-400 hover:bg-white/[0.04] hover:text-white'
+                                ? 'bg-amber-500/15 text-amber-400'
+                                : 'text-gray-400 hover:bg-white/[0.04] hover:text-white'
                                 }`}
                         >
                             {t.label}
@@ -487,17 +564,17 @@ export default function AdminLawyerDetailPage() {
                     </div>
                 ) : tab === 'overview' ? (
                     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                        {/* Bio */}
                         {lawyer?.bio && (
                             <AdminCard className="lg:col-span-2">
-                                <h2 className="mb-4 text-lg font-semibold">Bio</h2>
+                                <h2 className="mb-4 text-lg font-semibold">
+                                    Bio
+                                </h2>
                                 <p className="whitespace-pre-line text-sm leading-relaxed text-gray-300">
                                     {lawyer.bio}
                                 </p>
                             </AdminCard>
                         )}
 
-                        {/* Professional */}
                         <AdminCard>
                             <h2 className="mb-6 text-lg font-semibold">
                                 Professional Details
@@ -531,7 +608,9 @@ export default function AdminLawyerDetailPage() {
                                     label="Languages Spoken"
                                     value={
                                         lawyer?.languagesSpoken?.length
-                                            ? lawyer.languagesSpoken.join(', ')
+                                            ? lawyer.languagesSpoken.join(
+                                                ', '
+                                            )
                                             : '—'
                                     }
                                 />
@@ -543,12 +622,15 @@ export default function AdminLawyerDetailPage() {
                                 <DetailRow
                                     icon={UserIcon}
                                     label="Gender"
-                                    value={raw?.gender ? capitalize(raw.gender) : '—'}
+                                    value={
+                                        raw?.gender
+                                            ? capitalize(raw.gender)
+                                            : '—'
+                                    }
                                 />
                             </div>
                         </AdminCard>
 
-                        {/* Consultation */}
                         <AdminCard>
                             <h2 className="mb-6 text-lg font-semibold">
                                 Consultation
@@ -577,7 +659,9 @@ export default function AdminLawyerDetailPage() {
                                     label="Modes"
                                     value={
                                         consultationModeLabels.length
-                                            ? consultationModeLabels.join(', ')
+                                            ? consultationModeLabels.join(
+                                                ', '
+                                            )
                                             : '—'
                                     }
                                 />
@@ -586,7 +670,9 @@ export default function AdminLawyerDetailPage() {
                                     label="Max Bookings / Day"
                                     value={
                                         lawyer?.maxBookingsPerDay
-                                            ? String(lawyer.maxBookingsPerDay)
+                                            ? String(
+                                                lawyer.maxBookingsPerDay
+                                            )
                                             : '—'
                                     }
                                 />
@@ -604,14 +690,16 @@ export default function AdminLawyerDetailPage() {
                                     label="Rating"
                                     value={
                                         lawyer?.averageRating != null
-                                            ? `${lawyer.averageRating.toFixed(1)} ★ (${lawyer.totalReviews} reviews)`
+                                            ? `${lawyer.averageRating.toFixed(
+                                                1
+                                            )} ★ (${lawyer.totalReviews
+                                            } reviews)`
                                             : 'No reviews yet'
                                     }
                                 />
                             </div>
                         </AdminCard>
 
-                        {/* Contact & Location */}
                         <AdminCard>
                             <h2 className="mb-6 text-lg font-semibold">
                                 Contact & Location
@@ -621,14 +709,18 @@ export default function AdminLawyerDetailPage() {
                                     icon={Mail}
                                     label="Email"
                                     value={
-                                        raw?.userInfo?.email || raw?.email || '—'
+                                        raw?.userInfo?.email ||
+                                        raw?.email ||
+                                        '—'
                                     }
                                 />
                                 <DetailRow
                                     icon={Phone}
                                     label="Phone"
                                     value={
-                                        raw?.userInfo?.phone || raw?.phone || '—'
+                                        raw?.userInfo?.phone ||
+                                        raw?.phone ||
+                                        '—'
                                     }
                                 />
                                 <DetailRow
@@ -646,7 +738,9 @@ export default function AdminLawyerDetailPage() {
                                     label="Joined"
                                     value={
                                         lawyer?.createdAt
-                                            ? formatDate(lawyer.createdAt)
+                                            ? formatDate(
+                                                lawyer.createdAt
+                                            )
                                             : '—'
                                     }
                                 />
@@ -655,14 +749,15 @@ export default function AdminLawyerDetailPage() {
                                     label="Last Updated"
                                     value={
                                         raw?.updatedAt
-                                            ? formatDateTime(raw.updatedAt)
+                                            ? formatDateTime(
+                                                raw.updatedAt
+                                            )
                                             : '—'
                                     }
                                 />
                             </div>
                         </AdminCard>
 
-                        {/* Account & Security */}
                         <AdminCard>
                             <h2 className="mb-6 text-lg font-semibold">
                                 Account & Security
@@ -681,22 +776,34 @@ export default function AdminLawyerDetailPage() {
                                 <DetailRow
                                     icon={Eye}
                                     label="Availability"
-                                    value={lawyer?.availabilityStatus || '—'}
+                                    value={
+                                        lawyer?.availabilityStatus || '—'
+                                    }
                                 />
                                 <DetailRow
                                     icon={Crown}
                                     label="Premium"
-                                    value={lawyer?.isPremium ? 'Yes' : 'No'}
+                                    value={
+                                        lawyer?.isPremium ? 'Yes' : 'No'
+                                    }
                                 />
                                 <DetailRow
                                     icon={CreditCard}
                                     label="Payout Verified"
-                                    value={lawyer?.payoutVerified ? 'Yes' : 'No'}
+                                    value={
+                                        lawyer?.payoutVerified
+                                            ? 'Yes'
+                                            : 'No'
+                                    }
                                 />
                                 <DetailRow
                                     icon={Shield}
                                     label="Platform Verified"
-                                    value={lawyer?.verifiedByPlatform ? 'Yes' : 'No'}
+                                    value={
+                                        lawyer?.verifiedByPlatform
+                                            ? 'Yes'
+                                            : 'No'
+                                    }
                                 />
                                 {raw?.suspensionReason && (
                                     <DetailRow
@@ -708,53 +815,37 @@ export default function AdminLawyerDetailPage() {
                             </div>
                         </AdminCard>
 
-                        {/* Notification Preferences */}
                         {raw?.notificationPreferences && (
                             <AdminCard className="lg:col-span-2">
                                 <h2 className="mb-4 text-lg font-semibold">
                                     Notification Preferences
                                 </h2>
                                 <div className="flex flex-wrap gap-3">
-                                    {Object.entries(raw.notificationPreferences).map(
-                                        ([key, val]) => (
-                                            <span
-                                                key={key}
-                                                className={`rounded-lg border px-3 py-1.5 text-xs font-medium capitalize ${val
-                                                        ? 'border-green-500/20 bg-green-500/10 text-green-400'
-                                                        : 'border-white/[0.08] bg-white/[0.02] text-gray-500'
-                                                    }`}
-                                            >
-                                                {key}: {val ? 'on' : 'off'}
-                                            </span>
-                                        )
-                                    )}
+                                    {Object.entries(
+                                        raw.notificationPreferences
+                                    ).map(([key, val]) => (
+                                        <span
+                                            key={key}
+                                            className={`rounded-lg border px-3 py-1.5 text-xs font-medium capitalize ${val
+                                                ? 'border-green-500/20 bg-green-500/10 text-green-400'
+                                                : 'border-white/[0.08] bg-white/[0.02] text-gray-500'
+                                                }`}
+                                        >
+                                            {key}: {val ? 'on' : 'off'}
+                                        </span>
+                                    ))}
                                 </div>
                             </AdminCard>
                         )}
-
-                        {/* Debug — remove later */}
-                        <AdminCard className="lg:col-span-2">
-                            <details className="group">
-                                <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-400 transition hover:text-white">
-                                    <AlertTriangle className="h-4 w-4 text-amber-400" />
-                                    Debug: raw lawyer JSON
-                                    <span className="ml-auto text-xs text-gray-600 group-open:hidden">
-                                        Show
-                                    </span>
-                                    <span className="ml-auto hidden text-xs text-gray-600 group-open:inline">
-                                        Hide
-                                    </span>
-                                </summary>
-                                <pre className="mt-4 max-h-96 overflow-auto rounded-lg border border-white/[0.06] bg-black/60 p-4 text-xs text-gray-400">
-                                    {JSON.stringify(raw, null, 2)}
-                                </pre>
-                            </details>
-                        </AdminCard>
                     </div>
                 ) : tab === 'work' ? (
                     <AdminCard>
-                        <h2 className="mb-6 text-lg font-semibold">Assigned Work</h2>
-                        {work.length === 0 ? (
+                        <h2 className="mb-6 text-lg font-semibold">
+                            Assigned Work
+                        </h2>
+                        {tabLoading.work ? (
+                            <Skeleton rows={5} />
+                        ) : work.length === 0 ? (
                             <EmptyState
                                 title="No work assigned"
                                 description="This lawyer has no work items yet."
@@ -762,9 +853,9 @@ export default function AdminLawyerDetailPage() {
                             />
                         ) : (
                             <div className="space-y-2">
-                                {work.map((item) => (
+                                {work.map((item, i) => (
                                     <div
-                                        key={item.id}
+                                        key={item.id || `work-${i}`}
                                         className="flex items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-4"
                                     >
                                         <Briefcase className="h-4 w-4 shrink-0 text-amber-400" />
@@ -775,11 +866,15 @@ export default function AdminLawyerDetailPage() {
                                             <p className="mt-1 truncate text-xs text-gray-600">
                                                 {item.type} • {item.client}
                                                 {item.dueDate
-                                                    ? ` • Due ${formatDate(item.dueDate)}`
+                                                    ? ` • Due ${formatDate(
+                                                        item.dueDate
+                                                    )}`
                                                     : ''}
                                             </p>
                                         </div>
-                                        <StatusBadge status={item.status} />
+                                        <StatusBadge
+                                            status={item.status}
+                                        />
                                     </div>
                                 ))}
                             </div>
@@ -787,8 +882,12 @@ export default function AdminLawyerDetailPage() {
                     </AdminCard>
                 ) : tab === 'contracts' ? (
                     <AdminCard>
-                        <h2 className="mb-6 text-lg font-semibold">Contracts</h2>
-                        {contracts.length === 0 ? (
+                        <h2 className="mb-6 text-lg font-semibold">
+                            Contracts
+                        </h2>
+                        {tabLoading.contracts ? (
+                            <Skeleton rows={5} />
+                        ) : contracts.length === 0 ? (
                             <EmptyState
                                 title="No contracts"
                                 description="No contracts are assigned to this lawyer."
@@ -796,9 +895,9 @@ export default function AdminLawyerDetailPage() {
                             />
                         ) : (
                             <div className="space-y-2">
-                                {contracts.map((c) => (
+                                {contracts.map((c, i) => (
                                     <div
-                                        key={c.id}
+                                        key={c.id || `contract-${i}`}
                                         className="flex items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-4"
                                     >
                                         <FileText className="h-4 w-4 shrink-0 text-amber-400" />
@@ -809,11 +908,15 @@ export default function AdminLawyerDetailPage() {
                                             <p className="mt-1 truncate text-xs text-gray-600">
                                                 {c.client}
                                                 {c.dueDate
-                                                    ? ` • ${formatDate(c.dueDate)}`
+                                                    ? ` • ${formatDate(
+                                                        c.dueDate
+                                                    )}`
                                                     : ''}
                                             </p>
                                         </div>
-                                        <StatusBadge status={c.status} />
+                                        <StatusBadge
+                                            status={c.status}
+                                        />
                                     </div>
                                 ))}
                             </div>
@@ -821,8 +924,12 @@ export default function AdminLawyerDetailPage() {
                     </AdminCard>
                 ) : (
                     <AdminCard>
-                        <h2 className="mb-6 text-lg font-semibold">Compliance</h2>
-                        {compliance.length === 0 ? (
+                        <h2 className="mb-6 text-lg font-semibold">
+                            Compliance
+                        </h2>
+                        {tabLoading.compliance ? (
+                            <Skeleton rows={5} />
+                        ) : compliance.length === 0 ? (
                             <EmptyState
                                 title="No compliance items"
                                 description="No compliance items assigned."
@@ -830,9 +937,11 @@ export default function AdminLawyerDetailPage() {
                             />
                         ) : (
                             <div className="space-y-2">
-                                {compliance.map((c) => (
+                                {compliance.map((c, i) => (
                                     <div
-                                        key={c.id}
+                                        key={
+                                            c.id || `compliance-${i}`
+                                        }
                                         className="flex items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-4"
                                     >
                                         <Shield className="h-4 w-4 shrink-0 text-amber-400" />
@@ -843,11 +952,15 @@ export default function AdminLawyerDetailPage() {
                                             <p className="mt-1 text-xs text-gray-600">
                                                 {c.client}
                                                 {c.dueDate
-                                                    ? ` • Due ${formatDate(c.dueDate)}`
+                                                    ? ` • Due ${formatDate(
+                                                        c.dueDate
+                                                    )}`
                                                     : ''}
                                             </p>
                                         </div>
-                                        <StatusBadge status={c.status} />
+                                        <StatusBadge
+                                            status={c.status}
+                                        />
                                     </div>
                                 ))}
                             </div>
