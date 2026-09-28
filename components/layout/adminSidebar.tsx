@@ -50,12 +50,12 @@ const navItems: NavItem[] = [
     { label: 'Overview', icon: BarChart3, href: '/admin-dashboard', badgeKey: null },
     { label: 'Businesses', icon: Building2, href: '/admin-dashboard/business', badgeKey: null },
     { label: 'Lawyers', icon: Scale, href: '/admin-dashboard/lawyers', badgeKey: 'team' },
-    { label: 'Users', icon: Users, href: '/admin-dashboard/users', badgeKey: null },
+    // { label: 'Users', icon: Users, href: '/admin-dashboard/users', badgeKey: null },
     { label: 'Legal Requests', icon: ClipboardList, href: '/admin-dashboard/legal-requests', badgeKey: 'contractRequests' },
     { label: 'Contracts', icon: FileCheck, href: '/admin-dashboard/contracts', badgeKey: 'contracts' },
     { label: 'Compliance', icon: ShieldCheck, href: '/admin-dashboard/compliance', badgeKey: 'compliance' },
     { label: 'Documents', icon: FileText, href: '/admin-dashboard/documents', badgeKey: null },
-    { label: 'Consultations', icon: BriefcaseBusiness, href: '/admin-dashboard/consultations', badgeKey: null },
+    // { label: 'Consultations', icon: BriefcaseBusiness, href: '/admin-dashboard/consultations', badgeKey: null },
     { label: 'Support', icon: HelpCircle, href: '/admin-dashboard/support', badgeKey: null },
 ]
 

@@ -1,32 +1,110 @@
 // app/admin/page.tsx
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
-    AlertCircle,
     AlertTriangle,
     ArrowRight,
-    Briefcase,
     CheckCircle2,
     ChevronRight,
     FileText,
-    MessageCircle,
     RefreshCw,
     Shield,
-    Users,
-    Building2,
     Scale,
+    Building2,
     TrendingUp,
-    DollarSign,
     Activity,
     UserCog,
     BarChart3,
     Clock,
+    AlertCircle,
+    Users,
+    Inbox,
 } from 'lucide-react'
 
-// ---------- Static demo data ----------
+// ---------- API base ----------
+const API_BASE =
+    process.env.NEXT_PUBLIC_API_BASE_URL || 'https://nyaymitra-backend-production.up.railway.app/api/v1'
+
+// ---------- Types (matching the real API response) ----------
+
+type Overview = {
+    totalBusinesses: number
+    totalUsers: number
+    totalLawyers: number
+    totalContractRequests: number
+    pendingContractRequests: number
+    assignedContractRequests: number
+    convertedContractRequests: number
+    totalContracts: number
+    activeContracts: number
+    reviewContracts: number
+    executedContracts: number
+    pendingInvitations: number
+}
+
+type StatusCount = { _id: string; count: number }
+
+type ProfessionalRef = {
+    _id: string
+    fullName: string
+    email: string
+    role: string
+}
+
+type BusinessRef = {
+    _id: string
+    companyName: string
+}
+
+type RecentContractRequest = {
+    _id: string
+    priority?: string
+    status?: string
+    title?: string
+    contractType?: string
+    description?: string
+    requestNumber?: string
+    expectedDeliveryDate?: string
+    createdAt?: string
+    business?: BusinessRef
+    assignedProfessional?: ProfessionalRef
+}
+
+type RecentContract = {
+    _id: string
+    status?: string
+    priority?: string
+    title?: string
+    contractType?: string
+    contractNumber?: string
+    createdAt?: string
+    updatedAt?: string
+    effectiveDate?: string
+    expiryDate?: string
+    business?: BusinessRef
+    assignedProfessional?: ProfessionalRef
+    counterparty?: { name?: string; company?: string }
+}
+
+type AdminStatsData = {
+    overview: Overview
+    requestStatusStats: StatusCount[]
+    contractStatusStats: StatusCount[]
+    userRoleStats: StatusCount[]
+    recentContractRequests: RecentContractRequest[]
+    recentContracts: RecentContract[]
+}
+
+type AdminStatsResponse = {
+    success: boolean
+    message: string
+    data: AdminStatsData
+}
+
+// ---------- UI types ----------
 
 type StatCard = {
     label: string
@@ -41,29 +119,27 @@ type ActivityItem = {
     id: string
     title: string
     meta: string
-    kind: 'lawyer' | 'business' | 'contract' | 'compliance' | 'work'
     status?: string
     priority?: string
     dueDate?: string
 }
 
-type LawyerRow = {
+type ContractRow = {
     id: string
-    name: string
-    email: string
-    specialization: string
-    activeClients: number
-    openWork: number
+    title: string
+    contractNumber: string
+    contractType: string
+    business: string
+    professional: string
     status: string
+    priority?: string
+    date?: string
 }
 
 type BusinessRow = {
     id: string
     name: string
-    industry: string
-    assignedLawyer: string
     contracts: number
-    compliance: number
     status: string
 }
 
@@ -84,6 +160,15 @@ function getGreeting(hour: number) {
     if (hour < 12) return 'Good morning'
     if (hour < 17) return 'Good afternoon'
     return 'Good evening'
+}
+
+function getAuthToken(): string | null {
+    if (typeof window === 'undefined') return null
+    return (
+        localStorage.getItem('token') ||
+        localStorage.getItem('accessToken') ||
+        sessionStorage.getItem('token')
+    )
 }
 
 // ---------- Reusable UI ----------
@@ -122,12 +207,17 @@ const Card = ({
 function StatusBadge({ status }: { status?: string }) {
     if (!status) return null
 
-    const key = status.toLowerCase()
+    // Normalise keys like "Internal Review" -> "internal-review"
+    const key = status.toLowerCase().trim().replace(/\s+/g, '-')
     const colors: Record<string, string> = {
         active: 'bg-green-500/10 text-green-400 border-green-500/20',
+        executed: 'bg-green-500/10 text-green-400 border-green-500/20',
         verified: 'bg-green-500/10 text-green-400 border-green-500/20',
         completed: 'bg-green-500/10 text-green-400 border-green-500/20',
         approved: 'bg-green-500/10 text-green-400 border-green-500/20',
+        converted: 'bg-green-500/10 text-green-400 border-green-500/20',
+        'internal-review':
+            'bg-amber-500/10 text-amber-400 border-amber-500/20',
         'in-progress': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
         pending: 'bg-gray-500/10 text-gray-400 border-gray-500/20',
         review: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
@@ -143,7 +233,7 @@ function StatusBadge({ status }: { status?: string }) {
         <span
             className={`inline-flex rounded-lg border px-2 py-1 text-xs font-medium ${className}`}
         >
-            {status.replace(/-/g, ' ')}
+            {status}
         </span>
     )
 }
@@ -200,200 +290,32 @@ function Skeleton({ rows = 3 }: { rows?: number }) {
     )
 }
 
-// ---------- Static demo data ----------
+function ErrorState({
+    message,
+    onRetry,
+}: {
+    message: string
+    onRetry: () => void
+}) {
+    return (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+            <AlertCircle className="mb-4 h-10 w-10 text-red-400/70" />
+            <h3 className="text-sm font-medium text-gray-300">
+                Failed to load data
+            </h3>
+            <p className="mt-1 max-w-sm text-xs text-gray-600">{message}</p>
+            <button
+                type="button"
+                onClick={onRetry}
+                className="mt-4 rounded-lg border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-xs font-medium text-amber-400 transition hover:bg-amber-400/20"
+            >
+                Try again
+            </button>
+        </div>
+    )
+}
 
-const STAT_CARDS: StatCard[] = [
-    {
-        label: 'Total Lawyers',
-        value: 148,
-        delta: '+6 this month',
-        trend: 'up',
-        icon: Scale,
-        href: '/admin/lawyers',
-    },
-    {
-        label: 'Businesses',
-        value: 312,
-        delta: '+18 this month',
-        trend: 'up',
-        icon: Building2,
-        href: '/admin/businesses',
-    },
-    {
-        label: 'Active Contracts',
-        value: 487,
-        delta: '+24 this week',
-        trend: 'up',
-        icon: FileText,
-        href: '/admin/contracts',
-    },
-    {
-        label: 'Pending Compliance',
-        value: 37,
-        delta: '8 overdue',
-        trend: 'down',
-        icon: Shield,
-        href: '/admin/compliance',
-    },
-]
-
-const REVENUE_SNAPSHOT = [
-    { label: 'MRR', value: '₹12.4L', delta: '+8.2%' },
-    { label: 'ARR', value: '₹1.48Cr', delta: '+11.5%' },
-    { label: 'Active Subscriptions', value: '286', delta: '+14' },
-    { label: 'Churn', value: '2.1%', delta: '-0.4%' },
-]
-
-const ACTIVITY: ActivityItem[] = [
-    {
-        id: 'a1',
-        title: 'Compliance deadline missed — GST filing',
-        meta: 'Acme Industries • Assigned to Adv. Rao',
-        kind: 'compliance',
-        status: 'overdue',
-        priority: 'urgent',
-        dueDate: '2026-09-18',
-    },
-    {
-        id: 'a2',
-        title: 'New lawyer application pending review',
-        meta: 'Adv. Priya Menon • Corporate Law',
-        kind: 'lawyer',
-        status: 'review',
-        priority: 'high',
-    },
-    {
-        id: 'a3',
-        title: 'Contract renewal requires approval',
-        meta: 'Vertex Solutions • MSA Renewal',
-        kind: 'contract',
-        status: 'pending',
-        priority: 'high',
-        dueDate: '2026-09-28',
-    },
-    {
-        id: 'a4',
-        title: 'Business onboarding incomplete',
-        meta: 'Nova Retail • KYC pending',
-        kind: 'business',
-        status: 'pending',
-        priority: 'medium',
-    },
-    {
-        id: 'a5',
-        title: 'Legal work item escalated',
-        meta: 'Zenith Pharma • Employment dispute',
-        kind: 'work',
-        priority: 'urgent',
-        status: 'in-progress',
-        dueDate: '2026-09-25',
-    },
-    {
-        id: 'a6',
-        title: 'New compliance item assigned',
-        meta: 'Bright Logistics • PF filing',
-        kind: 'compliance',
-        status: 'pending',
-        priority: 'medium',
-        dueDate: '2026-10-05',
-    },
-]
-
-const LAWYERS: LawyerRow[] = [
-    {
-        id: 'l1',
-        name: 'Adv. Ananya Rao',
-        email: 'ananya.rao@nyaymitra.in',
-        specialization: 'Corporate & M&A',
-        activeClients: 12,
-        openWork: 9,
-        status: 'active',
-    },
-    {
-        id: 'l2',
-        name: 'Adv. Rohit Sharma',
-        email: 'rohit.sharma@nyaymitra.in',
-        specialization: 'Tax & Compliance',
-        activeClients: 8,
-        openWork: 14,
-        status: 'active',
-    },
-    {
-        id: 'l3',
-        name: 'Adv. Priya Menon',
-        email: 'priya.menon@nyaymitra.in',
-        specialization: 'Employment Law',
-        activeClients: 5,
-        openWork: 3,
-        status: 'review',
-    },
-    {
-        id: 'l4',
-        name: 'Adv. Karan Verma',
-        email: 'karan.verma@nyaymitra.in',
-        specialization: 'IP & Tech',
-        activeClients: 10,
-        openWork: 7,
-        status: 'active',
-    },
-    {
-        id: 'l5',
-        name: 'Adv. Sneha Iyer',
-        email: 'sneha.iyer@nyaymitra.in',
-        specialization: 'Real Estate',
-        activeClients: 0,
-        openWork: 0,
-        status: 'suspended',
-    },
-]
-
-const BUSINESSES: BusinessRow[] = [
-    {
-        id: 'b1',
-        name: 'Acme Industries Pvt Ltd',
-        industry: 'Manufacturing',
-        assignedLawyer: 'Adv. Rohit Sharma',
-        contracts: 14,
-        compliance: 6,
-        status: 'active',
-    },
-    {
-        id: 'b2',
-        name: 'Vertex Solutions',
-        industry: 'IT Services',
-        assignedLawyer: 'Adv. Ananya Rao',
-        contracts: 9,
-        compliance: 3,
-        status: 'active',
-    },
-    {
-        id: 'b3',
-        name: 'Nova Retail',
-        industry: 'Retail',
-        assignedLawyer: 'Unassigned',
-        contracts: 0,
-        compliance: 2,
-        status: 'pending',
-    },
-    {
-        id: 'b4',
-        name: 'Zenith Pharma',
-        industry: 'Healthcare',
-        assignedLawyer: 'Adv. Karan Verma',
-        contracts: 11,
-        compliance: 4,
-        status: 'active',
-    },
-    {
-        id: 'b5',
-        name: 'Bright Logistics',
-        industry: 'Logistics',
-        assignedLawyer: 'Adv. Priya Menon',
-        contracts: 6,
-        compliance: 5,
-        status: 'active',
-    },
-]
+// ---------- Quick actions ----------
 
 const QUICK_ACTIONS = [
     { label: 'Lawyers', icon: Scale, href: '/admin/lawyers' },
@@ -409,18 +331,231 @@ const QUICK_ACTIONS = [
 export default function AdminDashboardPage() {
     const router = useRouter()
     const [greeting] = useState(() => getGreeting(new Date().getHours()))
+
+    const [loading, setLoading] = useState(true)
     const [refreshing, setRefreshing] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [stats, setStats] = useState<AdminStatsData | null>(null)
 
-    // Purely for demo — simulates a refresh
-    const handleRefresh = () => {
-        setRefreshing(true)
-        window.setTimeout(() => setRefreshing(false), 700)
-    }
+    // ----- Fetch -----
+    const fetchStats = useCallback(async (isRefresh = false) => {
+        if (isRefresh) setRefreshing(true)
+        else setLoading(true)
+        setError(null)
 
-    const attention = useMemo(() => ACTIVITY.slice(0, 6), [])
+        try {
+            const token = getAuthToken()
 
-    const recentLawyers = useMemo(() => LAWYERS.slice(0, 5), [])
-    const recentBusinesses = useMemo(() => BUSINESSES.slice(0, 5), [])
+            const res = await fetch(`${API_BASE}/admin/stats`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                // credentials: 'include', // if using httpOnly cookies
+            })
+
+            if (!res.ok) {
+                if (res.status === 401)
+                    throw new Error('Unauthorized. Please sign in again.')
+                if (res.status === 403)
+                    throw new Error('Forbidden. You do not have admin access.')
+                throw new Error(`Request failed with status ${res.status}`)
+            }
+
+            const json: AdminStatsResponse = await res.json()
+
+            // ⬇️ KEY FIX: unwrap the `data` envelope
+            if (!json.success || !json.data) {
+                throw new Error(json.message || 'Malformed response from server.')
+            }
+
+            setStats(json.data)
+        } catch (err) {
+            const message =
+                err instanceof Error
+                    ? err.message
+                    : 'Something went wrong while fetching stats.'
+            setError(message)
+        } finally {
+            setLoading(false)
+            setRefreshing(false)
+        }
+    }, [])
+
+    useEffect(() => {
+        fetchStats()
+    }, [fetchStats])
+
+    const handleRefresh = () => fetchStats(true)
+
+    // ----- Derive stat cards -----
+    const statCards: StatCard[] = useMemo(() => {
+        if (!stats) return []
+        const o = stats.overview
+
+        return [
+            {
+                label: 'Total Lawyers',
+                value: o.totalLawyers ?? 0,
+                delta: `${o.totalUsers ?? 0} total users`,
+                trend: 'up',
+                icon: Scale,
+                href: '/admin-dashboard/lawyers',
+            },
+            {
+                label: 'Businesses',
+                value: o.totalBusinesses ?? 0,
+                delta: `${o.pendingInvitations ?? 0} pending invites`,
+                trend: 'up',
+                icon: Building2,
+                href: '/admin-dashboard/businesses',
+            },
+            {
+                label: 'Active Contracts',
+                value: o.activeContracts ?? 0,
+                delta: `${o.totalContracts ?? 0} total contracts`,
+                trend: 'up',
+                icon: FileText,
+                href: '/admin-dashboard/contracts',
+            },
+            {
+                label: 'Review Contracts',
+                value: o.reviewContracts ?? 0,
+                delta: `${o.pendingContractRequests ?? 0} pending requests`,
+                trend: o.reviewContracts > 0 ? 'down' : 'flat',
+                icon: Shield,
+                href: '/admin/contracts',
+            },
+        ]
+    }, [stats])
+
+    // ----- Derive "Revenue Snapshot" as request/contract pipeline -----
+    const pipeline = useMemo(() => {
+        if (!stats) return []
+        const o = stats.overview
+        return [
+            {
+                label: 'Contract Requests',
+                value: String(o.totalContractRequests ?? 0),
+                delta: `${o.pendingContractRequests ?? 0} pending`,
+            },
+            {
+                label: 'Converted',
+                value: String(o.convertedContractRequests ?? 0),
+                delta: `${o.assignedContractRequests ?? 0} assigned`,
+            },
+            {
+                label: 'Total Contracts',
+                value: String(o.totalContracts ?? 0),
+                delta: `${o.executedContracts ?? 0} executed`,
+            },
+            {
+                label: 'Pending Invites',
+                value: String(o.pendingInvitations ?? 0),
+                delta: `${o.totalUsers ?? 0} users`,
+            },
+        ]
+    }, [stats])
+
+    // ----- "Needs Attention" from recentContractRequests -----
+    const attention: ActivityItem[] = useMemo(() => {
+        if (!stats) return []
+        return stats.recentContractRequests.slice(0, 6).map((r) => ({
+            id: r._id,
+            title: r.title || r.contractType || 'Contract request',
+            meta: `${r.business?.companyName ?? 'Unknown business'} • ${r.assignedProfessional?.fullName ?? 'Unassigned'
+                }${r.requestNumber ? ` • ${r.requestNumber}` : ''}`,
+            status: r.status,
+            priority: r.priority,
+            dueDate: r.expectedDeliveryDate,
+        }))
+    }, [stats])
+
+    // ----- "Recent Activity" from recentContracts -----
+    const recentContracts: ContractRow[] = useMemo(() => {
+        if (!stats) return []
+        return stats.recentContracts.map((c) => ({
+            id: c._id,
+            title: c.title || c.contractType || 'Contract',
+            contractNumber: c.contractNumber ?? '—',
+            contractType: c.contractType ?? '—',
+            business: c.business?.companyName ?? '—',
+            professional: c.assignedProfessional?.fullName ?? 'Unassigned',
+            status: c.status ?? '—',
+            priority: c.priority,
+            date: c.createdAt,
+        }))
+    }, [stats])
+
+    // ----- Businesses aggregated from recentContracts -----
+    const businesses: BusinessRow[] = useMemo(() => {
+        if (!stats) return []
+        const map = new Map<string, BusinessRow>()
+        for (const c of stats.recentContracts) {
+            const id = c.business?._id
+            const name = c.business?.companyName
+            if (!id || !name) continue
+            const existing = map.get(id)
+            if (existing) {
+                existing.contracts += 1
+            } else {
+                map.set(id, {
+                    id,
+                    name,
+                    contracts: 1,
+                    status: 'active',
+                })
+            }
+        }
+        return Array.from(map.values())
+    }, [stats])
+
+    // ----- Platform health from status stats + role stats -----
+    const platformHealth = useMemo(() => {
+        if (!stats) return []
+        const o = stats.overview
+        const totalRoleUsers = stats.userRoleStats.reduce(
+            (sum, r) => sum + r.count,
+            0
+        )
+        return [
+            {
+                label: 'Total Users',
+                value: String(totalRoleUsers || o.totalUsers || 0),
+                status: 'Healthy',
+                tone: 'good' as const,
+            },
+            {
+                label: 'Contract Requests',
+                value: `${o.convertedContractRequests}/${o.totalContractRequests} converted`,
+                status:
+                    o.pendingContractRequests > 0 ? 'Needs review' : 'Healthy',
+                tone:
+                    o.pendingContractRequests > 0
+                        ? ('warn' as const)
+                        : ('good' as const),
+            },
+            {
+                label: 'Contracts in Review',
+                value: String(o.reviewContracts ?? 0),
+                status: o.reviewContracts > 0 ? 'Needs review' : 'Healthy',
+                tone:
+                    o.reviewContracts > 0
+                        ? ('warn' as const)
+                        : ('good' as const),
+            },
+            {
+                label: 'Pending Invitations',
+                value: String(o.pendingInvitations ?? 0),
+                status: o.pendingInvitations > 0 ? 'Needs review' : 'Healthy',
+                tone:
+                    o.pendingInvitations > 0
+                        ? ('warn' as const)
+                        : ('good' as const),
+            },
+        ]
+    }, [stats])
 
     return (
         <div className="min-h-full text-white">
@@ -455,7 +590,7 @@ export default function AdminDashboardPage() {
                         <button
                             type="button"
                             onClick={handleRefresh}
-                            disabled={refreshing}
+                            disabled={refreshing || loading}
                             className="rounded-lg border border-white/10 bg-white/[0.04] p-2 transition hover:bg-white/[0.08] disabled:opacity-50"
                         >
                             <RefreshCw
@@ -468,462 +603,460 @@ export default function AdminDashboardPage() {
             </div>
 
             <main className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-                {/* Stat cards */}
-                <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    {STAT_CARDS.map((item, index) => {
-                        const Icon = item.icon
+                {/* Loading / error */}
+                {loading && !stats && (
+                    <Card className="mb-8">
+                        <Skeleton rows={6} />
+                    </Card>
+                )}
 
-                        return (
-                            <motion.div
-                                key={item.label}
-                                initial={{ opacity: 0, y: 15 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: index * 0.05 }}
-                            >
-                                <Card
-                                    clickable
-                                    onClick={() => router.push(item.href)}
-                                >
-                                    <div className="flex items-start justify-between">
-                                        <div>
-                                            <p className="text-sm text-gray-500">
-                                                {item.label}
-                                            </p>
-                                            <p className="mt-2 text-4xl font-light">
-                                                {item.value}
-                                            </p>
-                                            {item.delta && (
-                                                <p
-                                                    className={`mt-1 text-xs ${item.trend === 'up'
-                                                        ? 'text-green-400'
-                                                        : item.trend ===
-                                                            'down'
-                                                            ? 'text-red-400'
-                                                            : 'text-gray-500'
-                                                        }`}
-                                                >
-                                                    {item.delta}
-                                                </p>
-                                            )}
-                                        </div>
+                {error && !stats && (
+                    <Card className="mb-8">
+                        <ErrorState
+                            message={error}
+                            onRetry={() => fetchStats()}
+                        />
+                    </Card>
+                )}
 
-                                        <Icon className="h-5 w-5 text-amber-400/70" />
-                                    </div>
-
-                                    <div className="mt-4 flex items-center gap-1 text-xs text-amber-400">
-                                        Open
-                                        <ArrowRight className="h-3 w-3" />
-                                    </div>
-                                </Card>
-                            </motion.div>
-                        )
-                    })}
-                </div>
-
-                {/* Revenue snapshot */}
-                <Card className="mb-8">
-                    <div className="mb-6 flex items-center justify-between">
-                        <div>
-                            <h2 className="text-lg font-semibold">
-                                Revenue Snapshot
-                            </h2>
-                            <p className="mt-1 text-sm text-gray-600">
-                                Subscription health at a glance
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => router.push('/admin/analytics')}
-                            className="text-xs text-amber-400 hover:text-amber-300"
-                        >
-                            View analytics
-                        </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                        {REVENUE_SNAPSHOT.map((item) => (
-                            <div
-                                key={item.label}
-                                className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-4"
-                            >
-                                <div className="flex items-center justify-between">
-                                    <p className="text-xs text-gray-500">
-                                        {item.label}
-                                    </p>
-                                    <TrendingUp className="h-3.5 w-3.5 text-green-400" />
-                                </div>
-                                <p className="mt-2 text-2xl font-light">
-                                    {item.value}
-                                </p>
-                                <p className="mt-1 text-xs text-green-400">
-                                    {item.delta}
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-                </Card>
-
-                {/* Attention + Activity */}
-                <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-                    <Card>
-                        <div className="mb-6 flex items-center justify-between">
-                            <div>
-                                <h2 className="text-lg font-semibold">
-                                    Needs Your Attention
-                                </h2>
-                                <p className="mt-1 text-sm text-gray-600">
-                                    Urgent and high-priority items across the
-                                    platform
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => router.push('/admin/alerts')}
-                                className="text-xs text-amber-400 hover:text-amber-300"
-                            >
-                                View all
-                            </button>
-                        </div>
-
-                        {attention.length === 0 ? (
-                            <EmptyState
-                                title="You're all caught up"
-                                description="No urgent items require your attention."
-                                icon={CheckCircle2}
-                            />
-                        ) : (
-                            <div className="space-y-2">
-                                {attention.map((item) => (
-                                    <button
-                                        key={item.id}
-                                        type="button"
-                                        onClick={() =>
-                                            router.push('/admin/alerts')
-                                        }
-                                        className="flex w-full items-center gap-3 rounded-xl border border-white/[0.05] bg-white/[0.03] p-4 text-left transition hover:border-amber-400/30 hover:bg-white/[0.05]"
-                                    >
-                                        <AlertTriangle className="h-4 w-4 shrink-0 text-red-400" />
-                                        <div className="min-w-0 flex-1">
-                                            <p className="truncate text-sm font-medium">
-                                                {item.title}
-                                            </p>
-                                            <p className="mt-1 text-xs text-gray-600">
-                                                {item.meta}
-                                                {item.dueDate
-                                                    ? ` • Due ${formatDate(
-                                                        item.dueDate
-                                                    )}`
-                                                    : ''}
-                                            </p>
-                                        </div>
-                                        <PriorityBadge
-                                            priority={item.priority}
-                                        />
-                                        <ChevronRight className="h-4 w-4 text-gray-600" />
-                                    </button>
-                                ))}
+                {stats && (
+                    <>
+                        {error && (
+                            <div className="mb-6 flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+                                <AlertCircle className="h-4 w-4 shrink-0" />
+                                <span>{error}</span>
                             </div>
                         )}
-                    </Card>
 
-                    <Card>
-                        <div className="mb-6 flex items-center justify-between">
-                            <div>
-                                <h2 className="text-lg font-semibold">
-                                    Recent Activity
-                                </h2>
-                                <p className="mt-1 text-sm text-gray-600">
-                                    What's happening across the platform
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => router.push('/admin/analytics/activity')}
-                                className="text-xs text-amber-400 hover:text-amber-300"
-                            >
-                                View all
-                            </button>
-                        </div>
-
-                        <div className="space-y-2">
-                            {ACTIVITY.map((item) => (
-                                <div
-                                    key={`act-${item.id}`}
-                                    className="flex items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-4"
-                                >
-                                    <Activity className="h-4 w-4 shrink-0 text-amber-400" />
-                                    <div className="min-w-0 flex-1">
-                                        <p className="truncate text-sm font-medium">
-                                            {item.title}
-                                        </p>
-                                        <p className="mt-1 truncate text-xs text-gray-600">
-                                            {item.meta}
-                                        </p>
-                                    </div>
-                                    <StatusBadge status={item.status} />
-                                </div>
-                            ))}
-                        </div>
-                    </Card>
-                </div>
-
-                {/* Lawyers + Businesses */}
-                <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-                    <Card>
-                        <div className="mb-6 flex items-center justify-between">
-                            <div>
-                                <h2 className="text-lg font-semibold">
-                                    Lawyers
-                                </h2>
-                                <p className="mt-1 text-sm text-gray-600">
-                                    Recently active on the platform
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => router.push('/admin/lawyers')}
-                                className="flex items-center gap-1 text-sm font-medium text-amber-400 hover:text-amber-300"
-                            >
-                                View all
-                                <ChevronRight className="h-4 w-4" />
-                            </button>
-                        </div>
-
-                        <div className="space-y-2">
-                            {recentLawyers.map((lawyer) => (
-                                <button
-                                    key={lawyer.id}
-                                    type="button"
-                                    onClick={() =>
-                                        router.push(
-                                            `/admin/lawyers/${lawyer.id}`
-                                        )
-                                    }
-                                    className="grid w-full grid-cols-[minmax(0,1fr)_70px_70px_90px_20px] items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 text-left transition hover:border-amber-400/30 hover:bg-white/[0.05]"
-                                >
-                                    <div className="min-w-0">
-                                        <p className="truncate text-sm font-medium text-white">
-                                            {lawyer.name}
-                                        </p>
-                                        <p className="mt-0.5 truncate text-xs text-gray-600">
-                                            {lawyer.specialization}
-                                        </p>
-                                    </div>
-
-                                    <div className="text-center">
-                                        <p className="text-sm text-gray-300">
-                                            {lawyer.activeClients}
-                                        </p>
-                                        <p className="text-[10px] text-gray-700">
-                                            Clients
-                                        </p>
-                                    </div>
-
-                                    <div className="text-center">
-                                        <p className="text-sm text-gray-300">
-                                            {lawyer.openWork}
-                                        </p>
-                                        <p className="text-[10px] text-gray-700">
-                                            Work
-                                        </p>
-                                    </div>
-
-                                    <div className="text-center">
-                                        <StatusBadge
-                                            status={lawyer.status}
-                                        />
-                                    </div>
-
-                                    <ChevronRight className="h-4 w-4 text-gray-600" />
-                                </button>
-                            ))}
-                        </div>
-                    </Card>
-
-                    <Card>
-                        <div className="mb-6 flex items-center justify-between">
-                            <div>
-                                <h2 className="text-lg font-semibold">
-                                    Businesses
-                                </h2>
-                                <p className="mt-1 text-sm text-gray-600">
-                                    Recently onboarded clients
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    router.push('/admin/businesses')
-                                }
-                                className="flex items-center gap-1 text-sm font-medium text-amber-400 hover:text-amber-300"
-                            >
-                                View all
-                                <ChevronRight className="h-4 w-4" />
-                            </button>
-                        </div>
-
-                        <div className="space-y-2">
-                            {recentBusinesses.map((business) => (
-                                <button
-                                    key={business.id}
-                                    type="button"
-                                    onClick={() =>
-                                        router.push(
-                                            `/admin/businesses/${business.id}`
-                                        )
-                                    }
-                                    className="grid w-full grid-cols-[minmax(0,1fr)_70px_80px_90px_20px] items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 text-left transition hover:border-amber-400/30 hover:bg-white/[0.05]"
-                                >
-                                    <div className="min-w-0">
-                                        <p className="truncate text-sm font-medium text-white">
-                                            {business.name}
-                                        </p>
-                                        <p className="mt-0.5 truncate text-xs text-gray-600">
-                                            {business.industry} •{' '}
-                                            {business.assignedLawyer}
-                                        </p>
-                                    </div>
-
-                                    <div className="text-center">
-                                        <p className="text-sm text-gray-300">
-                                            {business.contracts}
-                                        </p>
-                                        <p className="text-[10px] text-gray-700">
-                                            Contracts
-                                        </p>
-                                    </div>
-
-                                    <div className="text-center">
-                                        <p className="text-sm text-gray-300">
-                                            {business.compliance}
-                                        </p>
-                                        <p className="text-[10px] text-gray-700">
-                                            Compliance
-                                        </p>
-                                    </div>
-
-                                    <div className="text-center">
-                                        <StatusBadge
-                                            status={business.status}
-                                        />
-                                    </div>
-
-                                    <ChevronRight className="h-4 w-4 text-gray-600" />
-                                </button>
-                            ))}
-                        </div>
-                    </Card>
-                </div>
-
-                {/* Platform health + Quick actions */}
-                <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-                    <Card>
-                        <div className="mb-6 flex items-center justify-between">
-                            <div>
-                                <h2 className="text-lg font-semibold">
-                                    Platform Health
-                                </h2>
-                                <p className="mt-1 text-sm text-gray-600">
-                                    Live operational status
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="space-y-3">
-                            {[
-                                {
-                                    label: 'API uptime (30d)',
-                                    value: '99.98%',
-                                    status: 'Healthy',
-                                    tone: 'good',
-                                },
-                                {
-                                    label: 'Avg. response time',
-                                    value: '142 ms',
-                                    status: 'Healthy',
-                                    tone: 'good',
-                                },
-                                {
-                                    label: 'Failed contract syncs',
-                                    value: '3',
-                                    status: 'Needs review',
-                                    tone: 'warn',
-                                },
-                                {
-                                    label: 'Compliance cron jobs',
-                                    value: 'All passing',
-                                    status: 'Healthy',
-                                    tone: 'good',
-                                },
-                            ].map((row) => (
-                                <div
-                                    key={row.label}
-                                    className="flex items-center justify-between rounded-xl border border-white/[0.04] bg-white/[0.02] px-4 py-3"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <Clock className="h-4 w-4 text-gray-500" />
-                                        <p className="text-sm text-gray-300">
-                                            {row.label}
-                                        </p>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <p className="text-sm text-white">
-                                            {row.value}
-                                        </p>
-                                        <span
-                                            className={`rounded-lg border px-2 py-1 text-xs font-medium ${row.tone === 'good'
-                                                ? 'bg-green-500/10 text-green-400 border-green-500/20'
-                                                : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                                                }`}
-                                        >
-                                            {row.status}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </Card>
-
-                    <Card>
-                        <div className="mb-6 flex items-center justify-between">
-                            <div>
-                                <h2 className="text-lg font-semibold">
-                                    Quick Actions
-                                </h2>
-                                <p className="mt-1 text-sm text-gray-600">
-                                    Jump directly into your admin workspace
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                            {QUICK_ACTIONS.map((action) => {
-                                const Icon = action.icon
+                        {/* Stat cards */}
+                        <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                            {statCards.map((item, index) => {
+                                const Icon = item.icon
 
                                 return (
-                                    <motion.button
-                                        key={action.label}
-                                        type="button"
-                                        whileHover={{ scale: 1.03 }}
-                                        whileTap={{ scale: 0.98 }}
-                                        onClick={() =>
-                                            router.push(action.href)
-                                        }
-                                        className="rounded-xl border border-white/[0.06] bg-black/40 p-4 transition hover:border-amber-400/30 hover:bg-white/[0.04]"
+                                    <motion.div
+                                        key={item.label}
+                                        initial={{ opacity: 0, y: 15 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: index * 0.05 }}
                                     >
-                                        <Icon className="mx-auto mb-2 h-5 w-5 text-amber-400" />
-                                        <p className="text-center text-xs font-medium text-white">
-                                            {action.label}
-                                        </p>
-                                    </motion.button>
+                                        <Card
+                                            clickable
+                                            onClick={() =>
+                                                router.push(item.href)
+                                            }
+                                        >
+                                            <div className="flex items-start justify-between">
+                                                <div>
+                                                    <p className="text-sm text-gray-500">
+                                                        {item.label}
+                                                    </p>
+                                                    <p className="mt-2 text-4xl font-light">
+                                                        {item.value}
+                                                    </p>
+                                                    {item.delta && (
+                                                        <p
+                                                            className={`mt-1 text-xs ${item.trend ===
+                                                                'up'
+                                                                ? 'text-green-400'
+                                                                : item.trend ===
+                                                                    'down'
+                                                                    ? 'text-red-400'
+                                                                    : 'text-gray-500'
+                                                                }`}
+                                                        >
+                                                            {item.delta}
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                <Icon className="h-5 w-5 text-amber-400/70" />
+                                            </div>
+
+                                            <div className="mt-4 flex items-center gap-1 text-xs text-amber-400">
+                                                Open
+                                                <ArrowRight className="h-3 w-3" />
+                                            </div>
+                                        </Card>
+                                    </motion.div>
                                 )
                             })}
                         </div>
-                    </Card>
-                </div>
+
+                        {/* Pipeline snapshot */}
+                        <Card className="mb-8">
+                            <div className="mb-6 flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-lg font-semibold">
+                                        Pipeline Snapshot
+                                    </h2>
+                                    <p className="mt-1 text-sm text-gray-600">
+                                        Contract request &amp; execution
+                                        health
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        router.push('/admin/analytics')
+                                    }
+                                    className="text-xs text-amber-400 hover:text-amber-300"
+                                >
+                                    View analytics
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                                {pipeline.map((item) => (
+                                    <div
+                                        key={item.label}
+                                        className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-4"
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-xs text-gray-500">
+                                                {item.label}
+                                            </p>
+                                            <TrendingUp className="h-3.5 w-3.5 text-green-400" />
+                                        </div>
+                                        <p className="mt-2 text-2xl font-light">
+                                            {item.value}
+                                        </p>
+                                        <p className="mt-1 text-xs text-green-400">
+                                            {item.delta}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+
+                        {/* Attention + Activity */}
+                        <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+                            <Card>
+                                <div className="mb-6 flex items-center justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-semibold">
+                                            Recent Contract Requests
+                                        </h2>
+                                        <p className="mt-1 text-sm text-gray-600">
+                                            Newest requests across the platform
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            router.push(
+                                                '/admin/contract-requests'
+                                            )
+                                        }
+                                        className="text-xs text-amber-400 hover:text-amber-300"
+                                    >
+                                        View all
+                                    </button>
+                                </div>
+
+                                {attention.length === 0 ? (
+                                    <EmptyState
+                                        title="No requests yet"
+                                        description="Incoming contract requests will appear here."
+                                        icon={Inbox}
+                                    />
+                                ) : (
+                                    <div className="space-y-2">
+                                        {attention.map((item) => (
+                                            <button
+                                                key={item.id}
+                                                type="button"
+                                                onClick={() =>
+                                                    router.push(
+                                                        `/admin/contract-requests/${item.id}`
+                                                    )
+                                                }
+                                                className="flex w-full items-center gap-3 rounded-xl border border-white/[0.05] bg-white/[0.03] p-4 text-left transition hover:border-amber-400/30 hover:bg-white/[0.05]"
+                                            >
+                                                <AlertTriangle className="h-4 w-4 shrink-0 text-red-400" />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-sm font-medium">
+                                                        {item.title}
+                                                    </p>
+                                                    <p className="mt-1 text-xs text-gray-600">
+                                                        {item.meta}
+                                                        {item.dueDate
+                                                            ? ` • Due ${formatDate(
+                                                                item.dueDate
+                                                            )}`
+                                                            : ''}
+                                                    </p>
+                                                </div>
+                                                <PriorityBadge
+                                                    priority={item.priority}
+                                                />
+                                                <ChevronRight className="h-4 w-4 text-gray-600" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </Card>
+
+                            <Card>
+                                <div className="mb-6 flex items-center justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-semibold">
+                                            Recent Contracts
+                                        </h2>
+                                        <p className="mt-1 text-sm text-gray-600">
+                                            Latest contracts created
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            router.push('/admin/contracts')
+                                        }
+                                        className="text-xs text-amber-400 hover:text-amber-300"
+                                    >
+                                        View all
+                                    </button>
+                                </div>
+
+                                {recentContracts.length === 0 ? (
+                                    <EmptyState
+                                        title="No contracts yet"
+                                        description="Contracts will appear here once created."
+                                        icon={Activity}
+                                    />
+                                ) : (
+                                    <div className="space-y-2">
+                                        {recentContracts.map((c) => (
+                                            <button
+                                                key={c.id}
+                                                type="button"
+                                                onClick={() =>
+                                                    router.push(
+                                                        `/admin/contracts/${c.id}`
+                                                    )
+                                                }
+                                                className="flex w-full items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-4 text-left transition hover:border-amber-400/30 hover:bg-white/[0.05]"
+                                            >
+                                                <FileText className="h-4 w-4 shrink-0 text-amber-400" />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-sm font-medium">
+                                                        {c.title}
+                                                    </p>
+                                                    <p className="mt-1 truncate text-xs text-gray-600">
+                                                        {c.contractNumber} •{' '}
+                                                        {c.business} •{' '}
+                                                        {c.professional}
+                                                    </p>
+                                                </div>
+                                                <StatusBadge
+                                                    status={c.status}
+                                                />
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </Card>
+                        </div>
+
+                        {/* Businesses + Role breakdown */}
+                        <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+                            <Card>
+                                <div className="mb-6 flex items-center justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-semibold">
+                                            Businesses
+                                        </h2>
+                                        <p className="mt-1 text-sm text-gray-600">
+                                            Active on the platform
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            router.push('/admin/businesses')
+                                        }
+                                        className="flex items-center gap-1 text-sm font-medium text-amber-400 hover:text-amber-300"
+                                    >
+                                        View all
+                                        <ChevronRight className="h-4 w-4" />
+                                    </button>
+                                </div>
+
+                                {businesses.length === 0 ? (
+                                    <EmptyState
+                                        title="No businesses yet"
+                                        description="Business profiles will appear here once onboarded."
+                                        icon={Building2}
+                                    />
+                                ) : (
+                                    <div className="space-y-2">
+                                        {businesses.map((b) => (
+                                            <button
+                                                key={b.id}
+                                                type="button"
+                                                onClick={() =>
+                                                    router.push(
+                                                        `/admin/businesses/${b.id}`
+                                                    )
+                                                }
+                                                className="grid w-full grid-cols-[minmax(0,1fr)_80px_90px_20px] items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 text-left transition hover:border-amber-400/30 hover:bg-white/[0.05]"
+                                            >
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-medium text-white">
+                                                        {b.name}
+                                                    </p>
+                                                </div>
+
+                                                <div className="text-center">
+                                                    <p className="text-sm text-gray-300">
+                                                        {b.contracts}
+                                                    </p>
+                                                    <p className="text-[10px] text-gray-700">
+                                                        Contracts
+                                                    </p>
+                                                </div>
+
+                                                <div className="text-center">
+                                                    <StatusBadge
+                                                        status={b.status}
+                                                    />
+                                                </div>
+
+                                                <ChevronRight className="h-4 w-4 text-gray-600" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </Card>
+
+                            <Card>
+                                <div className="mb-6 flex items-center justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-semibold">
+                                            Users by Role
+                                        </h2>
+                                        <p className="mt-1 text-sm text-gray-600">
+                                            Platform composition
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {stats.userRoleStats.length === 0 ? (
+                                    <EmptyState
+                                        title="No user data"
+                                        description="Role breakdown will appear here."
+                                        icon={Users}
+                                    />
+                                ) : (
+                                    <div className="space-y-2">
+                                        {stats.userRoleStats.map((r) => (
+                                            <div
+                                                key={r._id}
+                                                className="flex items-center justify-between rounded-xl border border-white/[0.04] bg-white/[0.02] px-4 py-3"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <Users className="h-4 w-4 text-gray-500" />
+                                                    <p className="text-sm capitalize text-gray-300">
+                                                        {r._id}
+                                                    </p>
+                                                </div>
+                                                <p className="text-sm font-medium text-white">
+                                                    {r.count}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </Card>
+                        </div>
+
+                        {/* Platform health + Quick actions */}
+                        <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+                            <Card>
+                                <div className="mb-6 flex items-center justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-semibold">
+                                            Platform Health
+                                        </h2>
+                                        <p className="mt-1 text-sm text-gray-600">
+                                            Live operational status
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {platformHealth.map((row) => (
+                                        <div
+                                            key={row.label}
+                                            className="flex items-center justify-between rounded-xl border border-white/[0.04] bg-white/[0.02] px-4 py-3"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <Clock className="h-4 w-4 text-gray-500" />
+                                                <p className="text-sm text-gray-300">
+                                                    {row.label}
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <p className="text-sm text-white">
+                                                    {row.value}
+                                                </p>
+                                                <span
+                                                    className={`rounded-lg border px-2 py-1 text-xs font-medium ${row.tone === 'good'
+                                                        ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                                                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                                        }`}
+                                                >
+                                                    {row.status}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </Card>
+
+                            <Card>
+                                <div className="mb-6 flex items-center justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-semibold">
+                                            Quick Actions
+                                        </h2>
+                                        <p className="mt-1 text-sm text-gray-600">
+                                            Jump directly into your admin
+                                            workspace
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                                    {QUICK_ACTIONS.map((action) => {
+                                        const Icon = action.icon
+
+                                        return (
+                                            <motion.button
+                                                key={action.label}
+                                                type="button"
+                                                whileHover={{ scale: 1.03 }}
+                                                whileTap={{ scale: 0.98 }}
+                                                onClick={() =>
+                                                    router.push(action.href)
+                                                }
+                                                className="rounded-xl border border-white/[0.06] bg-black/40 p-4 transition hover:border-amber-400/30 hover:bg-white/[0.04]"
+                                            >
+                                                <Icon className="mx-auto mb-2 h-5 w-5 text-amber-400" />
+                                                <p className="text-center text-xs font-medium text-white">
+                                                    {action.label}
+                                                </p>
+                                            </motion.button>
+                                        )
+                                    })}
+                                </div>
+                            </Card>
+                        </div>
+                    </>
+                )}
 
                 <div className="mt-6 text-center text-xs text-gray-700">
-                    Admin dashboard • Static demo data
+                    Admin dashboard
                 </div>
             </main>
         </div>
