@@ -16,9 +16,9 @@ const settingsTabs = [
   { id: 'profile', label: 'Profile', icon: '👤' },
   { id: 'organization', label: 'Organization', icon: '🏢' },
   { id: 'security', label: 'Security', icon: '🔒' },
-  { id: 'notifications', label: 'Notifications', icon: '🔔' },
+  // { id: 'notifications', label: 'Notifications', icon: '🔔' },
   { id: 'billing', label: 'Billing', icon: '💳' },
-  { id: 'api', label: 'API Keys', icon: '🔑' },
+  // { id: 'api', label: 'API Keys', icon: '🔑' },
 ]
 
 export default function SettingsPage() {
