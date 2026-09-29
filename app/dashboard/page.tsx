@@ -246,6 +246,143 @@ interface DashboardResponse {
 }
 
 /* =========================================================
+   NORMALIZER
+========================================================= */
+
+const asArray = <T,>(value: unknown): T[] =>
+  Array.isArray(value) ? (value as T[]) : []
+
+const num = (value: unknown, fallback = 0): number =>
+  typeof value === 'number' && !Number.isNaN(value) ? value : fallback
+
+const normalizeDashboard = (
+  raw: Partial<DashboardData> | Record<string, any> | null | undefined
+): DashboardData => {
+  const d = (raw || {}) as Record<string, any>
+
+  const business = (d.business || {}) as DashboardBusiness
+  const overview = (d.overview || {}) as Record<string, any>
+  const legalRequests = (d.legalRequests || {}) as Record<string, any>
+  const contractRequests = (d.contractRequests || {}) as Record<string, any>
+  const contracts = (d.contracts || {}) as Record<string, any>
+  const compliance = (d.compliance || {}) as Record<string, any>
+  const documents = (d.documents || {}) as Record<string, any>
+  const team = (d.team || {}) as Record<string, any>
+  const legalHealth = (d.legalHealth || {}) as Record<string, any>
+  const monthlyOperations = (d.monthlyOperations || {}) as Record<string, any>
+
+  return {
+    business: {
+      id: business.id || '',
+      companyName: business.companyName || 'Your Workspace',
+      legalName: business.legalName,
+      companyType: business.companyType,
+      industry: business.industry,
+      website: business.website,
+      email: business.email,
+      phone: business.phone,
+      registrationStatus: business.registrationStatus,
+      legalHealthScore: business.legalHealthScore,
+    },
+
+    overview: {
+      legalRequests: num(overview.legalRequests, 0),
+      contractRequests: num(overview.contractRequests, 0),
+      totalLegalRequests: num(overview.totalLegalRequests, 0),
+      totalContractRequests: num(overview.totalContractRequests, 0),
+      completedLegalRequests: num(overview.completedLegalRequests, 0),
+      completedContractRequests: num(overview.completedContractRequests, 0),
+      contracts: num(overview.contracts, 0),
+      pendingActions: num(overview.pendingActions, 0),
+      complianceDue: num(overview.complianceDue, 0),
+      documents: num(overview.documents, 0),
+      teamMembers: num(overview.teamMembers, 0),
+    },
+
+    attention: asArray<DashboardAttention>(d.attention),
+
+    legalRequests: {
+      total: num(legalRequests.total, 0),
+      active: num(legalRequests.active, 0),
+      pending: num(legalRequests.pending, 0),
+      completed: num(legalRequests.completed, 0),
+      monthly: num(legalRequests.monthly, 0),
+      items: asArray<DashboardLegalRequest>(legalRequests.items),
+    },
+
+    contractRequests: {
+      total: num(contractRequests.total, 0),
+      active: num(contractRequests.active, 0),
+      pending: num(contractRequests.pending, 0),
+      completed: num(contractRequests.completed, 0),
+      monthly: num(contractRequests.monthly, 0),
+      items: asArray<DashboardContractRequest>(contractRequests.items),
+    },
+
+    contracts: {
+      total: num(contracts.total, 0),
+      awaitingSignature: num(contracts.awaitingSignature, 0),
+      inReview: num(contracts.inReview, 0),
+      approved: num(contracts.approved, 0),
+      executed: num(contracts.executed, 0),
+      items: asArray<DashboardContract>(contracts.items),
+    },
+
+    compliance: {
+      total: num(compliance.total, 0),
+      pending: num(compliance.pending, 0),
+      inProgress: num(compliance.inProgress, 0),
+      completed: num(compliance.completed, 0),
+      overdue: num(compliance.overdue, 0),
+      items: asArray<DashboardCompliance>(compliance.items),
+    },
+
+    documents: {
+      total: num(documents.total, 0),
+      recent: asArray<DashboardDocument>(documents.recent),
+      expiring: asArray<DashboardDocument>(documents.expiring),
+    },
+
+    team: {
+      total: num(team.total, 0),
+      active: num(team.active, 0),
+      pendingInvitations: num(team.pendingInvitations, 0),
+      professionals: asArray<DashboardProfessional>(team.professionals),
+    },
+
+    legalHealth: {
+      score: num(legalHealth.score, 0),
+      businessScore: legalHealth.businessScore ?? null,
+      status: legalHealth.status || 'unknown',
+      contracts: num(legalHealth.contracts, 0),
+      compliance: num(legalHealth.compliance, 0),
+      documentation: num(legalHealth.documentation, 0),
+      risk: legalHealth.risk || 'low',
+      attentionCount: num(
+        legalHealth.attentionCount,
+        asArray<DashboardAttention>(d.attention).length
+      ),
+    },
+
+    activity: asArray(d.activity),
+
+    monthlyOperations: {
+      requestsReceived: num(monthlyOperations.requestsReceived, 0),
+      legalRequestsReceived: monthlyOperations.legalRequestsReceived,
+      contractRequestsReceived: monthlyOperations.contractRequestsReceived,
+      requestsCompleted: num(monthlyOperations.requestsCompleted, 0),
+      legalRequestsCompleted: monthlyOperations.legalRequestsCompleted,
+      contractRequestsCompleted: monthlyOperations.contractRequestsCompleted,
+      contractsReviewed: num(monthlyOperations.contractsReviewed, 0),
+      contractsDrafted: num(monthlyOperations.contractsDrafted, 0),
+      pendingActions: num(monthlyOperations.pendingActions, 0),
+    },
+
+    generatedAt: d.generatedAt || new Date().toISOString(),
+  }
+}
+
+/* =========================================================
    HELPERS
 ========================================================= */
 
@@ -359,13 +496,17 @@ const SectionHeader = ({
 ========================================================= */
 
 const ContractStatusBadge = ({ status }: { status: string }) => {
-  const normalized = status.toLowerCase().replace(/\s+/g, '-')
+  const normalized = (status || '').toLowerCase().replace(/\s+/g, '-')
   let classes = 'bg-white/[0.05] text-slate-300 border-white/10'
 
   if (normalized === 'awaiting-signature' || normalized === 'pending-signature') {
     classes = 'bg-red-400/10 text-red-300 border-red-400/20'
   }
-  if (normalized === 'in-review' || normalized === 'internal-review' || normalized === 'client-review') {
+  if (
+    normalized === 'in-review' ||
+    normalized === 'internal-review' ||
+    normalized === 'client-review'
+  ) {
     classes = 'bg-amber-400/10 text-amber-300 border-amber-400/20'
   }
   if (normalized === 'approved') {
@@ -388,7 +529,7 @@ const ContractStatusBadge = ({ status }: { status: string }) => {
 }
 
 const ComplianceStatusBadge = ({ status }: { status: string }) => {
-  const normalized = status.toLowerCase()
+  const normalized = (status || '').toLowerCase()
   if (normalized === 'completed') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] text-emerald-300">
@@ -422,7 +563,7 @@ const ComplianceStatusBadge = ({ status }: { status: string }) => {
 }
 
 const RequestStatusBadge = ({ status }: { status: string }) => {
-  const normalized = status.toLowerCase()
+  const normalized = (status || '').toLowerCase().replace(/\s+/g, '-')
   if (normalized === 'completed' || normalized === 'converted') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] text-emerald-300">
@@ -439,7 +580,11 @@ const RequestStatusBadge = ({ status }: { status: string }) => {
       </span>
     )
   }
-  if (normalized === 'assigned' || normalized === 'in-progress' || normalized === 'under-review') {
+  if (
+    normalized === 'assigned' ||
+    normalized === 'in-progress' ||
+    normalized === 'under-review'
+  ) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-blue-400/20 bg-blue-400/10 px-2.5 py-1 text-[10px] text-blue-300">
         <Clock3 className="w-3 h-3" />
@@ -536,17 +681,23 @@ const StatCard = ({
   }
 
   return (
-    <motion.button whileHover={{ y: -2 }} onClick={onClick} className="text-left w-full">
+    <motion.button
+      whileHover={{ y: -2 }}
+      onClick={onClick}
+      className="text-left w-full"
+    >
       <Card className="p-4 sm:p-5 h-full hover:border-white/[0.13] hover:bg-white/[0.04] transition-all">
         <div className="flex items-start justify-between gap-3">
-          <div className={`w-9 h-9 rounded-xl border flex items-center justify-center ${accentMap[accent]}`}>
+          <div
+            className={`w-9 h-9 rounded-xl border flex items-center justify-center ${accentMap[accent]}`}
+          >
             <Icon className="w-4 h-4" />
           </div>
           <ArrowUpRight className="w-4 h-4 text-slate-700" />
         </div>
         <div className="mt-5">
           <p className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
-            {value}
+            {value ?? 0}
           </p>
           <p className="text-sm text-slate-300 mt-1">{label}</p>
           <p className="text-[11px] text-slate-600 mt-1.5">{description}</p>
@@ -567,6 +718,7 @@ const AttentionPanel = ({
   items: DashboardAttention[]
   onNavigate: (item: DashboardAttention) => void
 }) => {
+  const safeItems = items ?? []
   return (
     <Card className="overflow-hidden">
       <div className="px-5 sm:px-6 py-5 border-b border-white/[0.06]">
@@ -579,15 +731,15 @@ const AttentionPanel = ({
               Needs your attention
             </h2>
           </div>
-          {items.length > 0 && (
+          {safeItems.length > 0 && (
             <span className="px-2.5 py-1 rounded-full bg-red-400/10 border border-red-400/20 text-[10px] font-medium text-red-300">
-              {items.length} open
+              {safeItems.length} open
             </span>
           )}
         </div>
       </div>
 
-      {items.length === 0 ? (
+      {safeItems.length === 0 ? (
         <div className="px-6 py-10 text-center">
           <div className="w-11 h-11 mx-auto rounded-xl bg-emerald-400/10 border border-emerald-400/20 flex items-center justify-center mb-3">
             <ShieldCheck className="w-5 h-5 text-emerald-400" />
@@ -599,7 +751,7 @@ const AttentionPanel = ({
         </div>
       ) : (
         <div className="divide-y divide-white/[0.05]">
-          {items.map((item, index) => (
+          {safeItems.map((item, index) => (
             <motion.button
               key={item.id}
               initial={{ opacity: 0, x: -8 }}
@@ -663,7 +815,6 @@ const AttentionPanel = ({
 
 /* =========================================================
    LEGAL HEALTH
-   Driven by business.legalHealthScore
 ========================================================= */
 
 const LegalHealthCard = ({
@@ -673,10 +824,21 @@ const LegalHealthCard = ({
   data: DashboardData['legalHealth']
   businessScore?: number | null
 }) => {
+  const safe = data ?? {
+    score: 0,
+    businessScore: null,
+    status: 'unknown',
+    contracts: 0,
+    compliance: 0,
+    documentation: 0,
+    risk: 'low',
+    attentionCount: 0,
+  }
+
   const effectiveScore =
     typeof businessScore === 'number' && !Number.isNaN(businessScore)
       ? businessScore
-      : data.score
+      : safe.score
 
   const score = Math.max(0, Math.min(100, effectiveScore || 0))
 
@@ -691,9 +853,6 @@ const LegalHealthCard = ({
         : score >= 40
           ? 'Needs attention'
           : 'At risk'
-
-  const showCalculated =
-    typeof businessScore === 'number' && businessScore !== data.score
 
   return (
     <Card className="p-5 sm:p-6 h-full">
@@ -750,25 +909,19 @@ const LegalHealthCard = ({
             Based on contracts, compliance and documentation.
           </p>
 
-          {showCalculated && (
-            <p className="text-[10px] text-slate-600 mt-2">
-              Calculated score: {data.score}/100
-            </p>
-          )}
-
-          {data.attentionCount > 0 && (
+          {safe.attentionCount > 0 && (
             <p className="text-xs text-amber-400 mt-3">
-              {data.attentionCount} area
-              {data.attentionCount !== 1 ? 's' : ''} needs attention
+              {safe.attentionCount} area
+              {safe.attentionCount !== 1 ? 's' : ''} needs attention
             </p>
           )}
         </div>
       </div>
 
       <div className="space-y-4">
-        <HealthBar label="Contracts" value={data.contracts} />
-        <HealthBar label="Compliance" value={data.compliance} />
-        <HealthBar label="Documentation" value={data.documentation} />
+        <HealthBar label="Contracts" value={safe.contracts} />
+        <HealthBar label="Compliance" value={safe.compliance} />
+        <HealthBar label="Documentation" value={safe.documentation} />
       </div>
 
       <div className="mt-6 pt-5 border-t border-white/[0.06] flex items-center justify-between">
@@ -777,13 +930,13 @@ const LegalHealthCard = ({
             Risk level
           </p>
           <p className="text-sm font-medium text-white mt-1 capitalize">
-            {data.risk || 'Unknown'}
+            {safe.risk || 'Unknown'}
           </p>
         </div>
         <ShieldCheck
-          className={`w-5 h-5 ${data.risk === 'high'
+          className={`w-5 h-5 ${safe.risk === 'high'
             ? 'text-red-400'
-            : data.risk === 'medium'
+            : safe.risk === 'medium'
               ? 'text-amber-400'
               : 'text-emerald-400'
             }`}
@@ -828,72 +981,89 @@ const LegalRequestsCard = ({
 }: {
   data: DashboardData['legalRequests']
   onViewAll: () => void
-}) => (
-  <Card className="overflow-hidden">
-    <div className="p-5 sm:p-6">
-      <SectionHeader
-        eyebrow="Requests"
-        title="Legal requests"
-        description={`${data.total} requests raised in your workspace`}
-        action={
-          <button
-            onClick={onViewAll}
-            className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
-          >
-            View all
-            <ArrowRight className="w-3 h-3" />
-          </button>
-        }
-      />
+}) => {
+  const safe = data ?? {
+    total: 0,
+    active: 0,
+    pending: 0,
+    completed: 0,
+    monthly: 0,
+    items: [],
+  }
 
-      <div className="grid grid-cols-3 gap-2 mb-6">
-        <MiniMetric label="Active" value={data.active} color="blue" />
-        <MiniMetric label="Pending" value={data.pending} color="amber" />
-        <MiniMetric label="Completed" value={data.completed} color="emerald" />
+  return (
+    <Card className="overflow-hidden">
+      <div className="p-5 sm:p-6">
+        <SectionHeader
+          eyebrow="Requests"
+          title="Legal requests"
+          description={`${safe.total} requests raised in your workspace`}
+          action={
+            <button
+              onClick={onViewAll}
+              className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
+            >
+              View all
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          }
+        />
+
+        <div className="grid grid-cols-3 gap-2 mb-6">
+          <MiniMetric label="Active" value={safe.active} color="blue" />
+          <MiniMetric label="Pending" value={safe.pending} color="amber" />
+          <MiniMetric label="Completed" value={safe.completed} color="emerald" />
+        </div>
       </div>
-    </div>
 
-    {data.items.length === 0 ? (
-      <EmptyState
-        icon={Scale}
-        title="No active legal requests"
-        description="New legal requests will appear here."
-      />
-    ) : (
-      <div className="border-t border-white/[0.06] divide-y divide-white/[0.05]">
-        {data.items.slice(0, 5).map((item) => (
-          <div
-            key={item.id}
-            className="px-5 sm:px-6 py-4 flex items-center gap-4 hover:bg-white/[0.02] transition"
-          >
-            <div className="w-9 h-9 rounded-xl bg-violet-400/10 text-violet-400 flex items-center justify-center flex-shrink-0">
-              <Scale className="w-4 h-4" />
-            </div>
+      {safe.items.length === 0 ? (
+        <EmptyState
+          icon={Scale}
+          title={
+            safe.total === 0 ? 'No legal requests yet' : 'No active legal requests'
+          }
+          description={
+            safe.total === 0
+              ? 'Raise your first legal request to get started.'
+              : 'New legal requests will appear here.'
+          }
+        />
+      ) : (
+        <div className="border-t border-white/[0.06] divide-y divide-white/[0.05]">
+          {safe.items.slice(0, 5).map((item) => (
+            <div
+              key={item.id}
+              className="px-5 sm:px-6 py-4 flex items-center gap-4 hover:bg-white/[0.02] transition"
+            >
+              <div className="w-9 h-9 rounded-xl bg-violet-400/10 text-violet-400 flex items-center justify-center flex-shrink-0">
+                <Scale className="w-4 h-4" />
+              </div>
 
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">
-                {item.title}
-              </p>
-              <p className="text-[11px] text-slate-600 mt-1 truncate">
-                {capitalize(item.category) || 'Legal request'}
-                {item.assignedTo ? ` · ${item.assignedTo}` : ' · Unassigned'}
-              </p>
-            </div>
-
-            <div className="text-right flex-shrink-0">
-              <RequestStatusBadge status={item.status} />
-              {item.priority && (
-                <p className="text-[10px] text-slate-600 mt-1.5 capitalize">
-                  {item.priority}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white truncate">
+                  {item.title}
                 </p>
-              )}
+                <p className="text-[11px] text-slate-600 mt-1 truncate">
+                  {capitalize(item.category) || 'Legal request'}
+                  {item.assignedTo ? ` · ${item.assignedTo}` : ' · Unassigned'}
+                </p>
+              </div>
+
+              <div className="text-right flex-shrink-0">
+                <RequestStatusBadge status={item.status} />
+                {item.priority && (
+                  <p className="text-[10px] text-slate-600 mt-1.5 capitalize">
+                    {item.priority}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-    )}
-  </Card>
-)
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
 
 /* =========================================================
    CONTRACT REQUESTS
@@ -905,75 +1075,94 @@ const ContractRequestsCard = ({
 }: {
   data: DashboardData['contractRequests']
   onViewAll: () => void
-}) => (
-  <Card className="overflow-hidden">
-    <div className="p-5 sm:p-6">
-      <SectionHeader
-        eyebrow="Contract intake"
-        title="Contract requests"
-        description={`${data.total} requests · ${data.monthly} this month`}
-        action={
-          <button
-            onClick={onViewAll}
-            className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
-          >
-            View all
-            <ArrowRight className="w-3 h-3" />
-          </button>
-        }
-      />
+}) => {
+  const safe = data ?? {
+    total: 0,
+    active: 0,
+    pending: 0,
+    completed: 0,
+    monthly: 0,
+    items: [],
+  }
 
-      <div className="grid grid-cols-3 gap-2 mb-6">
-        <MiniMetric label="Active" value={data.active} color="blue" />
-        <MiniMetric label="Pending" value={data.pending} color="amber" />
-        <MiniMetric label="Completed" value={data.completed} color="emerald" />
+  return (
+    <Card className="overflow-hidden">
+      <div className="p-5 sm:p-6">
+        <SectionHeader
+          eyebrow="Contract intake"
+          title="Contract requests"
+          description={`${safe.total} requests · ${safe.monthly} this month`}
+          action={
+            <button
+              onClick={onViewAll}
+              className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
+            >
+              View all
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          }
+        />
+
+        <div className="grid grid-cols-3 gap-2 mb-6">
+          <MiniMetric label="Active" value={safe.active} color="blue" />
+          <MiniMetric label="Pending" value={safe.pending} color="amber" />
+          <MiniMetric label="Completed" value={safe.completed} color="emerald" />
+        </div>
       </div>
-    </div>
 
-    {data.items.length === 0 ? (
-      <EmptyState
-        icon={FileCheck2}
-        title="No active contract requests"
-        description="New contract requests will appear here."
-      />
-    ) : (
-      <div className="border-t border-white/[0.06] divide-y divide-white/[0.05]">
-        {data.items.slice(0, 5).map((item) => (
-          <div
-            key={item.id}
-            className="px-5 sm:px-6 py-4 flex items-center gap-4 hover:bg-white/[0.02] transition"
-          >
-            <div className="w-9 h-9 rounded-xl bg-blue-400/10 text-blue-400 flex items-center justify-center flex-shrink-0">
-              <FileCheck2 className="w-4 h-4" />
-            </div>
+      {safe.items.length === 0 ? (
+        <EmptyState
+          icon={FileCheck2}
+          title={
+            safe.total === 0
+              ? 'No contract requests yet'
+              : 'No active contract requests'
+          }
+          description={
+            safe.total === 0
+              ? 'Submit your first contract request to get started.'
+              : 'New contract requests will appear here.'
+          }
+        />
+      ) : (
+        <div className="border-t border-white/[0.06] divide-y divide-white/[0.05]">
+          {safe.items.slice(0, 5).map((item) => (
+            <div
+              key={item.id}
+              className="px-5 sm:px-6 py-4 flex items-center gap-4 hover:bg-white/[0.02] transition"
+            >
+              <div className="w-9 h-9 rounded-xl bg-blue-400/10 text-blue-400 flex items-center justify-center flex-shrink-0">
+                <FileCheck2 className="w-4 h-4" />
+              </div>
 
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">
-                {item.title}
-              </p>
-              <p className="text-[11px] text-slate-600 mt-1 truncate">
-                {item.requestNumber ? `${item.requestNumber} · ` : ''}
-                {item.contractType || 'Contract'}
-                {item.assignedProfessional
-                  ? ` · ${item.assignedProfessional}`
-                  : ''}
-              </p>
-            </div>
-
-            <div className="text-right flex-shrink-0">
-              <RequestStatusBadge status={item.status} />
-              {item.expectedDeliveryDate && (
-                <p className="text-[10px] text-slate-600 mt-1.5">
-                  Due {formatDate(item.expectedDeliveryDate)}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white truncate">
+                  {item.title}
                 </p>
-              )}
+                <p className="text-[11px] text-slate-600 mt-1 truncate">
+                  {item.requestNumber ? `${item.requestNumber} · ` : ''}
+                  {item.contractType || 'Contract'}
+                  {item.assignedProfessional
+                    ? ` · ${item.assignedProfessional}`
+                    : ''}
+                </p>
+              </div>
+
+              <div className="text-right flex-shrink-0">
+                <RequestStatusBadge status={item.status} />
+                {item.expectedDeliveryDate && (
+                  <p className="text-[10px] text-slate-600 mt-1.5">
+                    Due {formatDate(item.expectedDeliveryDate)}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-    )}
-  </Card>
-)
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
 
 /* =========================================================
    CONTRACTS
@@ -985,72 +1174,87 @@ const ContractsCard = ({
 }: {
   data: DashboardData['contracts']
   onViewAll: () => void
-}) => (
-  <Card className="overflow-hidden">
-    <div className="p-5 sm:p-6">
-      <SectionHeader
-        eyebrow="Contract lifecycle"
-        title="Contracts"
-        description={`${data.total} contracts in your workspace`}
-        action={
-          <button
-            onClick={onViewAll}
-            className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
-          >
-            View all
-            <ArrowRight className="w-3 h-3" />
-          </button>
-        }
-      />
+}) => {
+  const safe = data ?? {
+    total: 0,
+    awaitingSignature: 0,
+    inReview: 0,
+    approved: 0,
+    executed: 0,
+    items: [],
+  }
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
-        <MiniMetric label="Awaiting signature" value={data.awaitingSignature} color="red" />
-        <MiniMetric label="In review" value={data.inReview} color="amber" />
-        <MiniMetric label="Approved" value={data.approved} color="blue" />
-        <MiniMetric label="Executed" value={data.executed} color="emerald" />
+  return (
+    <Card className="overflow-hidden">
+      <div className="p-5 sm:p-6">
+        <SectionHeader
+          eyebrow="Contract lifecycle"
+          title="Contracts"
+          description={`${safe.total} contracts in your workspace`}
+          action={
+            <button
+              onClick={onViewAll}
+              className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
+            >
+              View all
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          }
+        />
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
+          <MiniMetric
+            label="Awaiting signature"
+            value={safe.awaitingSignature}
+            color="red"
+          />
+          <MiniMetric label="In review" value={safe.inReview} color="amber" />
+          <MiniMetric label="Approved" value={safe.approved} color="blue" />
+          <MiniMetric label="Executed" value={safe.executed} color="emerald" />
+        </div>
       </div>
-    </div>
 
-    {data.items.length === 0 ? (
-      <EmptyState
-        icon={FileText}
-        title="No contracts requiring attention"
-        description="Your contract workspace is currently clear."
-      />
-    ) : (
-      <div className="border-t border-white/[0.06] divide-y divide-white/[0.05]">
-        {data.items.slice(0, 5).map((contract) => (
-          <div
-            key={contract.id}
-            className="px-5 sm:px-6 py-4 flex items-center gap-4 hover:bg-white/[0.02] transition"
-          >
-            <div className="w-9 h-9 rounded-xl bg-blue-400/10 text-blue-400 flex items-center justify-center flex-shrink-0">
-              <FileText className="w-4 h-4" />
-            </div>
+      {safe.items.length === 0 ? (
+        <EmptyState
+          icon={FileText}
+          title="No contracts requiring attention"
+          description="Your contract workspace is currently clear."
+        />
+      ) : (
+        <div className="border-t border-white/[0.06] divide-y divide-white/[0.05]">
+          {safe.items.slice(0, 5).map((contract) => (
+            <div
+              key={contract.id}
+              className="px-5 sm:px-6 py-4 flex items-center gap-4 hover:bg-white/[0.02] transition"
+            >
+              <div className="w-9 h-9 rounded-xl bg-blue-400/10 text-blue-400 flex items-center justify-center flex-shrink-0">
+                <FileText className="w-4 h-4" />
+              </div>
 
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">
-                {contract.name}
-              </p>
-              <p className="text-[11px] text-slate-600 mt-1 truncate">
-                {contract.nextAction || 'Contract activity'}
-              </p>
-            </div>
-
-            <div className="text-right flex-shrink-0">
-              <ContractStatusBadge status={contract.status} />
-              {contract.dueDate && (
-                <p className="text-[10px] text-slate-600 mt-1.5">
-                  Due {formatDate(contract.dueDate)}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white truncate">
+                  {contract.name}
                 </p>
-              )}
+                <p className="text-[11px] text-slate-600 mt-1 truncate">
+                  {contract.nextAction || 'Contract activity'}
+                </p>
+              </div>
+
+              <div className="text-right flex-shrink-0">
+                <ContractStatusBadge status={contract.status} />
+                {contract.dueDate && (
+                  <p className="text-[10px] text-slate-600 mt-1.5">
+                    Due {formatDate(contract.dueDate)}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-    )}
-  </Card>
-)
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
 
 /* =========================================================
    COMPLIANCE
@@ -1062,79 +1266,93 @@ const ComplianceCard = ({
 }: {
   data: DashboardData['compliance']
   onViewAll: () => void
-}) => (
-  <Card className="overflow-hidden">
-    <div className="p-5 sm:p-6">
-      <SectionHeader
-        eyebrow="Compliance"
-        title="Compliance calendar"
-        description={`${data.total} obligations tracked`}
-        action={
-          <button
-            onClick={onViewAll}
-            className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
-          >
-            View all
-            <ArrowRight className="w-3 h-3" />
-          </button>
-        }
-      />
+}) => {
+  const safe = data ?? {
+    total: 0,
+    pending: 0,
+    inProgress: 0,
+    completed: 0,
+    overdue: 0,
+    items: [],
+  }
 
-      <div className="grid grid-cols-3 gap-2 mb-6">
-        <MiniMetric label="Pending" value={data.pending} color="amber" />
-        <MiniMetric label="Completed" value={data.completed} color="emerald" />
-        <MiniMetric label="Overdue" value={data.overdue} color="red" />
-      </div>
-    </div>
-
-    {data.items.length === 0 ? (
-      <EmptyState
-        icon={ShieldCheck}
-        title="No compliance items"
-        description="There are no compliance obligations to display."
-      />
-    ) : (
-      <div className="border-t border-white/[0.06] divide-y divide-white/[0.05]">
-        {data.items.slice(0, 5).map((item) => (
-          <div key={item.id} className="px-5 sm:px-6 py-4 flex items-center gap-4">
-            <div
-              className={`
-                w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0
-                ${item.status === 'overdue'
-                  ? 'bg-red-400/10 text-red-400'
-                  : item.status === 'completed'
-                    ? 'bg-emerald-400/10 text-emerald-400'
-                    : 'bg-amber-400/10 text-amber-400'
-                }
-              `}
+  return (
+    <Card className="overflow-hidden">
+      <div className="p-5 sm:p-6">
+        <SectionHeader
+          eyebrow="Compliance"
+          title="Compliance calendar"
+          description={`${safe.total} obligations tracked`}
+          action={
+            <button
+              onClick={onViewAll}
+              className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
             >
-              <CalendarDays className="w-4 h-4" />
-            </div>
+              View all
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          }
+        />
 
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">
-                {item.name}
-              </p>
-              <p className="text-[11px] text-slate-600 mt-1 capitalize">
-                {item.category || 'Compliance'}
-                {item.assignedProfessional
-                  ? ` · ${item.assignedProfessional}`
-                  : ''}
-              </p>
-            </div>
-
-            <div className="text-right flex-shrink-0">
-              <ComplianceStatusBadge status={item.status} />
-              <p className="text-[10px] text-slate-600 mt-1.5">
-                {formatDate(item.dueDate)}
-              </p>
-            </div>
-          </div>
-        ))}
+        <div className="grid grid-cols-3 gap-2 mb-6">
+          <MiniMetric label="Pending" value={safe.pending} color="amber" />
+          <MiniMetric label="Completed" value={safe.completed} color="emerald" />
+          <MiniMetric label="Overdue" value={safe.overdue} color="red" />
+        </div>
       </div>
-    )}
-  </Card>
-)
+
+      {safe.items.length === 0 ? (
+        <EmptyState
+          icon={ShieldCheck}
+          title="No compliance items"
+          description="There are no compliance obligations to display."
+        />
+      ) : (
+        <div className="border-t border-white/[0.06] divide-y divide-white/[0.05]">
+          {safe.items.slice(0, 5).map((item) => (
+            <div
+              key={item.id}
+              className="px-5 sm:px-6 py-4 flex items-center gap-4"
+            >
+              <div
+                className={`
+                  w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0
+                  ${item.status === 'overdue'
+                    ? 'bg-red-400/10 text-red-400'
+                    : item.status === 'completed'
+                      ? 'bg-emerald-400/10 text-emerald-400'
+                      : 'bg-amber-400/10 text-amber-400'
+                  }
+                `}
+              >
+                <CalendarDays className="w-4 h-4" />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white truncate">
+                  {item.name}
+                </p>
+                <p className="text-[11px] text-slate-600 mt-1 capitalize">
+                  {item.category || 'Compliance'}
+                  {item.assignedProfessional
+                    ? ` · ${item.assignedProfessional}`
+                    : ''}
+                </p>
+              </div>
+
+              <div className="text-right flex-shrink-0">
+                <ComplianceStatusBadge status={item.status} />
+                <p className="text-[10px] text-slate-600 mt-1.5">
+                  {formatDate(item.dueDate)}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
 
 /* =========================================================
    DOCUMENTS
@@ -1146,67 +1364,71 @@ const DocumentsCard = ({
 }: {
   data: DashboardData['documents']
   onViewAll: () => void
-}) => (
-  <Card className="p-5 sm:p-6">
-    <SectionHeader
-      eyebrow="Secure vault"
-      title="Recent documents"
-      description={`${data.total} documents stored securely`}
-      action={
+}) => {
+  const safe = data ?? { total: 0, recent: [], expiring: [] }
+
+  return (
+    <Card className="p-5 sm:p-6">
+      <SectionHeader
+        eyebrow="Secure vault"
+        title="Recent documents"
+        description={`${safe.total} documents stored securely`}
+        action={
+          <button
+            onClick={onViewAll}
+            className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
+          >
+            Vault
+            <ArrowRight className="w-3 h-3" />
+          </button>
+        }
+      />
+
+      <div className="space-y-2">
+        {safe.recent.length === 0 ? (
+          <EmptyState
+            icon={FolderLock}
+            title="Your vault is empty"
+            description="Upload your first business document."
+          />
+        ) : (
+          safe.recent.slice(0, 5).map((document) => (
+            <div
+              key={document.id}
+              className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/[0.035] transition"
+            >
+              <div className="w-9 h-9 rounded-lg bg-white/[0.05] flex items-center justify-center flex-shrink-0">
+                <FileText className="w-4 h-4 text-slate-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm text-white truncate">
+                  {document.name}
+                </p>
+                <p className="text-[10px] text-slate-600 mt-1">
+                  {capitalize(document.category) || 'Document'}
+                  {' · '}
+                  {document.uploadedBy || 'Unknown'}
+                </p>
+              </div>
+              <span className="text-[10px] text-slate-600 flex-shrink-0">
+                {formatRelativeDate(document.createdAt)}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+
+      {safe.recent.length > 0 && (
         <button
           onClick={onViewAll}
-          className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
+          className="mt-5 w-full py-2.5 rounded-xl border border-white/[0.07] text-xs text-slate-400 hover:text-white hover:bg-white/[0.03] transition"
         >
-          Vault
-          <ArrowRight className="w-3 h-3" />
+          Open document vault
         </button>
-      }
-    />
-
-    <div className="space-y-2">
-      {data.recent.length === 0 ? (
-        <EmptyState
-          icon={FolderLock}
-          title="Your vault is empty"
-          description="Upload your first business document."
-        />
-      ) : (
-        data.recent.slice(0, 5).map((document) => (
-          <div
-            key={document.id}
-            className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/[0.035] transition"
-          >
-            <div className="w-9 h-9 rounded-lg bg-white/[0.05] flex items-center justify-center flex-shrink-0">
-              <FileText className="w-4 h-4 text-slate-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs sm:text-sm text-white truncate">
-                {document.name}
-              </p>
-              <p className="text-[10px] text-slate-600 mt-1">
-                {capitalize(document.category) || 'Document'}
-                {' · '}
-                {document.uploadedBy || 'Unknown'}
-              </p>
-            </div>
-            <span className="text-[10px] text-slate-600 flex-shrink-0">
-              {formatRelativeDate(document.createdAt)}
-            </span>
-          </div>
-        ))
       )}
-    </div>
-
-    {data.recent.length > 0 && (
-      <button
-        onClick={onViewAll}
-        className="mt-5 w-full py-2.5 rounded-xl border border-white/[0.07] text-xs text-slate-400 hover:text-white hover:bg-white/[0.03] transition"
-      >
-        Open document vault
-      </button>
-    )}
-  </Card>
-)
+    </Card>
+  )
+}
 
 /* =========================================================
    TEAM
@@ -1218,91 +1440,100 @@ const TeamCard = ({
 }: {
   data: DashboardData['team']
   onViewAll: () => void
-}) => (
-  <Card className="p-5 sm:p-6">
-    <SectionHeader
-      eyebrow="Workspace"
-      title="Legal team"
-      description={`${data.active} active member${data.active !== 1 ? 's' : ''}`}
-      action={
-        <button
-          onClick={onViewAll}
-          className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
-        >
-          Manage
-          <ArrowRight className="w-3 h-3" />
-        </button>
-      }
-    />
+}) => {
+  const safe = data ?? {
+    total: 0,
+    active: 0,
+    pendingInvitations: 0,
+    professionals: [],
+  }
 
-    <div className="flex items-center justify-between mb-5">
-      <div className="flex -space-x-2">
-        {data.professionals.slice(0, 5).map((member) => (
-          <div
-            key={member.id}
-            title={member.name}
-            className="w-9 h-9 rounded-full bg-slate-800 border-2 border-[#0b0b0b] flex items-center justify-center text-[10px] font-semibold text-white"
+  return (
+    <Card className="p-5 sm:p-6">
+      <SectionHeader
+        eyebrow="Workspace"
+        title="Legal team"
+        description={`${safe.active} active member${safe.active !== 1 ? 's' : ''}`}
+        action={
+          <button
+            onClick={onViewAll}
+            className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
           >
-            {getInitials(member.name)}
-          </div>
-        ))}
-        {data.total > 5 && (
-          <div className="w-9 h-9 rounded-full bg-white/[0.05] border-2 border-[#0b0b0b] flex items-center justify-center text-[10px] text-slate-400">
-            +{data.total - 5}
-          </div>
-        )}
-      </div>
-      <div className="text-right">
-        <p className="text-xl font-semibold text-white">{data.total}</p>
-        <p className="text-[10px] uppercase tracking-wider text-slate-600">
-          Members
-        </p>
-      </div>
-    </div>
+            Manage
+            <ArrowRight className="w-3 h-3" />
+          </button>
+        }
+      />
 
-    {data.professionals.length === 0 ? (
-      <div className="rounded-xl border border-dashed border-white/[0.08] p-5 text-center">
-        <Users className="w-5 h-5 mx-auto text-slate-600 mb-2" />
-        <p className="text-xs text-slate-500">No professionals added yet.</p>
-      </div>
-    ) : (
-      <div className="space-y-2">
-        {data.professionals.slice(0, 3).map((member) => (
-          <div
-            key={member.id}
-            className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.025]"
-          >
-            <div className="w-8 h-8 rounded-full bg-amber-400/10 text-amber-400 flex items-center justify-center text-[10px] font-semibold">
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex -space-x-2">
+          {safe.professionals.slice(0, 5).map((member) => (
+            <div
+              key={member.id}
+              title={member.name}
+              className="w-9 h-9 rounded-full bg-slate-800 border-2 border-[#0b0b0b] flex items-center justify-center text-[10px] font-semibold text-white"
+            >
               {getInitials(member.name)}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-white truncate">
-                {member.name}
-              </p>
-              <p className="text-[10px] text-slate-600 truncate">
-                {member.memberType || 'Team member'}
-              </p>
+          ))}
+          {safe.total > 5 && (
+            <div className="w-9 h-9 rounded-full bg-white/[0.05] border-2 border-[#0b0b0b] flex items-center justify-center text-[10px] text-slate-400">
+              +{safe.total - 5}
             </div>
-            <span className="text-[10px] text-slate-500 capitalize">
-              {member.workspaceRole || 'member'}
-            </span>
-          </div>
-        ))}
+          )}
+        </div>
+        <div className="text-right">
+          <p className="text-xl font-semibold text-white">{safe.total}</p>
+          <p className="text-[10px] uppercase tracking-wider text-slate-600">
+            Members
+          </p>
+        </div>
       </div>
-    )}
 
-    {data.pendingInvitations > 0 && (
-      <div className="mt-4 rounded-xl bg-amber-400/[0.06] border border-amber-400/10 px-3.5 py-3 flex items-center gap-3">
-        <Clock3 className="w-4 h-4 text-amber-400" />
-        <p className="text-xs text-amber-200 flex-1">
-          {data.pendingInvitations} invitation
-          {data.pendingInvitations !== 1 ? 's' : ''} pending
-        </p>
-        <ChevronRight className="w-3.5 h-3.5 text-amber-400" />
-      </div>
-    )}
-  </Card>
-)
+      {safe.professionals.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-white/[0.08] p-5 text-center">
+          <Users className="w-5 h-5 mx-auto text-slate-600 mb-2" />
+          <p className="text-xs text-slate-500">No professionals added yet.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {safe.professionals.slice(0, 3).map((member) => (
+            <div
+              key={member.id}
+              className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.025]"
+            >
+              <div className="w-8 h-8 rounded-full bg-amber-400/10 text-amber-400 flex items-center justify-center text-[10px] font-semibold">
+                {getInitials(member.name)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-white truncate">
+                  {member.name}
+                </p>
+                <p className="text-[10px] text-slate-600 truncate">
+                  {member.memberType || 'Team member'}
+                </p>
+              </div>
+              <span className="text-[10px] text-slate-500 capitalize">
+                {member.workspaceRole || 'member'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {safe.pendingInvitations > 0 && (
+        <div className="mt-4 rounded-xl bg-amber-400/[0.06] border border-amber-400/10 px-3.5 py-3 flex items-center gap-3">
+          <Clock3 className="w-4 h-4 text-amber-400" />
+          <p className="text-xs text-amber-200 flex-1">
+            {safe.pendingInvitations} invitation
+            {safe.pendingInvitations !== 1 ? 's' : ''} pending
+          </p>
+          <ChevronRight className="w-3.5 h-3.5 text-amber-400" />
+        </div>
+      )}
+    </Card>
+  )
+}
 
 /* =========================================================
    OPERATIONS
@@ -1313,9 +1544,17 @@ const OperationsCard = ({
 }: {
   data: DashboardData['monthlyOperations']
 }) => {
+  const safe = data ?? {
+    requestsReceived: 0,
+    requestsCompleted: 0,
+    contractsReviewed: 0,
+    contractsDrafted: 0,
+    pendingActions: 0,
+  }
+
   const completedRate =
-    data.requestsReceived > 0
-      ? Math.round((data.requestsCompleted / data.requestsReceived) * 100)
+    safe.requestsReceived > 0
+      ? Math.round((safe.requestsCompleted / safe.requestsReceived) * 100)
       : 0
 
   return (
@@ -1327,17 +1566,17 @@ const OperationsCard = ({
       />
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <OperationMetric label="Requests" value={data.requestsReceived} />
+        <OperationMetric label="Requests" value={safe.requestsReceived} />
         <OperationMetric
           label="Completed"
-          value={data.requestsCompleted}
+          value={safe.requestsCompleted}
           accent="emerald"
         />
-        <OperationMetric label="Reviewed" value={data.contractsReviewed} />
-        <OperationMetric label="Drafted" value={data.contractsDrafted} />
+        <OperationMetric label="Reviewed" value={safe.contractsReviewed} />
+        <OperationMetric label="Drafted" value={safe.contractsDrafted} />
         <OperationMetric
           label="Pending"
-          value={data.pendingActions}
+          value={safe.pendingActions}
           accent="amber"
         />
       </div>
@@ -1347,9 +1586,7 @@ const OperationsCard = ({
           <span className="text-[10px] uppercase tracking-wider text-slate-600">
             Request completion
           </span>
-          <span className="text-xs text-white font-medium">
-            {completedRate}%
-          </span>
+          <span className="text-xs text-white font-medium">{completedRate}%</span>
         </div>
         <div className="h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
           <motion.div
@@ -1382,7 +1619,7 @@ const OperationMetric = ({
           : 'text-white'
         }`}
     >
-      {value}
+      {value ?? 0}
     </p>
     <p className="text-[10px] text-slate-600 uppercase tracking-wider mt-1">
       {label}
@@ -1411,7 +1648,7 @@ const MiniMetric = ({
   }
   return (
     <div className="rounded-xl bg-white/[0.025] border border-white/[0.05] p-3">
-      <p className={`text-lg font-semibold ${colors[color]}`}>{value}</p>
+      <p className={`text-lg font-semibold ${colors[color]}`}>{value ?? 0}</p>
       <p className="text-[9px] leading-3 text-slate-600 mt-1">{label}</p>
     </div>
   )
@@ -1490,7 +1727,7 @@ export default function DashboardPage() {
           throw new Error(result.message || 'Failed to load dashboard')
         }
 
-        setDashboard(result.data)
+        setDashboard(normalizeDashboard(result.data))
       } catch (err) {
         console.error('Dashboard fetch error:', err)
         setError(
@@ -1517,31 +1754,14 @@ export default function DashboardPage() {
     [router]
   )
 
-  /* =========================================================
-     ALL NAVIGATION NOW POINTS TO /dashboard/*
-  ========================================================= */
-
   const handleAttentionNavigation = (item: DashboardAttention) => {
-    if (item.type === 'compliance') {
-      navigateTo('/dashboard/compliance')
-      return
-    }
-    if (item.type === 'contract') {
-      navigateTo('/dashboard/contracts')
-      return
-    }
-    if (item.type === 'document') {
-      navigateTo('/dashboard/documents')
-      return
-    }
-    if (item.type === 'legal-request') {
-      navigateTo('/dashboard/legal-requests')
-      return
-    }
-    if (item.type === 'contract-request') {
-      navigateTo('/dashboard/contract-requests')
-      return
-    }
+    if (item.type === 'compliance') return navigateTo('/dashboard/compliance')
+    if (item.type === 'contract') return navigateTo('/dashboard/contracts')
+    if (item.type === 'document') return navigateTo('/dashboard/documents')
+    if (item.type === 'legal-request')
+      return navigateTo('/dashboard/legal-requests')
+    if (item.type === 'contract-request')
+      return navigateTo('/dashboard/contract-requests')
     navigateTo('/dashboard')
   }
 
@@ -1796,10 +2016,7 @@ export default function DashboardPage() {
           transition={{ delay: 0.35 }}
           className="grid lg:grid-cols-3 gap-5 mb-6"
         >
-          <TeamCard
-            data={team}
-            onViewAll={() => navigateTo('/dashboard/team')}
-          />
+          <TeamCard data={team} onViewAll={() => navigateTo('/dashboard/team')} />
           <div className="lg:col-span-2">
             <OperationsCard data={monthlyOperations} />
           </div>
