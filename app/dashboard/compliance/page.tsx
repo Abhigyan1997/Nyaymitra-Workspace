@@ -121,10 +121,6 @@ const emptyForm: ComplianceForm = {
   recurrence: '',
 }
 
-/* Default recurrence used when the user checks "Recurring"
-   but does not explicitly pick a recurrence option. */
-const DEFAULT_RECURRENCE = 'monthly'
-
 /* =========================================================
    PAGE
 ========================================================= */
@@ -354,11 +350,11 @@ export default function CompliancePage() {
 
       if (form.assignedTo) payload.assignedTo = form.assignedTo
 
-      // Recurrence is optional. If the item is recurring and the user
-      // didn't choose a recurrence, fall back to a sensible default so
-      // the backend never rejects the create request.
+      // Recurrence is optional. Only send it when the user actually
+      // picked one. If recurring is true but no recurrence was chosen,
+      // send 'monthly' as a safe default so the backend accepts it.
       if (form.recurring) {
-        payload.recurrence = form.recurrence || DEFAULT_RECURRENCE
+        payload.recurrence = form.recurrence || 'monthly'
       }
 
       const response = await fetch(`${API_URL}/api/v1/compliance`, {
@@ -408,10 +404,10 @@ export default function CompliancePage() {
         assignedTo: form.assignedTo || null,
       }
 
-      // Recurrence is optional. Only send it when the item is recurring.
-      // If recurring and no recurrence chosen, fall back to the default.
+      // Recurrence is optional. If recurring, send the chosen value
+      // (or default to 'monthly'). If not recurring, clear it.
       if (form.recurring) {
-        payload.recurrence = form.recurrence || DEFAULT_RECURRENCE
+        payload.recurrence = form.recurrence || 'monthly'
       } else {
         payload.recurrence = null
       }
