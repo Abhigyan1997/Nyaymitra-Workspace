@@ -12,7 +12,7 @@ import {
 import { useParams, useRouter } from "next/navigation";
 
 const API_URL =
-    "http://localhost:5000";
+    "https://nyaymitra-backend-production.up.railway.app";
 
 interface InvitationData {
     invitation: {
