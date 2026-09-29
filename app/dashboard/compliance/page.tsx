@@ -349,13 +349,7 @@ export default function CompliancePage() {
       }
 
       if (form.assignedTo) payload.assignedTo = form.assignedTo
-
-      // Recurrence is optional. Only send it when the user actually
-      // picked one. If recurring is true but no recurrence was chosen,
-      // send 'monthly' as a safe default so the backend accepts it.
-      if (form.recurring) {
-        payload.recurrence = form.recurrence || 'monthly'
-      }
+      if (form.recurring && form.recurrence) payload.recurrence = form.recurrence
 
       const response = await fetch(`${API_URL}/api/v1/compliance`, {
         method: 'POST',
@@ -402,14 +396,7 @@ export default function CompliancePage() {
         priority: form.priority,
         recurring: form.recurring,
         assignedTo: form.assignedTo || null,
-      }
-
-      // Recurrence is optional. If recurring, send the chosen value
-      // (or default to 'monthly'). If not recurring, clear it.
-      if (form.recurring) {
-        payload.recurrence = form.recurrence || 'monthly'
-      } else {
-        payload.recurrence = null
+        recurrence: form.recurring && form.recurrence ? form.recurrence : null,
       }
 
       const response = await fetch(`${API_URL}/api/v1/compliance/${selectedId}`, {
@@ -562,7 +549,7 @@ export default function CompliancePage() {
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
       >
-        {/* Header row */}
+        {/* Header row: stacks on mobile, side-by-side on larger screens */}
         <div className="flex flex-col gap-5 mb-8 sm:mb-10 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground mb-2 sm:mb-3 break-words">
@@ -573,6 +560,7 @@ export default function CompliancePage() {
             </p>
           </div>
 
+          {/* Actions: full-width row on mobile */}
           <div className="flex items-center gap-2 sm:gap-3 w-full lg:w-auto">
             <motion.button
               whileHover={{ scale: 1.03 }}
@@ -598,8 +586,9 @@ export default function CompliancePage() {
           </div>
         </div>
 
-        {/* STATS */}
+        {/* STATS: 2 cols on mobile, 4 on md+ */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
+          {/* Total */}
           <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
             <p className="text-xs sm:text-sm font-medium mb-2 sm:mb-3 text-muted-foreground">
               Total Items
@@ -613,6 +602,7 @@ export default function CompliancePage() {
             )}
           </div>
 
+          {/* Pending */}
           <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
             <div className="flex items-center gap-2 mb-2 sm:mb-3">
               <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-500 shrink-0" />
@@ -629,6 +619,7 @@ export default function CompliancePage() {
             )}
           </div>
 
+          {/* Overdue */}
           <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
             <div className="flex items-center gap-2 mb-2 sm:mb-3">
               <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-500 shrink-0" />
@@ -645,6 +636,7 @@ export default function CompliancePage() {
             )}
           </div>
 
+          {/* Completed */}
           <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
             <div className="flex items-center gap-2 mb-2 sm:mb-3">
               <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-accent shrink-0" />
@@ -680,7 +672,7 @@ export default function CompliancePage() {
           />
         </div>
 
-        {/* FILTER */}
+        {/* FILTER: horizontal scroll on mobile */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -975,7 +967,7 @@ export default function CompliancePage() {
                       />
                     </div>
 
-                    {/* Category + Priority */}
+                    {/* Category + Priority: stack on smallest, 2-col from sm */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-2">
@@ -1105,14 +1097,11 @@ export default function CompliancePage() {
                       </label>
                     </div>
 
-                    {/* Recurrence (optional) */}
+                    {/* Recurrence */}
                     {form.recurring && (
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-2">
-                          Recurrence{' '}
-                          <span className="text-muted-foreground font-normal">
-                            (optional)
-                          </span>
+                          Recurrence
                         </label>
                         <select
                           value={form.recurrence}
@@ -1122,18 +1111,13 @@ export default function CompliancePage() {
                           }
                           className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 text-sm sm:text-base"
                         >
-                          <option value="">
-                            Not specified (defaults to Monthly)
-                          </option>
+                          <option value="">Select recurrence</option>
                           <option value="monthly">Monthly</option>
                           <option value="quarterly">Quarterly</option>
                           <option value="half-yearly">Half-yearly</option>
                           <option value="yearly">Yearly</option>
                           <option value="custom">Custom</option>
                         </select>
-                        <p className="text-xs text-muted-foreground mt-1.5">
-                          If left unspecified, the recurrence will default to Monthly.
-                        </p>
                       </div>
                     )}
 
@@ -1192,7 +1176,7 @@ export default function CompliancePage() {
                 )}
               </div>
 
-              {/* FOOTER */}
+              {/* FOOTER: stacks on mobile */}
               <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-2 sm:gap-3 px-4 sm:px-6 py-4 border-t border-border bg-card sticky bottom-0">
                 <button
                   onClick={closeModal}
