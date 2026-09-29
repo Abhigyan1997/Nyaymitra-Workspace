@@ -9,10 +9,12 @@ import {
     ShieldCheck,
     Users,
 } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 
 const API_URL =
     "https://nyaymitra-backend-production.up.railway.app";
+
+const SITE_URL = "https://mynyaymitra.info";
 
 interface InvitationData {
     invitation: {
@@ -72,7 +74,6 @@ const memberTypeLabel = (type: string) => {
 
 export default function InvitationPage() {
     const params = useParams();
-    const router = useRouter();
 
     const token = params?.token as string;
 
@@ -221,26 +222,20 @@ export default function InvitationPage() {
             }
 
             setSuccess(
-                "Your account has been created and you have joined the workspace."
+                "Your account has been created and you have joined the workspace. Redirecting..."
             );
 
             // ------------------------------------------
-            // IMPORTANT
+            // REDIRECT TO MAIN SITE
             // ------------------------------------------
             //
-            // If your backend returns a JWT from
-            // registration, save it here and redirect.
-            //
-            // For now we redirect to login.
+            // Full-page navigation (not router.push) so it
+            // works reliably across origins / subdomains
+            // and avoids the 404 you were seeing on /login.
             // ------------------------------------------
 
             setTimeout(() => {
-                router.push(
-                    `/login?email=${encodeURIComponent(
-                        invitation?.invitation.email ||
-                        ""
-                    )}&invited=1`
-                );
+                window.location.href = SITE_URL;
             }, 1500);
         } catch (err) {
             console.error(err);
@@ -298,9 +293,9 @@ export default function InvitationPage() {
                     </p>
 
                     <button
-                        onClick={() =>
-                            router.push("/")
-                        }
+                        onClick={() => {
+                            window.location.href = SITE_URL;
+                        }}
                         className="mt-6 h-10 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground"
                     >
                         Go to NyayMitra
