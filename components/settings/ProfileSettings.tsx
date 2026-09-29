@@ -24,7 +24,7 @@ import {
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:5000'
+  'https://nyaymitra-backend-production.up.railway.app'
 
 const BUSINESS_PROFILE_API = `${API_URL}/api/v1/business/me`
 const UPDATE_BUSINESS_PROFILE_API = `${API_URL}/api/v1/business/profile`
