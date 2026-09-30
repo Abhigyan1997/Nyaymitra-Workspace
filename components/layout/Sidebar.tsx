@@ -50,7 +50,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Overview', icon: BarChart3, href: '/dashboard', badgeKey: null },
-  { label: 'LegalBox', icon: Lock, href: '/dashboard/documents', badgeKey: 'documents' },
+  { label: 'NyayVault', icon: Lock, href: '/dashboard/documents', badgeKey: 'documents' },
   { label: 'Compliance', icon: CheckSquare, href: '/dashboard/compliance', badgeKey: 'compliance' },
   { label: 'Contracts', icon: FileCheck, href: '/dashboard/contracts', badgeKey: 'contracts' },
   { label: 'Legal Requests', icon: Briefcase, href: '/dashboard/legal-requests', badgeKey: 'legalRequests' },
