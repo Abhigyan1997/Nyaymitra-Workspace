@@ -1,6 +1,6 @@
 'use client'
 
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Upload,
   FileText,
@@ -25,6 +25,12 @@ import {
   Plus,
   Pencil,
   FolderInput,
+  Info,
+  KeyRound,
+  ServerCog,
+  History,
+  UserCheck,
+  Ban,
   type LucideIcon,
 } from 'lucide-react'
 import {
@@ -154,9 +160,7 @@ function Keyhole({
   lit: boolean
   className?: string
 }) {
-  const fill = lit
-    ? '#facc15'
-    : 'rgba(255,255,255,0.18)'
+  const fill = lit ? '#facc15' : 'rgba(255,255,255,0.18)'
 
   return (
     <svg
@@ -173,10 +177,7 @@ function Keyhole({
       }
     >
       <circle cx="12" cy="9.5" r="4" fill={fill} />
-      <path
-        d="M10.2 12.5h3.6l1 7h-5.6z"
-        fill={fill}
-      />
+      <path d="M10.2 12.5h3.6l1 7h-5.6z" fill={fill} />
     </svg>
   )
 }
@@ -217,11 +218,10 @@ function MoveMenu({
     placement: 'bottom',
   })
 
-  /* Position the menu relative to the anchor */
   useLayoutEffect(() => {
     const compute = () => {
       const rect = anchorEl.getBoundingClientRect()
-      const menuWidth = 224 // w-56
+      const menuWidth = 224
       const margin = 8
       const viewportPadding = 8
 
@@ -281,7 +281,6 @@ function MoveMenu({
     }
   }, [anchorEl])
 
-  /* Close on outside click + Escape */
   useEffect(() => {
     const handlePointerDown = (
       e: MouseEvent | TouchEvent
@@ -316,10 +315,7 @@ function MoveMenu({
       'touchstart',
       handlePointerDown
     )
-    document.addEventListener(
-      'keydown',
-      handleKeyDown
-    )
+    document.addEventListener('keydown', handleKeyDown)
 
     return () => {
       document.removeEventListener(
@@ -414,6 +410,212 @@ function MoveMenu({
 }
 
 /* =====================================================
+   SECURITY INFO MODAL
+===================================================== */
+
+interface SecurityInfoModalProps {
+  open: boolean
+  onClose: () => void
+}
+
+const SECURITY_FEATURES: {
+  icon: LucideIcon
+  title: string
+  body: string
+}[] = [
+    {
+      icon: Lock,
+      title: 'AES-256 encryption at rest',
+      body: 'Every file is stored encrypted with bank-grade AES-256. The raw bytes on disk are unreadable without the encryption key, so even a direct disk compromise cannot expose your documents.',
+    },
+    {
+      icon: ShieldCheck,
+      title: 'TLS 1.2+ encryption in transit',
+      body: 'All uploads, downloads, and API calls travel over HTTPS with modern TLS. Your files are never sent in plain text over the network.',
+    },
+    {
+      icon: KeyRound,
+      title: 'Signed, time-limited URLs',
+      body: 'Files are never exposed via public links. Access is granted through short-lived signed URLs that expire automatically and are tied to your authenticated session.',
+    },
+    {
+      icon: UserCheck,
+      title: 'Strict tenant isolation',
+      body: 'Each business vault is logically isolated. Your documents are scoped to your business ID and cannot be accessed, listed, or queried by any other account.',
+    },
+    {
+      icon: ServerCog,
+      title: 'Private encrypted storage',
+      body: 'Files live in a private storage bucket with no public read access. Object-level permissions ensure only the vault service acting on your behalf can retrieve them.',
+    },
+    {
+      icon: History,
+      title: 'Audit trail & access logging',
+      body: 'Every upload, view, download, move, and delete is recorded with a timestamp. This gives you a traceable history of who touched what, and when.',
+    },
+    {
+      icon: Ban,
+      title: 'No third-party sharing',
+      body: 'We never sell, share, or mine your documents. Your confidential data is used only to provide the vault service you requested nothing else.',
+    },
+  ]
+
+function SecurityInfoModal({
+  open,
+  onClose,
+}: SecurityInfoModalProps) {
+  useEffect(() => {
+    if (!open) return
+
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+
+    document.addEventListener('keydown', handleKey)
+
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    return () => {
+      document.removeEventListener('keydown', handleKey)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [open, onClose])
+
+  if (typeof document === 'undefined') return null
+
+  const modal = (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          className="fixed inset-0 z-[10000] flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm px-3 sm:px-4 py-4"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 24, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.98 }}
+            transition={{
+              type: 'spring',
+              stiffness: 300,
+              damping: 28,
+            }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="security-info-title"
+            className="w-full max-w-lg max-h-[88vh] overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-[#141416] shadow-2xl"
+          >
+            {/* Header */}
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-white/10 bg-gradient-to-b from-[#1c1c1f] to-[#141416] px-5 py-4 rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl border border-yellow-400/25 bg-yellow-400/10 flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5 text-yellow-300" />
+                </div>
+
+                <div>
+                  <h3
+                    id="security-info-title"
+                    className="text-lg text-white"
+                    style={{
+                      fontFamily:
+                        'var(--font-display), serif',
+                    }}
+                  >
+                    Your data, locked down
+                  </h3>
+
+                  <p className="text-xs text-white/45">
+                    How NyayVault protects confidential
+                    files
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={onClose}
+                aria-label="Close security information"
+                className="p-1.5 rounded-lg text-white/45 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-5 space-y-5">
+              <p className="text-sm text-white/65 leading-relaxed">
+                Every document you upload is treated as
+                confidential. It is encrypted at rest and
+                in transit, and access is restricted to
+                your verified business account only.
+                Nobody else not other tenants, not our
+                staff can read your files.
+              </p>
+
+              <div className="space-y-3">
+                {SECURITY_FEATURES.map((feature) => {
+                  const Icon = feature.icon
+
+                  return (
+                    <div
+                      key={feature.title}
+                      className="flex gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5"
+                    >
+                      <div className="w-9 h-9 rounded-lg bg-yellow-400/10 flex items-center justify-center flex-shrink-0">
+                        <Icon className="w-4 h-4 text-yellow-300" />
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white">
+                          {feature.title}
+                        </p>
+
+                        <p className="text-xs text-white/50 mt-1 leading-relaxed">
+                          {feature.body}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="rounded-xl border border-yellow-400/20 bg-yellow-400/[0.06] p-3.5">
+                <p className="text-xs text-yellow-100/80 leading-relaxed">
+                  <span className="font-semibold text-yellow-200">
+                    In short:
+                  </span>{' '}
+                  your files are encrypted end-to-end,
+                  isolated to your account, and never
+                  shared. Only you through your
+                  authenticated session can access
+                  them.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-white/10 px-5 py-4">
+              <button
+                onClick={onClose}
+                className="w-full rounded-lg bg-yellow-400 px-4 py-2.5 text-sm font-semibold text-black hover:bg-yellow-300 transition-colors"
+              >
+                Got it
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+
+  return createPortal(modal, document.body)
+}
+
+/* =====================================================
    PAGE
 ===================================================== */
 
@@ -436,38 +638,33 @@ export default function DocumentsPage() {
     string | null
   >(null)
 
-  const [folders, setFolders] = useState<VaultFolder[]>(
-    []
-  )
+  const [folders, setFolders] = useState<VaultFolder[]>([])
 
-  const [showNewFolder, setShowNewFolder] =
-    useState(false)
+  const [showNewFolder, setShowNewFolder] = useState(false)
 
-  const [newFolderName, setNewFolderName] =
-    useState('')
+  const [newFolderName, setNewFolderName] = useState('')
 
   const [creatingFolder, setCreatingFolder] =
     useState(false)
 
-  const [renamingFolder, setRenamingFolder] =
-    useState<string | null>(null)
+  const [renamingFolder, setRenamingFolder] = useState<
+    string | null
+  >(null)
 
-  const [renameValue, setRenameValue] =
-    useState('')
+  const [renameValue, setRenameValue] = useState('')
 
-  const [savingRename, setSavingRename] =
+  const [savingRename, setSavingRename] = useState(false)
+
+  const [showSecurityInfo, setShowSecurityInfo] =
     useState(false)
 
   const [token, setToken] = useState('')
   const [businessId, setBusinessId] = useState('')
   const [businessCode, setBusinessCode] = useState('')
 
-  const [error, setError] = useState<string | null>(
-    null
-  )
+  const [error, setError] = useState<string | null>(null)
 
-  const [documentCount, setDocumentCount] =
-    useState(0)
+  const [documentCount, setDocumentCount] = useState(0)
 
   const [totalStorageUsed, setTotalStorageUsed] =
     useState(0)
@@ -475,16 +672,15 @@ export default function DocumentsPage() {
   const [uploadedDocuments, setUploadedDocuments] =
     useState<CompanyDoc[]>([])
 
-  const fileInputRef =
-    useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  /* Store the anchor button element for the open move menu */
   const anchorRefs = useRef<
     Record<string, HTMLButtonElement | null>
   >({})
 
-  const [uploadProgress, setUploadProgress] =
-    useState<Record<string, number>>({})
+  const [uploadProgress, setUploadProgress] = useState<
+    Record<string, number>
+  >({})
 
   /* =====================================================
      AUTH + BUSINESS
@@ -492,8 +688,7 @@ export default function DocumentsPage() {
 
   useEffect(() => {
     const initialize = async () => {
-      const storedToken =
-        localStorage.getItem('token')
+      const storedToken = localStorage.getItem('token')
 
       if (!storedToken) {
         setError(
@@ -715,8 +910,8 @@ export default function DocumentsPage() {
 
       setDocumentCount(totalDocuments)
 
-      const formattedDocs: CompanyDoc[] =
-        documents.map((doc: any) => ({
+      const formattedDocs: CompanyDoc[] = documents.map(
+        (doc: any) => ({
           id: doc._id,
           name:
             doc.name ||
@@ -726,9 +921,7 @@ export default function DocumentsPage() {
           uploaded: true,
 
           file:
-            doc.originalName ||
-            doc.name ||
-            null,
+            doc.originalName || doc.name || null,
 
           category: doc.category || 'other',
 
@@ -745,7 +938,8 @@ export default function DocumentsPage() {
             doc.folder?._id ||
             doc.folder ||
             undefined,
-        }))
+        })
+      )
 
       setUploadedDocuments(formattedDocs)
 
@@ -784,8 +978,7 @@ export default function DocumentsPage() {
     }
 
     if (folder.slug) {
-      const config =
-        SYSTEM_FOLDER_CONFIG[folder.slug]
+      const config = SYSTEM_FOLDER_CONFIG[folder.slug]
 
       if (config) {
         return config.category
@@ -804,16 +997,12 @@ export default function DocumentsPage() {
     folderId?: string
   ) => {
     if (!businessId || !token) {
-      setError(
-        'Missing business ID or authentication.'
-      )
+      setError('Missing business ID or authentication.')
       return
     }
 
     if (!folderId) {
-      setError(
-        'Please select a folder before uploading.'
-      )
+      setError('Please select a folder before uploading.')
       return
     }
 
@@ -833,26 +1022,24 @@ export default function DocumentsPage() {
       const category =
         getCategoryForFolder(selectedFolder)
 
-      const generateResponse =
-        await axios.post(
-          `${API_BASE_URL}/api/v1/documents/generate-upload-url`,
-          {
-            businessId,
-            category,
-            folderId,
-            fileName: file.name,
-            mimeType:
-              file.type ||
-              'application/octet-stream',
-            visibility: 'business',
+      const generateResponse = await axios.post(
+        `${API_BASE_URL}/api/v1/documents/generate-upload-url`,
+        {
+          businessId,
+          category,
+          folderId,
+          fileName: file.name,
+          mimeType:
+            file.type || 'application/octet-stream',
+          visibility: 'business',
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
           },
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        )
+        }
+      )
 
       if (!generateResponse.data?.success) {
         throw new Error(
@@ -873,8 +1060,7 @@ export default function DocumentsPage() {
       await axios.put(uploadUrl, file, {
         headers: {
           'Content-Type':
-            file.type ||
-            'application/octet-stream',
+            file.type || 'application/octet-stream',
         },
         onUploadProgress: (progressEvent) => {
           if (progressEvent.total) {
@@ -940,9 +1126,7 @@ export default function DocumentsPage() {
      VIEW DOCUMENT
   ===================================================== */
 
-  const handleViewDocument = async (
-    doc: CompanyDoc
-  ) => {
+  const handleViewDocument = async (doc: CompanyDoc) => {
     if (!doc.uploaded || !doc.id) {
       return
     }
@@ -1015,8 +1199,7 @@ export default function DocumentsPage() {
           }
         )
 
-        downloadUrl =
-          response.data?.data?.downloadUrl
+        downloadUrl = response.data?.data?.downloadUrl
       }
 
       if (!downloadUrl) {
@@ -1024,26 +1207,20 @@ export default function DocumentsPage() {
         return
       }
 
-      const fileResponse = await axios.get(
-        downloadUrl,
-        { responseType: 'blob' }
-      )
-
-      const blob = new Blob([fileResponse.data], {
-        type:
-          doc.mimeType ||
-          'application/octet-stream',
+      const fileResponse = await axios.get(downloadUrl, {
+        responseType: 'blob',
       })
 
-      const url =
-        window.URL.createObjectURL(blob)
+      const blob = new Blob([fileResponse.data], {
+        type: doc.mimeType || 'application/octet-stream',
+      })
 
-      const link =
-        document.createElement('a')
+      const url = window.URL.createObjectURL(blob)
+
+      const link = document.createElement('a')
 
       link.href = url
-      link.download =
-        doc.file || doc.name || 'document'
+      link.download = doc.file || doc.name || 'document'
 
       document.body.appendChild(link)
       link.click()
@@ -1130,13 +1307,9 @@ export default function DocumentsPage() {
      DELETE DOCUMENT
   ===================================================== */
 
-  const handleDeleteDocument = async (
-    docId: string
-  ) => {
+  const handleDeleteDocument = async (docId: string) => {
     if (
-      !confirm(
-        'Remove this document from the vault?'
-      )
+      !confirm('Remove this document from the vault?')
     ) {
       return
     }
@@ -1151,16 +1324,13 @@ export default function DocumentsPage() {
         }
       )
 
-      const updatedDocs =
-        uploadedDocuments.filter(
-          (doc) => doc.id !== docId
-        )
+      const updatedDocs = uploadedDocuments.filter(
+        (doc) => doc.id !== docId
+      )
 
       setUploadedDocuments(updatedDocs)
 
-      setDocumentCount((prev) =>
-        Math.max(prev - 1, 0)
-      )
+      setDocumentCount((prev) => Math.max(prev - 1, 0))
 
       setTotalStorageUsed(
         updatedDocs.reduce(
@@ -1195,9 +1365,7 @@ export default function DocumentsPage() {
     }
 
     if (!businessId || !token) {
-      setError(
-        'Missing business ID or authentication.'
-      )
+      setError('Missing business ID or authentication.')
       return
     }
 
@@ -1246,9 +1414,7 @@ export default function DocumentsPage() {
      START RENAME
   ===================================================== */
 
-  const startRenameFolder = (
-    folder: VaultFolder
-  ) => {
+  const startRenameFolder = (folder: VaultFolder) => {
     if (folder.type !== 'custom') {
       return
     }
@@ -1321,9 +1487,7 @@ export default function DocumentsPage() {
     const folderDocs = docsIn(folder.id)
 
     if (folderDocs.length > 0) {
-      setError(
-        'Empty the folder before deleting it.'
-      )
+      setError('Empty the folder before deleting it.')
       return
     }
 
@@ -1378,9 +1542,7 @@ export default function DocumentsPage() {
       return `${(bytes / 1024).toFixed(1)} KB`
     }
 
-    return `${(bytes / (1024 * 1024)).toFixed(
-      1
-    )} MB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
   const formatStorageUsed = (bytes: number) => {
@@ -1397,9 +1559,7 @@ export default function DocumentsPage() {
 
     if (used < 1024 * 1024 * 1024) {
       return {
-        used: `${(used / (1024 * 1024)).toFixed(
-          1
-        )} MB`,
+        used: `${(used / (1024 * 1024)).toFixed(1)} MB`,
         percentage,
       }
     }
@@ -1410,9 +1570,7 @@ export default function DocumentsPage() {
     }
   }
 
-  const getFileExtension = (
-    fileName: string | null
-  ) => {
+  const getFileExtension = (fileName: string | null) => {
     if (!fileName) {
       return ''
     }
@@ -1434,9 +1592,7 @@ export default function DocumentsPage() {
     )
   }
 
-  const storageInfo = formatStorageUsed(
-    totalStorageUsed
-  )
+  const storageInfo = formatStorageUsed(totalStorageUsed)
 
   const activeProgress = uploading
     ? Object.values(uploadProgress)[0] ?? 0
@@ -1455,10 +1611,9 @@ export default function DocumentsPage() {
     ? folderDocs.find((d) => d.id === openMoveMenu)
     : null
 
-  const openAnchor =
-    openMoveMenu
-      ? anchorRefs.current[openMoveMenu]
-      : null
+  const openAnchor = openMoveMenu
+    ? anchorRefs.current[openMoveMenu]
+    : null
 
   /* =====================================================
      RENDER
@@ -1490,9 +1645,7 @@ export default function DocumentsPage() {
             role="alert"
             className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 mb-6 flex items-center justify-between"
           >
-            <p className="text-sm text-red-300">
-              {error}
-            </p>
+            <p className="text-sm text-red-300">{error}</p>
 
             <button
               onClick={() => setError(null)}
@@ -1528,27 +1681,38 @@ export default function DocumentsPage() {
             </div>
           </div>
 
-          {activeFolder && (
+          <div className="flex items-center gap-2">
             <button
-              onClick={() =>
-                fileInputRef.current?.click()
-              }
-              disabled={uploading}
-              className="flex items-center gap-2 px-4 py-2.5 bg-yellow-400 text-black rounded-full font-semibold text-sm hover:bg-yellow-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              onClick={() => setShowSecurityInfo(true)}
+              aria-label="How NyayVault protects your data"
+              title="How we protect your data"
+              className="flex items-center justify-center w-10 h-10 rounded-full border border-white/10 bg-white/[0.03] text-white/55 hover:text-yellow-300 hover:border-yellow-400/40 transition-colors"
             >
-              {uploading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  {activeProgress}%
-                </>
-              ) : (
-                <>
-                  <Upload className="w-4 h-4" />
-                  Upload
-                </>
-              )}
+              <Info className="w-4 h-4" />
             </button>
-          )}
+
+            {activeFolder && (
+              <button
+                onClick={() =>
+                  fileInputRef.current?.click()
+                }
+                disabled={uploading}
+                className="flex items-center gap-2 px-4 py-2.5 bg-yellow-400 text-black rounded-full font-semibold text-sm hover:bg-yellow-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {activeProgress}%
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    Upload
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </header>
 
         {/* Summary */}
@@ -1980,8 +2144,7 @@ export default function DocumentsPage() {
                     <activeFolder.icon className="w-8 h-8 mx-auto mb-3 text-white/15" />
 
                     <p className="text-sm text-white/60">
-                      No files in {activeFolder.name}{' '}
-                      yet
+                      No files in {activeFolder.name} yet
                     </p>
 
                     <p className="text-xs text-white/35 mt-1">
@@ -1995,8 +2158,9 @@ export default function DocumentsPage() {
                         doc.mimeType
                       )
 
-                      const fileExt =
-                        getFileExtension(doc.file)
+                      const fileExt = getFileExtension(
+                        doc.file
+                      )
 
                       const isMenuOpen =
                         openMoveMenu === doc.id
@@ -2018,9 +2182,7 @@ export default function DocumentsPage() {
 
                               <p className="text-xs text-white/40 mt-0.5">
                                 {fileExt || 'FILE'} ·{' '}
-                                {formatFileSize(
-                                  doc.size
-                                )}
+                                {formatFileSize(doc.size)}
 
                                 {doc.uploadedAt &&
                                   ` · ${new Date(
@@ -2075,9 +2237,7 @@ export default function DocumentsPage() {
 
                             <button
                               onClick={() =>
-                                handleDownloadDocument(
-                                  doc
-                                )
+                                handleDownloadDocument(doc)
                               }
                               aria-label={`Download ${doc.name}`}
                               title="Download"
@@ -2088,9 +2248,7 @@ export default function DocumentsPage() {
 
                             <button
                               onClick={() =>
-                                handleDeleteDocument(
-                                  doc.id
-                                )
+                                handleDeleteDocument(doc.id)
                               }
                               aria-label={`Remove ${doc.name}`}
                               title="Delete"
@@ -2119,8 +2277,7 @@ export default function DocumentsPage() {
                   e.preventDefault()
                   setIsDragging(false)
 
-                  const file =
-                    e.dataTransfer.files[0]
+                  const file = e.dataTransfer.files[0]
 
                   if (file) {
                     handleFileUpload(
@@ -2164,7 +2321,8 @@ export default function DocumentsPage() {
                 </p>
 
                 <p className="text-xs text-white/30 mt-1">
-                  PDF, DOC, DOCX, XLS, XLSX, PNG, JPG · up to 100 MB
+                  PDF, DOC, DOCX, XLS, XLSX, PNG, JPG · up
+                  to 100 MB
                 </p>
               </div>
             </>
@@ -2176,6 +2334,13 @@ export default function DocumentsPage() {
           <ShieldCheck className="w-4 h-4 text-yellow-400/60" />
 
           <p>Every file is AES-256 encrypted</p>
+
+          <button
+            onClick={() => setShowSecurityInfo(true)}
+            className="underline decoration-dotted underline-offset-2 hover:text-yellow-300 transition-colors"
+          >
+            Learn more
+          </button>
         </footer>
       </div>
 
@@ -2193,6 +2358,12 @@ export default function DocumentsPage() {
           onClose={() => setOpenMoveMenu(null)}
         />
       )}
+
+      {/* Security info modal */}
+      <SecurityInfoModal
+        open={showSecurityInfo}
+        onClose={() => setShowSecurityInfo(false)}
+      />
     </div>
   )
 }
