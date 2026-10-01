@@ -45,6 +45,9 @@ const API_BASE = (
 ).replace(/\/$/, '')
 
 const BUSINESSES_API = `${API_BASE}/admin/businesses`
+const LAWYERS_API = `${API_BASE}/lawyer/all`
+const ASSIGN_LAWYER_API = (businessId: string) =>
+    `${API_BASE}/admin/businesses/${businessId}/lawyer`
 
 // ==================================================
 // AUTH
@@ -139,6 +142,9 @@ interface Business {
 
     owner?: BusinessOwner
 
+    // string id of the assigned lawyer (auth user ObjectId)
+    assignedLawyer?: string | null
+
     createdAt?: string
     updatedAt?: string
 }
@@ -148,6 +154,98 @@ interface BusinessPagination {
     limit: number
     total: number
     pages: number
+}
+
+// ---- Lawyer types (matching backend nested shape) ----
+
+interface LawyerUserInfo {
+    _id?: string // auth user ObjectId (6ab38080bc0e2a4134fb9e7f)
+    userId?: string // custom string id (L01M36JVX5PP457MAR00AS03F53)
+    fullName?: string
+    email?: string
+    phone?: string
+    profileImage?: string | null
+    profilePhoto?: string | null
+    gender?: string | null
+    address?: Record<string, unknown>
+}
+
+interface LawyerDetails {
+    _id: string // lawyer profile doc id (6ab38080bc0e2a4134fb9e81)
+    userId?: string
+    specialization?: string[] | string
+    experience?: number | null
+    yearsPracticing?: number
+    city?: string
+    state?: string
+    status?: string
+    consultationFee?: number
+    kycStatus?: string
+    verifiedByPlatform?: boolean
+    isPremium?: boolean
+    averageRating?: number
+    totalReviews?: number
+    isDeleted?: boolean
+    bio?: string
+    lawFirm?: string | null
+    barCouncilId?: string
+    languagesSpoken?: string[]
+    timeSlots?: unknown[]
+    consultationModes?: Record<string, boolean>
+    [key: string]: unknown
+}
+
+interface LawyerApiItem {
+    userInfo?: LawyerUserInfo
+    lawyerDetails?: LawyerDetails
+    _id?: string
+    fullName?: string
+    name?: string
+    email?: string
+    phone?: string
+    specialization?: string | string[]
+}
+
+// Normalized shape used throughout the UI
+interface Lawyer {
+    _id: string // auth user ObjectId (userInfo._id) — sent to backend + React key
+    profileId?: string // lawyerDetails._id — reference only
+    authUserId?: string // userInfo.userId / lawyerDetails.userId — reference only
+    fullName: string
+    email: string
+    phone: string
+    specialization: string
+    specializations: string[]
+    experience?: number | null
+    city?: string
+    state?: string
+    status?: string
+    consultationFee?: number
+    kycVerified: boolean
+    verifiedByPlatform: boolean
+    isPremium: boolean
+    averageRating: number
+    totalReviews: number
+    profileImage?: string | null
+    bio?: string
+    lawFirm?: string | null
+    barCouncilId?: string
+    languagesSpoken: string[]
+    raw: LawyerApiItem
+}
+
+interface AssignedLawyer {
+    _id?: string
+    lawyerId?: string
+    userId?: string
+    fullName?: string
+    name?: string
+    email?: string
+    phone?: string
+    specialization?: string
+    assignedAt?: string
+    assignedBy?: string
+    status?: string
 }
 
 // ==================================================
@@ -187,12 +285,7 @@ const BUSINESS_NEEDS = [
 const STATUSES = ['Active', 'Inactive']
 const WORKSPACE_STATUSES = ['Active', 'Suspended']
 const SUBSCRIPTION_PLANS = ['Starter', 'Growth', 'Enterprise']
-const SUBSCRIPTION_STATUSES = [
-    'Trial',
-    'Active',
-    'Expired',
-    'Cancelled',
-]
+const SUBSCRIPTION_STATUSES = ['Trial', 'Active', 'Expired', 'Cancelled']
 
 // ==================================================
 // HELPERS
@@ -224,6 +317,93 @@ function toInputDate(value?: string | null): string {
     const d = new Date(value)
     if (Number.isNaN(d.getTime())) return ''
     return d.toISOString().split('T')[0]
+}
+
+function normalizeSpecs(spec?: string | string[] | null): string[] {
+    if (!spec) return []
+    if (Array.isArray(spec)) {
+        return spec.map((s) => String(s).trim()).filter(Boolean)
+    }
+    return String(spec)
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+}
+
+function mapLawyer(item: LawyerApiItem, index: number): Lawyer {
+    const user = item.userInfo ?? {}
+    const details = item.lawyerDetails ?? ({} as LawyerDetails)
+
+    // ⬇️ Prefer auth user ObjectId (userInfo._id) — this is what backend expects.
+    // Falls back to top-level item._id, then lawyerDetails._id, then synthesised.
+    const authObjectId =
+        user._id ||
+        item._id ||
+        details._id ||
+        `${user.email ?? 'lawyer'}-${index}`
+
+    const profileId = details._id
+
+    const specs = normalizeSpecs(
+        details.specialization ?? item.specialization
+    )
+
+    const fullName =
+        user.fullName?.trim() ||
+        item.fullName?.trim() ||
+        item.name?.trim() ||
+        user.email?.split('@')[0] ||
+        'Unnamed Lawyer'
+
+    const profileImage =
+        (user.profilePhoto as string | null | undefined) ||
+        (user.profileImage as string | null | undefined) ||
+        null
+
+    return {
+        _id: authObjectId,
+        profileId,
+        authUserId: details.userId || user.userId,
+        fullName,
+        email: user.email ?? item.email ?? '',
+        phone: user.phone ?? item.phone ?? '',
+        specialization: specs.join(', '),
+        specializations: specs,
+        experience:
+            details.experience ?? details.yearsPracticing ?? undefined,
+        city: details.city,
+        state: details.state,
+        status: details.status,
+        consultationFee: details.consultationFee,
+        kycVerified:
+            String(details.kycStatus || '').toLowerCase() === 'verified',
+        verifiedByPlatform: Boolean(details.verifiedByPlatform),
+        isPremium: Boolean(details.isPremium),
+        averageRating: details.averageRating ?? 0,
+        totalReviews: details.totalReviews ?? 0,
+        profileImage,
+        bio: details.bio,
+        lawFirm: details.lawFirm,
+        barCouncilId: details.barCouncilId,
+        languagesSpoken: Array.isArray(details.languagesSpoken)
+            ? details.languagesSpoken
+            : [],
+        raw: item,
+    }
+}
+
+function lawyerToAssignedLawyer(l: Lawyer): AssignedLawyer {
+    return {
+        _id: l._id,
+        lawyerId: l._id,
+        userId: l.authUserId,
+        fullName: l.fullName,
+        name: l.fullName,
+        email: l.email,
+        phone: l.phone,
+        specialization: l.specialization,
+        status: l.status,
+    }
 }
 
 // ==================================================
@@ -390,6 +570,25 @@ export default function AdminBusinessesPage() {
     const [saveError, setSaveError] = useState<string | null>(null)
     const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
+    // ----- lawyer assignment -----
+    const [assignedLawyer, setAssignedLawyer] = useState<AssignedLawyer | null>(
+        null
+    )
+    const [assignedLawyerLoading, setAssignedLawyerLoading] = useState(false)
+    const [assignedLawyerError, setAssignedLawyerError] = useState<
+        string | null
+    >(null)
+
+    const [lawyers, setLawyers] = useState<Lawyer[]>([])
+    const [lawyersLoading, setLawyersLoading] = useState(false)
+    const [lawyersError, setLawyersError] = useState<string | null>(null)
+    const [lawyerSearch, setLawyerSearch] = useState('')
+
+    const [showAssignModal, setShowAssignModal] = useState(false)
+    const [assigning, setAssigning] = useState(false)
+    const [assignError, setAssignError] = useState<string | null>(null)
+    const [removingLawyer, setRemovingLawyer] = useState(false)
+
     const abortRef = useRef<AbortController | null>(null)
 
     // ----- debounce search input -----
@@ -533,9 +732,7 @@ export default function AdminBusinessesPage() {
 
             if (!res.ok) {
                 if (res.status === 404)
-                    throw new Error(
-                        json?.message || 'Business not found.'
-                    )
+                    throw new Error(json?.message || 'Business not found.')
                 if (res.status === 401)
                     throw new Error(
                         json?.message || 'Unauthorized. Please sign in again.'
@@ -567,13 +764,189 @@ export default function AdminBusinessesPage() {
         }
     }, [])
 
+    // ==================================================
+    // LAWYER ASSIGNMENT
+    // ==================================================
+
+    const fetchAssignedLawyer = useCallback(
+        async (businessId: string, businessAssignedId?: string | null) => {
+            setAssignedLawyerLoading(true)
+            setAssignedLawyerError(null)
+            setAssignedLawyer(null)
+
+            try {
+                const token = getAuthToken()
+                if (!token) throw new Error('Authentication required.')
+
+                // ---- Try dedicated endpoint first ----
+                try {
+                    const res = await fetch(ASSIGN_LAWYER_API(businessId), {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`,
+                        },
+                    })
+
+                    // 404 = nothing assigned — fall through to string fallback
+                    if (res.status !== 404) {
+                        const json = await res.json().catch(() => ({}))
+                        if (res.ok) {
+                            const payload: AssignedLawyer | null =
+                                json?.data?.lawyer || json?.data || null
+                            if (
+                                payload &&
+                                (payload._id || payload.lawyerId)
+                            ) {
+                                setAssignedLawyer(payload)
+                                return
+                            }
+                        }
+                    }
+                } catch {
+                    // swallow — fall through to string lookup
+                }
+
+                // ---- Fallback: use the string id on the business ----
+                const idToFind = businessAssignedId
+                if (!idToFind) {
+                    setAssignedLawyer(null)
+                    return
+                }
+
+                // 1) Check if we already have the lawyer loaded
+                const local = lawyers.find(
+                    (l) =>
+                        l._id === idToFind ||
+                        l.profileId === idToFind ||
+                        l.authUserId === idToFind
+                )
+                if (local) {
+                    setAssignedLawyer(lawyerToAssignedLawyer(local))
+                    return
+                }
+
+                // 2) Not loaded yet — fetch the full lawyers list once and look it up
+                try {
+                    const res = await fetch(`${LAWYERS_API}?limit=500`, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`,
+                        },
+                    })
+                    const json = await res.json().catch(() => ({}))
+                    if (res.ok) {
+                        const rawList: LawyerApiItem[] = Array.isArray(
+                            json?.lawyers
+                        )
+                            ? json.lawyers
+                            : Array.isArray(json?.data?.lawyers)
+                                ? json.data.lawyers
+                                : Array.isArray(json?.data)
+                                    ? json.data
+                                    : []
+                        const normalized = rawList.map(mapLawyer)
+                        setLawyers(normalized)
+                        const found = normalized.find(
+                            (l) =>
+                                l._id === idToFind ||
+                                l.profileId === idToFind ||
+                                l.authUserId === idToFind
+                        )
+                        if (found) {
+                            setAssignedLawyer(lawyerToAssignedLawyer(found))
+                            return
+                        }
+                    }
+                } catch {
+                    // ignore — show placeholder below
+                }
+
+                // 3) We know it's assigned, just don't have details
+                setAssignedLawyer({
+                    _id: idToFind,
+                    lawyerId: idToFind,
+                    fullName: 'Assigned Lawyer',
+                    name: 'Assigned Lawyer',
+                })
+            } catch (err) {
+                setAssignedLawyerError(
+                    err instanceof Error
+                        ? err.message
+                        : 'Failed to load assigned lawyer.'
+                )
+            } finally {
+                setAssignedLawyerLoading(false)
+            }
+        },
+        [lawyers]
+    )
+
+    const fetchLawyers = useCallback(async () => {
+        setLawyersLoading(true)
+        setLawyersError(null)
+
+        try {
+            const token = getAuthToken()
+            if (!token) throw new Error('Authentication required.')
+
+            const params = new URLSearchParams()
+            params.set('limit', '200')
+            if (lawyerSearch) params.set('search', lawyerSearch)
+
+            const res = await fetch(`${LAWYERS_API}?${params.toString()}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+            })
+
+            const json = await res.json().catch(() => ({}))
+
+            if (!res.ok) {
+                throw new Error(
+                    json?.message || `Failed to load lawyers (${res.status})`
+                )
+            }
+
+            // Backend returns: { lawyers: [{ userInfo, lawyerDetails }] }
+            const rawList: LawyerApiItem[] = Array.isArray(json?.lawyers)
+                ? json.lawyers
+                : Array.isArray(json?.data?.lawyers)
+                    ? json.data.lawyers
+                    : Array.isArray(json?.data)
+                        ? json.data
+                        : []
+
+            setLawyers(rawList.map(mapLawyer))
+        } catch (err) {
+            setLawyersError(
+                err instanceof Error ? err.message : 'Failed to load lawyers.'
+            )
+        } finally {
+            setLawyersLoading(false)
+        }
+    }, [lawyerSearch])
+
     const handleView = (id: string) => {
         setDetailId(id)
         setEditing(false)
         setSuccessMessage(null)
         setSaveError(null)
+        setAssignedLawyer(null)
+        setAssignedLawyerError(null)
         fetchDetails(id)
+        // Assigned lawyer will be resolved once `detail` is loaded — see effect below
     }
+
+    // Resolve assigned lawyer whenever the business detail is loaded / refreshed
+    useEffect(() => {
+        if (!detailId || !detail) return
+        fetchAssignedLawyer(detailId, detail.assignedLawyer ?? null)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [detailId, detail?._id, detail?.assignedLawyer])
 
     const closeDrawer = () => {
         setDetailId(null)
@@ -581,7 +954,132 @@ export default function AdminBusinessesPage() {
         setEditing(false)
         setSaveError(null)
         setSuccessMessage(null)
+        setAssignedLawyer(null)
+        setAssignedLawyerError(null)
+        setShowAssignModal(false)
     }
+
+    const openAssignModal = () => {
+        setShowAssignModal(true)
+        setAssignError(null)
+        setLawyerSearch('')
+        fetchLawyers()
+    }
+
+    // Pass the full Lawyer object; we send lawyer._id (auth user ObjectId)
+    const handleAssignLawyer = async (lawyer: Lawyer) => {
+        if (!detailId) return
+        setAssigning(true)
+        setAssignError(null)
+
+        try {
+            const token = getAuthToken()
+            if (!token) throw new Error('Authentication required.')
+
+            // Send the AUTH USER ObjectId (userInfo._id) — e.g. 6ab38080bc0e2a4134fb9e7f
+            const payload = {
+                lawyerId: lawyer._id,
+            }
+
+            const res = await fetch(ASSIGN_LAWYER_API(detailId), {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(payload),
+            })
+
+            const json = await res.json().catch(() => ({}))
+
+            if (!res.ok) {
+                throw new Error(
+                    json?.message ||
+                    `Failed to assign lawyer (${res.status})`
+                )
+            }
+
+            setShowAssignModal(false)
+            setSuccessMessage(
+                json?.message || 'Lawyer assigned successfully.'
+            )
+
+            // Optimistically update drawer, then re-fetch business detail
+            setAssignedLawyer(lawyerToAssignedLawyer(lawyer))
+            if (detailId) {
+                await fetchDetails(detailId)
+            }
+
+            window.setTimeout(() => setSuccessMessage(null), 4000)
+        } catch (err) {
+            setAssignError(
+                err instanceof Error
+                    ? err.message
+                    : 'Failed to assign lawyer.'
+            )
+        } finally {
+            setAssigning(false)
+        }
+    }
+
+    const handleRemoveLawyer = async () => {
+        if (!detailId) return
+        if (
+            !window.confirm('Remove the assigned lawyer from this business?')
+        )
+            return
+
+        setRemovingLawyer(true)
+        setAssignedLawyerError(null)
+
+        try {
+            const token = getAuthToken()
+            if (!token) throw new Error('Authentication required.')
+
+            const res = await fetch(ASSIGN_LAWYER_API(detailId), {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+            })
+
+            const json = await res.json().catch(() => ({}))
+
+            if (!res.ok) {
+                throw new Error(
+                    json?.message ||
+                    `Failed to remove lawyer (${res.status})`
+                )
+            }
+
+            setAssignedLawyer(null)
+            setSuccessMessage(json?.message || 'Lawyer removed successfully.')
+
+            if (detailId) {
+                await fetchDetails(detailId)
+            }
+
+            window.setTimeout(() => setSuccessMessage(null), 4000)
+        } catch (err) {
+            setAssignedLawyerError(
+                err instanceof Error
+                    ? err.message
+                    : 'Failed to remove lawyer.'
+            )
+        } finally {
+            setRemovingLawyer(false)
+        }
+    }
+
+    // Debounced lawyer search while modal is open
+    useEffect(() => {
+        if (!showAssignModal) return
+        const t = window.setTimeout(() => {
+            fetchLawyers()
+        }, 350)
+        return () => window.clearTimeout(t)
+    }, [lawyerSearch, showAssignModal, fetchLawyers])
 
     // ==================================================
     // EDIT
@@ -734,31 +1232,24 @@ export default function AdminBusinessesPage() {
                         json?.message || 'Forbidden. Admin access required.'
                     )
                 if (res.status === 404)
-                    throw new Error(
-                        json?.message || 'Business not found.'
-                    )
+                    throw new Error(json?.message || 'Business not found.')
                 throw new Error(
-                    json?.message ||
-                    `Save failed with status ${res.status}`
+                    json?.message || `Save failed with status ${res.status}`
                 )
             }
 
             setSuccessMessage(json?.message || 'Business updated successfully.')
             setEditing(false)
 
-            // Refresh detail and list
             await Promise.all([
                 fetchDetails(detailId),
                 fetchBusinesses(true),
             ])
 
-            // Auto-clear success message
             window.setTimeout(() => setSuccessMessage(null), 4000)
         } catch (err) {
             setSaveError(
-                err instanceof Error
-                    ? err.message
-                    : 'Failed to save changes.'
+                err instanceof Error ? err.message : 'Failed to save changes.'
             )
         } finally {
             setSaving(false)
@@ -815,9 +1306,7 @@ export default function AdminBusinessesPage() {
                             <input
                                 type="text"
                                 value={searchInput}
-                                onChange={(e) =>
-                                    setSearchInput(e.target.value)
-                                }
+                                onChange={(e) => setSearchInput(e.target.value)}
                                 placeholder="Search by name, email, CIN..."
                                 className={`${inputCls} pl-9`}
                             />
@@ -825,9 +1314,7 @@ export default function AdminBusinessesPage() {
 
                         <select
                             value={statusFilter}
-                            onChange={(e) =>
-                                setStatusFilter(e.target.value)
-                            }
+                            onChange={(e) => setStatusFilter(e.target.value)}
                             className={inputCls}
                         >
                             <option value="">All statuses</option>
@@ -856,9 +1343,7 @@ export default function AdminBusinessesPage() {
                         <input
                             type="text"
                             value={industryFilter}
-                            onChange={(e) =>
-                                setIndustryFilter(e.target.value)
-                            }
+                            onChange={(e) => setIndustryFilter(e.target.value)}
                             placeholder="Filter by industry"
                             className={inputCls}
                         />
@@ -1021,9 +1506,7 @@ export default function AdminBusinessesPage() {
                                         type="button"
                                         disabled={!canPrev || loading}
                                         onClick={() =>
-                                            setPage((p) =>
-                                                Math.max(1, p - 1)
-                                            )
+                                            setPage((p) => Math.max(1, p - 1))
                                         }
                                         className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-gray-300 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
                                     >
@@ -1035,9 +1518,7 @@ export default function AdminBusinessesPage() {
                                     <button
                                         type="button"
                                         disabled={!canNext || loading}
-                                        onClick={() =>
-                                            setPage((p) => p + 1)
-                                        }
+                                        onClick={() => setPage((p) => p + 1)}
                                         className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-gray-300 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                         Next
@@ -1079,9 +1560,7 @@ export default function AdminBusinessesPage() {
                                 <div className="min-w-0">
                                     <h2 className="truncate text-lg font-semibold">
                                         {detail
-                                            ? formatValue(
-                                                detail.companyName
-                                            )
+                                            ? formatValue(detail.companyName)
                                             : 'Business Details'}
                                     </h2>
                                     <p className="mt-0.5 truncate text-xs text-gray-600">
@@ -1114,9 +1593,7 @@ export default function AdminBusinessesPage() {
 
                             {/* Drawer body */}
                             <div className="flex-1 overflow-y-auto px-6 py-5">
-                                {detailLoading && (
-                                    <Skeleton rows={8} />
-                                )}
+                                {detailLoading && <Skeleton rows={8} />}
 
                                 {detailError && (
                                     <div className="flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
@@ -1141,6 +1618,26 @@ export default function AdminBusinessesPage() {
                                             </div>
                                         )}
 
+                                        {/* Assigned Lawyer Section (view mode only) */}
+                                        {!editing && (
+                                            <AssignedLawyerSection
+                                                assignedLawyer={assignedLawyer}
+                                                loading={assignedLawyerLoading}
+                                                error={assignedLawyerError}
+                                                removing={removingLawyer}
+                                                onAssign={openAssignModal}
+                                                onRemove={handleRemoveLawyer}
+                                                onRetry={() =>
+                                                    detailId &&
+                                                    fetchAssignedLawyer(
+                                                        detailId,
+                                                        detail.assignedLawyer ??
+                                                        null
+                                                    )
+                                                }
+                                            />
+                                        )}
+
                                         {editing ? (
                                             <EditForm
                                                 form={form}
@@ -1158,6 +1655,182 @@ export default function AdminBusinessesPage() {
                                 )}
                             </div>
                         </motion.aside>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* ---------- Assign Lawyer Modal ---------- */}
+            <AnimatePresence>
+                {showAssignModal && (
+                    <motion.div
+                        className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                    >
+                        <div
+                            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                            onClick={() =>
+                                !assigning && setShowAssignModal(false)
+                            }
+                        />
+
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            transition={{ duration: 0.15 }}
+                            className="relative flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0a0a0a]"
+                        >
+                            <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
+                                <div>
+                                    <h3 className="text-sm font-semibold text-white">
+                                        {assignedLawyer
+                                            ? 'Change Lawyer'
+                                            : 'Assign Lawyer'}
+                                    </h3>
+                                    <p className="mt-0.5 text-xs text-gray-600">
+                                        Select a lawyer to assign to this
+                                        business.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        !assigning && setShowAssignModal(false)
+                                    }
+                                    className="rounded-lg border border-white/10 bg-white/[0.04] p-1.5 text-gray-400 transition hover:bg-white/[0.08]"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+
+                            <div className="border-b border-white/[0.06] px-5 py-3">
+                                <div className="relative">
+                                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+                                    <input
+                                        type="text"
+                                        value={lawyerSearch}
+                                        onChange={(e) =>
+                                            setLawyerSearch(e.target.value)
+                                        }
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter')
+                                                fetchLawyers()
+                                        }}
+                                        placeholder="Search lawyers by name, email..."
+                                        className={`${inputCls} pl-9`}
+                                    />
+                                </div>
+                            </div>
+
+                            {assignError && (
+                                <div className="mx-5 mt-3 flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+                                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                                    <span>{assignError}</span>
+                                </div>
+                            )}
+
+                            <div className="flex-1 overflow-y-auto px-5 py-3">
+                                {lawyersLoading ? (
+                                    <Skeleton rows={5} />
+                                ) : lawyersError ? (
+                                    <div className="flex items-center gap-2 py-6 text-xs text-red-400">
+                                        <AlertCircle className="h-3.5 w-3.5" />
+                                        <span>{lawyersError}</span>
+                                    </div>
+                                ) : lawyers.length === 0 ? (
+                                    <EmptyState
+                                        title="No lawyers found"
+                                        description="Try a different search term."
+                                        icon={User}
+                                    />
+                                ) : (
+                                    <div className="space-y-2">
+                                        {lawyers.map((l) => {
+                                            // Match against auth ObjectId OR profileId OR authUserId
+                                            // so the "Current" badge works regardless of
+                                            // what the backend stored.
+                                            const isCurrent =
+                                                assignedLawyer?.lawyerId ===
+                                                l._id ||
+                                                assignedLawyer?._id === l._id ||
+                                                assignedLawyer?.lawyerId ===
+                                                l.profileId ||
+                                                assignedLawyer?._id ===
+                                                l.profileId ||
+                                                assignedLawyer?.userId ===
+                                                l.authUserId
+
+                                            return (
+                                                <button
+                                                    key={l._id}
+                                                    type="button"
+                                                    onClick={() =>
+                                                        handleAssignLawyer(l)
+                                                    }
+                                                    disabled={
+                                                        assigning || isCurrent
+                                                    }
+                                                    className="flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-left transition hover:border-amber-400/30 hover:bg-amber-400/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    {l.profileImage ? (
+                                                        <img
+                                                            src={l.profileImage}
+                                                            alt=""
+                                                            className="h-9 w-9 rounded-lg object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04]">
+                                                            <User className="h-4 w-4 text-gray-500" />
+                                                        </div>
+                                                    )}
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="truncate text-sm font-medium text-white">
+                                                            {l.fullName}
+                                                            {isCurrent && (
+                                                                <span className="ml-2 rounded-md border border-green-500/20 bg-green-500/10 px-1.5 py-0.5 text-[10px] text-green-400">
+                                                                    Current
+                                                                </span>
+                                                            )}
+                                                            {l.verifiedByPlatform && (
+                                                                <span className="ml-2 rounded-md border border-blue-500/20 bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-400">
+                                                                    Verified
+                                                                </span>
+                                                            )}
+                                                        </p>
+                                                        <p className="truncate text-xs text-gray-500">
+                                                            {l.email || '—'}
+                                                            {l.phone
+                                                                ? ` • ${l.phone}`
+                                                                : ''}
+                                                        </p>
+                                                        {l.specialization && (
+                                                            <p className="truncate text-[11px] text-gray-600">
+                                                                {
+                                                                    l.specialization
+                                                                }
+                                                                {l.experience
+                                                                    ? ` • ${l.experience} yr exp`
+                                                                    : ''}
+                                                                {l.city
+                                                                    ? ` • ${l.city}`
+                                                                    : ''}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    {assigning ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+                                                    ) : (
+                                                        <ChevronRight className="h-4 w-4 shrink-0 text-gray-600" />
+                                                    )}
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -1266,15 +1939,11 @@ function DetailsView({ business }: { business: Business }) {
             <Section title="Primary Contact" icon={User}>
                 <DetailRow
                     label="Full Name"
-                    value={formatValue(
-                        business.primaryContact?.fullName
-                    )}
+                    value={formatValue(business.primaryContact?.fullName)}
                 />
                 <DetailRow
                     label="Designation"
-                    value={formatValue(
-                        business.primaryContact?.designation
-                    )}
+                    value={formatValue(business.primaryContact?.designation)}
                 />
                 <DetailRow
                     label="Email"
@@ -1310,8 +1979,7 @@ function DetailsView({ business }: { business: Business }) {
             </Section>
 
             <Section title="Business Needs" icon={FileText}>
-                {business.businessNeeds &&
-                    business.businessNeeds.length > 0 ? (
+                {business.businessNeeds && business.businessNeeds.length > 0 ? (
                     <div className="flex flex-wrap gap-2 py-2">
                         {business.businessNeeds.map((n) => (
                             <span
@@ -1348,9 +2016,7 @@ function DetailsView({ business }: { business: Business }) {
                         <span className="text-xs text-gray-500">
                             Legal Health Score
                         </span>
-                        <span
-                            className={`text-sm font-semibold ${scoreColor}`}
-                        >
+                        <span className={`text-sm font-semibold ${scoreColor}`}>
                             {clamped}/100
                         </span>
                     </div>
@@ -1375,7 +2041,9 @@ function DetailsView({ business }: { business: Business }) {
                 />
                 <DetailRow
                     label="Status"
-                    value={<StatusBadge status={business.subscription?.status} />}
+                    value={
+                        <StatusBadge status={business.subscription?.status} />
+                    }
                 />
                 <DetailRow
                     label="Start Date"
@@ -1428,6 +2096,134 @@ function DetailsView({ business }: { business: Business }) {
                     value={formatValue(business.owner?.accountStatus)}
                 />
             </Section>
+        </div>
+    )
+}
+
+// ==================================================
+// ASSIGNED LAWYER SECTION
+// ==================================================
+
+function AssignedLawyerSection({
+    assignedLawyer,
+    loading,
+    error,
+    removing,
+    onAssign,
+    onRemove,
+    onRetry,
+}: {
+    assignedLawyer: AssignedLawyer | null
+    loading: boolean
+    error: string | null
+    removing: boolean
+    onAssign: () => void
+    onRemove: () => void
+    onRetry: () => void
+}) {
+    const name =
+        assignedLawyer?.fullName || assignedLawyer?.name || 'Unnamed Lawyer'
+
+    return (
+        <div className="mb-5">
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                    <Briefcase className="h-4 w-4 text-amber-400" />
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                        Assigned Lawyer
+                    </h3>
+                </div>
+
+                {!loading && (
+                    <button
+                        type="button"
+                        onClick={onAssign}
+                        className="inline-flex items-center gap-1 rounded-lg border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-xs font-medium text-amber-400 transition hover:bg-amber-400/20"
+                    >
+                        {assignedLawyer ? 'Change' : 'Assign Lawyer'}
+                    </button>
+                )}
+            </div>
+
+            <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-4 py-3">
+                {loading && (
+                    <div className="space-y-2">
+                        <div className="h-4 w-1/2 animate-pulse rounded bg-white/[0.06]" />
+                        <div className="h-3 w-2/3 animate-pulse rounded bg-white/[0.04]" />
+                        <div className="h-3 w-1/3 animate-pulse rounded bg-white/[0.04]" />
+                    </div>
+                )}
+
+                {!loading && error && (
+                    <div className="flex items-center gap-2 text-xs text-red-400">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        <span>{error}</span>
+                        <button
+                            type="button"
+                            onClick={onRetry}
+                            className="ml-auto underline hover:no-underline"
+                        >
+                            Retry
+                        </button>
+                    </div>
+                )}
+
+                {!loading && !error && !assignedLawyer && (
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs text-gray-500">
+                            No lawyer assigned to this business yet.
+                        </p>
+                    </div>
+                )}
+
+                {!loading && !error && assignedLawyer && (
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 space-y-1.5">
+                            <p className="truncate text-sm font-medium text-white">
+                                {name}
+                            </p>
+                            {assignedLawyer.email && (
+                                <p className="flex items-center gap-1.5 truncate text-xs text-gray-400">
+                                    <Mail className="h-3 w-3 text-gray-600" />
+                                    {assignedLawyer.email}
+                                </p>
+                            )}
+                            {assignedLawyer.phone && (
+                                <p className="flex items-center gap-1.5 truncate text-xs text-gray-400">
+                                    <Phone className="h-3 w-3 text-gray-600" />
+                                    {assignedLawyer.phone}
+                                </p>
+                            )}
+                            {assignedLawyer.specialization && (
+                                <p className="flex items-center gap-1.5 truncate text-xs text-gray-400">
+                                    <Briefcase className="h-3 w-3 text-gray-600" />
+                                    {assignedLawyer.specialization}
+                                </p>
+                            )}
+                            {assignedLawyer.assignedAt && (
+                                <p className="text-[11px] text-gray-600">
+                                    Assigned on{' '}
+                                    {formatDate(assignedLawyer.assignedAt)}
+                                </p>
+                            )}
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={onRemove}
+                            disabled={removing}
+                            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-400 transition hover:bg-red-500/20 disabled:opacity-50"
+                        >
+                            {removing ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                                <X className="h-3 w-3" />
+                            )}
+                            Remove
+                        </button>
+                    </div>
+                )}
+            </div>
         </div>
     )
 }
@@ -1609,9 +2405,7 @@ function EditForm({
                         <input
                             className={inputCls}
                             value={form.CIN ?? ''}
-                            onChange={(e) =>
-                                updateField('CIN', e.target.value)
-                            }
+                            onChange={(e) => updateField('CIN', e.target.value)}
                         />
                     </Field>
                     <Field label="GSTIN">
@@ -1627,18 +2421,14 @@ function EditForm({
                         <input
                             className={inputCls}
                             value={form.PAN ?? ''}
-                            onChange={(e) =>
-                                updateField('PAN', e.target.value)
-                            }
+                            onChange={(e) => updateField('PAN', e.target.value)}
                         />
                     </Field>
                     <Field label="TAN">
                         <input
                             className={inputCls}
                             value={form.TAN ?? ''}
-                            onChange={(e) =>
-                                updateField('TAN', e.target.value)
-                            }
+                            onChange={(e) => updateField('TAN', e.target.value)}
                         />
                     </Field>
                 </div>
@@ -1828,9 +2618,7 @@ function EditForm({
                             <input
                                 type="checkbox"
                                 className="h-4 w-4 accent-amber-500"
-                                checked={Boolean(
-                                    form.currentSetup?.[key]
-                                )}
+                                checked={Boolean(form.currentSetup?.[key])}
                                 onChange={(e) =>
                                     updateNested('currentSetup', {
                                         [key]: e.target.checked,
@@ -1885,9 +2673,7 @@ function EditForm({
                         <input
                             type="date"
                             className={inputCls}
-                            value={toInputDate(
-                                form.subscription?.startDate
-                            )}
+                            value={toInputDate(form.subscription?.startDate)}
                             onChange={(e) =>
                                 updateNested('subscription', {
                                     startDate: e.target.value,
@@ -1933,10 +2719,7 @@ function EditForm({
                             className={inputCls}
                             value={form.workspaceStatus ?? ''}
                             onChange={(e) =>
-                                updateField(
-                                    'workspaceStatus',
-                                    e.target.value
-                                )
+                                updateField('workspaceStatus', e.target.value)
                             }
                         >
                             <option value="">Select...</option>
