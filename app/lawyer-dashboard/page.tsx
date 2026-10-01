@@ -196,8 +196,7 @@ function StatusBadge({ status }: { status?: string }) {
     const key = status.toLowerCase()
     const colors: Record<string, string> = {
         completed: 'bg-green-500/10 text-green-400 border-green-500/20',
-        'in-progress':
-            'bg-blue-500/10 text-blue-400 border-blue-500/20',
+        'in-progress': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
         pending: 'bg-gray-500/10 text-gray-400 border-gray-500/20',
         overdue: 'bg-red-500/10 text-red-400 border-red-500/20',
         cancelled: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20',
@@ -207,8 +206,7 @@ function StatusBadge({ status }: { status?: string }) {
     }
 
     const className =
-        colors[key] ||
-        'bg-blue-500/10 text-blue-400 border-blue-500/20'
+        colors[key] || 'bg-blue-500/10 text-blue-400 border-blue-500/20'
 
     return (
         <span
@@ -321,13 +319,17 @@ export default function LawyerDashboardPage() {
                 return
             }
 
+            /* ================================================
+               Fetch all five independently so one failing
+               endpoint doesn't wipe out the whole dashboard
+               ================================================ */
             const [
-                clientsResponse,
-                workResponse,
-                contractsResponse,
-                complianceResponse,
-                documentsResponse,
-            ] = await Promise.all([
+                clientsResult,
+                workResult,
+                contractsResult,
+                complianceResult,
+                documentsResult,
+            ] = await Promise.allSettled([
                 apiFetch<any>('/lawyer/clients', token),
                 apiFetch<any>('/lawyer-works/work?page=1&limit=20', token),
                 apiFetch<any>('/lawyer/contracts?page=1&limit=20', token),
@@ -335,11 +337,47 @@ export default function LawyerDashboardPage() {
                 apiFetch<any>('/lawyer/documents?page=1&limit=20', token),
             ])
 
-            const rawClients = getArray<any>(clientsResponse)
-            const rawWork = getArray<any>(workResponse)
-            const rawContracts = getArray<any>(contractsResponse)
-            const rawCompliance = getArray<any>(complianceResponse)
-            const rawDocuments = getArray<any>(documentsResponse)
+                // Surface which endpoint failed without breaking the whole page
+                ;[
+                    ['clients', clientsResult],
+                    ['work', workResult],
+                    ['contracts', contractsResult],
+                    ['compliance', complianceResult],
+                    ['documents', documentsResult],
+                ].forEach(([name, result]) => {
+                    if (
+                        (result as PromiseSettledResult<any>).status ===
+                        'rejected'
+                    ) {
+                        console.warn(
+                            `[dashboard] ${name} failed:`,
+                            (result as PromiseRejectedResult).reason
+                        )
+                    }
+                })
+
+            const pick = <T,>(r: PromiseSettledResult<T>): T | null =>
+                r.status === 'fulfilled' ? r.value : null
+
+            const clientsResponse = pick(clientsResult)
+            const workResponse = pick(workResult)
+            const contractsResponse = pick(contractsResult)
+            const complianceResponse = pick(complianceResult)
+            const documentsResponse = pick(documentsResult)
+
+            const rawClients = clientsResponse
+                ? getArray<any>(clientsResponse)
+                : []
+            const rawWork = workResponse ? getArray<any>(workResponse) : []
+            const rawContracts = contractsResponse
+                ? getArray<any>(contractsResponse)
+                : []
+            const rawCompliance = complianceResponse
+                ? getArray<any>(complianceResponse)
+                : []
+            const rawDocuments = documentsResponse
+                ? getArray<any>(documentsResponse)
+                : []
 
             let storedUser: any = {}
 
@@ -351,6 +389,9 @@ export default function LawyerDashboardPage() {
                 storedUser = {}
             }
 
+            /* ================================================
+               Map clients — reads client._id from nested shape
+               ================================================ */
             const clients: Client[] = rawClients.map((item: any) => {
                 const client = item?.client || item?.business || item
 
@@ -364,8 +405,8 @@ export default function LawyerDashboardPage() {
                     ),
                     name:
                         client?.companyName ||
-                        item?.companyName ||
                         client?.legalName ||
+                        item?.companyName ||
                         'Client',
                     openWork:
                         Number(
@@ -390,10 +431,7 @@ export default function LawyerDashboardPage() {
             const work: WorkItem[] = rawWork.map((item: any) => ({
                 id: getId(item),
                 title: item?.title || 'Work item',
-                type:
-                    item?.workType ||
-                    item?.sourceType ||
-                    'Task',
+                type: item?.workType || item?.sourceType || 'Task',
                 client: getBusinessName(item),
                 dueDate: item?.dueDate,
                 status: item?.status,
@@ -414,8 +452,8 @@ export default function LawyerDashboardPage() {
                 })
             )
 
-            const compliance: ComplianceItem[] =
-                rawCompliance.map((item: any) => ({
+            const compliance: ComplianceItem[] = rawCompliance.map(
+                (item: any) => ({
                     id: getId(item),
                     name: item?.name || 'Compliance item',
                     client: getBusinessName(item),
@@ -423,7 +461,8 @@ export default function LawyerDashboardPage() {
                     dueDate: item?.dueDate,
                     priority: item?.priority,
                     description: item?.description,
-                }))
+                })
+            )
 
             const documents: Document[] = rawDocuments.map(
                 (item: any) => ({
@@ -445,21 +484,13 @@ export default function LawyerDashboardPage() {
 
             setData({
                 lawyer: {
-                    id: String(
-                        storedUser?._id ||
-                        storedUser?.id ||
-                        ''
-                    ),
+                    id: String(storedUser?._id || storedUser?.id || ''),
                     fullName:
-                        storedUser?.fullName ||
-                        'Legal Professional',
+                        storedUser?.fullName || 'Legal Professional',
                     email: storedUser?.email || '',
-                    profilePhoto:
-                        storedUser?.profilePhoto,
-                    specialization:
-                        storedUser?.specialization,
-                    practiceAreas:
-                        storedUser?.practiceAreas,
+                    profilePhoto: storedUser?.profilePhoto,
+                    specialization: storedUser?.specialization,
+                    practiceAreas: storedUser?.practiceAreas,
                 },
                 clients,
                 work,
@@ -522,8 +553,7 @@ export default function LawyerDashboardPage() {
     }, [data])
 
     const firstName =
-        data?.lawyer?.fullName?.split(' ')[0] ||
-        'Legal Professional'
+        data?.lawyer?.fullName?.split(' ')[0] || 'Legal Professional'
 
     const openWork = (id: string) =>
         id
@@ -532,29 +562,21 @@ export default function LawyerDashboardPage() {
 
     const openContract = (id: string) =>
         id
-            ? router.push(
-                `/lawyer/contracts/${encodeURIComponent(id)}`
-            )
+            ? router.push(`/lawyer/contracts/${encodeURIComponent(id)}`)
             : router.push('/lawyer/contracts')
 
     const openCompliance = (id: string) =>
         id
-            ? router.push(
-                `/lawyer/compliance/${encodeURIComponent(id)}`
-            )
+            ? router.push(`/lawyer/compliance/${encodeURIComponent(id)}`)
             : router.push('/lawyer/compliance')
 
     const openDocument = (id: string) =>
         id
-            ? router.push(
-                `/lawyer/documents/${encodeURIComponent(id)}`
-            )
+            ? router.push(`/lawyer/documents/${encodeURIComponent(id)}`)
             : router.push('/lawyer/documents')
 
     const openClient = (id: string) => {
-        router.push(
-            `/lawyer/clients?clientId=${encodeURIComponent(id)}`
-        )
+        router.push(`/lawyer/clients?clientId=${encodeURIComponent(id)}`)
     }
 
     if (error === 'NO_TOKEN') {
@@ -582,12 +604,7 @@ export default function LawyerDashboardPage() {
     }
 
     if (error && !loading) {
-        return (
-            <ErrorState
-                message={error}
-                onRetry={fetchDashboard}
-            />
-        )
+        return <ErrorState message={error} onRetry={fetchDashboard} />
     }
 
     return (
@@ -675,23 +692,13 @@ export default function LawyerDashboardPage() {
                         return (
                             <motion.div
                                 key={item.label}
-                                initial={{
-                                    opacity: 0,
-                                    y: 15,
-                                }}
-                                animate={{
-                                    opacity: 1,
-                                    y: 0,
-                                }}
-                                transition={{
-                                    delay: index * 0.05,
-                                }}
+                                initial={{ opacity: 0, y: 15 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: index * 0.05 }}
                             >
                                 <Card
                                     clickable
-                                    onClick={() =>
-                                        router.push(item.href)
-                                    }
+                                    onClick={() => router.push(item.href)}
                                 >
                                     <div className="flex items-start justify-between">
                                         <div>
@@ -733,9 +740,7 @@ export default function LawyerDashboardPage() {
                             </div>
                             <button
                                 type="button"
-                                onClick={() =>
-                                    router.push('/lawyer/work')
-                                }
+                                onClick={() => router.push('/lawyer/work')}
                                 className="text-xs text-blue-400 hover:text-blue-300"
                             >
                                 View all
@@ -839,9 +844,7 @@ export default function LawyerDashboardPage() {
                             </div>
                             <button
                                 type="button"
-                                onClick={() =>
-                                    router.push('/lawyer/work')
-                                }
+                                onClick={() => router.push('/lawyer/work')}
                                 className="text-xs text-blue-400 hover:text-blue-300"
                             >
                                 View all
@@ -856,9 +859,7 @@ export default function LawyerDashboardPage() {
                                     <button
                                         key={item.id}
                                         type="button"
-                                        onClick={() =>
-                                            openWork(item.id)
-                                        }
+                                        onClick={() => openWork(item.id)}
                                         className="flex w-full items-center gap-3 rounded-xl border border-white/[0.05] bg-white/[0.03] p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.05]"
                                     >
                                         <Briefcase className="h-4 w-4 shrink-0 text-blue-400" />
@@ -867,8 +868,7 @@ export default function LawyerDashboardPage() {
                                                 {item.title}
                                             </p>
                                             <p className="mt-1 truncate text-xs text-gray-600">
-                                                {item.type} •{' '}
-                                                {item.client}
+                                                {item.type} • {item.client}
                                             </p>
                                         </div>
                                         <StatusBadge status={item.status} />
@@ -917,9 +917,7 @@ export default function LawyerDashboardPage() {
                                     <button
                                         key={client.id}
                                         type="button"
-                                        onClick={() =>
-                                            openClient(client.id)
-                                        }
+                                        onClick={() => openClient(client.id)}
                                         className="grid w-full grid-cols-[minmax(0,1fr)_70px_80px_90px_20px] items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 text-left transition hover:border-blue-400/30 hover:bg-white/[0.05]"
                                     >
                                         <div className="min-w-0">
@@ -998,9 +996,7 @@ export default function LawyerDashboardPage() {
                                             key={contract.id}
                                             type="button"
                                             onClick={() =>
-                                                openContract(
-                                                    contract.id
-                                                )
+                                                openContract(contract.id)
                                             }
                                             className="flex w-full items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.05]"
                                         >
@@ -1014,9 +1010,7 @@ export default function LawyerDashboardPage() {
                                                 </p>
                                             </div>
                                             <StatusBadge
-                                                status={
-                                                    contract.status
-                                                }
+                                                status={contract.status}
                                             />
                                             <ChevronRight className="h-4 w-4 text-gray-600" />
                                         </button>
@@ -1065,9 +1059,7 @@ export default function LawyerDashboardPage() {
                                             key={item.id}
                                             type="button"
                                             onClick={() =>
-                                                openCompliance(
-                                                    item.id
-                                                )
+                                                openCompliance(item.id)
                                             }
                                             className="flex w-full items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.05]"
                                         >
@@ -1136,9 +1128,7 @@ export default function LawyerDashboardPage() {
                                             key={document.id}
                                             type="button"
                                             onClick={() =>
-                                                openDocument(
-                                                    document.id
-                                                )
+                                                openDocument(document.id)
                                             }
                                             className="flex w-full items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.05]"
                                         >
@@ -1228,9 +1218,7 @@ export default function LawyerDashboardPage() {
                                     whileHover={{ scale: 1.03 }}
                                     whileTap={{ scale: 0.98 }}
                                     onClick={() =>
-                                        router.push(
-                                            action.href
-                                        )
+                                        router.push(action.href)
                                     }
                                     className="rounded-xl border border-white/[0.06] bg-black/40 p-4 transition hover:border-blue-400/30 hover:bg-white/[0.04]"
                                 >
