@@ -35,7 +35,7 @@ type ResetPasswordData = z.infer<typeof resetPasswordSchema>
 
 const API_BASE = (
     process.env.NEXT_PUBLIC_API_URL ||
-    'http://localhost:5000/api/v1'
+    'https://nyaymitra-backend-production.up.railway.app/api/v1'
 ).replace(/\/$/, '')
 
 export default function ResetPasswordForm() {
@@ -122,7 +122,7 @@ export default function ResetPasswordForm() {
                                 className="mb-8"
                             >
                                 <Link
-                                    href="/login"
+                                    href="/"
                                     className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors mb-6 w-fit"
                                 >
                                     <ArrowLeft className="w-4 h-4" />
