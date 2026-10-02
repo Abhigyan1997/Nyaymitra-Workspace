@@ -16,7 +16,7 @@ type ForgotPasswordData = z.infer<typeof forgotPasswordSchema>
 
 const API_BASE = (
   process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:5000/api/v1'
+  'https://nyaymitra-backend-production.up.railway.app/api/v1'
 ).replace(/\/$/, '')
 
 export function ForgotPasswordForm() {
