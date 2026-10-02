@@ -33,6 +33,9 @@ import {
     Calendar,
     FileText,
     ExternalLink,
+    Plus,
+    Eye,
+    EyeOff,
 } from 'lucide-react'
 import { premiumToast } from '@/lib/premium-toast'
 
@@ -47,6 +50,7 @@ const API_BASE = (
 
 const BUSINESSES_API = `${API_BASE}/admin/businesses`
 const LAWYERS_API = `${API_BASE}/lawyer/all`
+const REGISTER_BUSINESS_API = `${API_BASE}/business/register`
 const ASSIGN_LAWYER_API = (businessId: string) =>
     `${API_BASE}/admin/businesses/${businessId}/lawyer`
 
@@ -249,6 +253,23 @@ interface AssignedLawyer {
     status?: string
 }
 
+// ---- Add Business form types ----
+
+interface AddBusinessForm {
+    fullName: string
+    email: string
+    phone: string
+    password: string
+    companyName: string
+    legalName: string
+    companyType: string
+    registrationStatus: string
+    industry: string
+    website: string
+    companyEmail: string
+    companyPhone: string
+}
+
 // ==================================================
 // CONSTANTS
 // ==================================================
@@ -287,6 +308,21 @@ const STATUSES = ['Active', 'Inactive']
 const WORKSPACE_STATUSES = ['Active', 'Suspended']
 const SUBSCRIPTION_PLANS = ['Starter', 'Growth', 'Enterprise']
 const SUBSCRIPTION_STATUSES = ['Trial', 'Active', 'Expired', 'Cancelled']
+
+const EMPTY_ADD_FORM: AddBusinessForm = {
+    fullName: '',
+    email: '',
+    phone: '',
+    password: '',
+    companyName: '',
+    legalName: '',
+    companyType: '',
+    registrationStatus: 'Registered',
+    industry: '',
+    website: '',
+    companyEmail: '',
+    companyPhone: '',
+}
 
 // ==================================================
 // HELPERS
@@ -517,13 +553,18 @@ function Section({
 function Field({
     label,
     children,
+    required,
 }: {
     label: string
     children: React.ReactNode
+    required?: boolean
 }) {
     return (
         <label className="block">
-            <span className="mb-1 block text-xs text-gray-500">{label}</span>
+            <span className="mb-1 block text-xs text-gray-500">
+                {label}
+                {required && <span className="ml-0.5 text-amber-400">*</span>}
+            </span>
             {children}
         </label>
     )
@@ -589,6 +630,13 @@ export default function AdminBusinessesPage() {
     const [assigning, setAssigning] = useState(false)
     const [assignError, setAssignError] = useState<string | null>(null)
     const [removingLawyer, setRemovingLawyer] = useState(false)
+
+    // ----- add business modal -----
+    const [showAddModal, setShowAddModal] = useState(false)
+    const [addForm, setAddForm] = useState<AddBusinessForm>(EMPTY_ADD_FORM)
+    const [addSaving, setAddSaving] = useState(false)
+    const [addError, setAddError] = useState<string | null>(null)
+    const [showPassword, setShowPassword] = useState(false)
 
     const abortRef = useRef<AbortController | null>(null)
 
@@ -725,6 +773,152 @@ export default function AdminBusinessesPage() {
     useEffect(() => {
         fetchBusinesses()
     }, [fetchBusinesses])
+
+    // ==================================================
+    // ADD BUSINESS
+    // ==================================================
+
+    const openAddModal = () => {
+        setAddForm(EMPTY_ADD_FORM)
+        setAddError(null)
+        setShowPassword(false)
+        setShowAddModal(true)
+    }
+
+    const closeAddModal = () => {
+        if (addSaving) return
+        setShowAddModal(false)
+        setAddForm(EMPTY_ADD_FORM)
+        setAddError(null)
+    }
+
+    const updateAddField = <K extends keyof AddBusinessForm>(
+        key: K,
+        value: AddBusinessForm[K]
+    ) => {
+        setAddForm((prev) => ({ ...prev, [key]: value }))
+    }
+
+    const validateAddForm = (): string | null => {
+        const f = addForm
+        if (!f.fullName.trim()) return 'Full name is required.'
+        if (!f.email.trim()) return 'Owner email is required.'
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()))
+            return 'Please enter a valid owner email address.'
+        if (!f.phone.trim()) return 'Owner phone is required.'
+        if (!f.password.trim()) return 'Password is required.'
+        if (f.password.length < 8)
+            return 'Password must be at least 8 characters long.'
+        if (!f.companyName.trim()) return 'Company name is required.'
+        if (!f.legalName.trim()) return 'Legal name is required.'
+        if (!f.companyType.trim()) return 'Company type is required.'
+        if (!f.registrationStatus.trim())
+            return 'Registration status is required.'
+        if (!f.industry.trim()) return 'Industry is required.'
+        if (f.companyEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.companyEmail.trim()))
+            return 'Please enter a valid company email address.'
+        return null
+    }
+
+    const handleAddBusiness = async () => {
+        const validationError = validateAddForm()
+        if (validationError) {
+            setAddError(validationError)
+            premiumToast.error('Validation failed', {
+                description: validationError,
+            })
+            return
+        }
+
+        setAddSaving(true)
+        setAddError(null)
+
+        try {
+            const token = getAuthToken()
+            if (!token) {
+                throw new Error(
+                    'Authentication required. Please sign in again.'
+                )
+            }
+
+            // Build payload — only send non-empty optional fields
+            const payload: Record<string, string> = {
+                fullName: addForm.fullName.trim(),
+                email: addForm.email.trim(),
+                phone: addForm.phone.trim(),
+                password: addForm.password,
+                companyName: addForm.companyName.trim(),
+                legalName: addForm.legalName.trim(),
+                companyType: addForm.companyType.trim(),
+                registrationStatus: addForm.registrationStatus.trim(),
+                industry: addForm.industry.trim(),
+            }
+            if (addForm.website.trim())
+                payload.website = addForm.website.trim()
+            if (addForm.companyEmail.trim())
+                payload.companyEmail = addForm.companyEmail.trim()
+            if (addForm.companyPhone.trim())
+                payload.companyPhone = addForm.companyPhone.trim()
+
+            const res = await fetch(REGISTER_BUSINESS_API, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(payload),
+            })
+
+            const json = await res.json().catch(() => ({}))
+
+            if (!res.ok) {
+                if (res.status === 401)
+                    throw new Error(
+                        json?.message || 'Unauthorized. Please sign in again.'
+                    )
+                if (res.status === 403)
+                    throw new Error(
+                        json?.message || 'Forbidden. Admin access required.'
+                    )
+                if (res.status === 409)
+                    throw new Error(
+                        json?.message ||
+                        'A business or user with these details already exists.'
+                    )
+                throw new Error(
+                    json?.message ||
+                    `Registration failed with status ${res.status}`
+                )
+            }
+
+            const createdName = addForm.companyName.trim()
+
+            setShowAddModal(false)
+            setAddForm(EMPTY_ADD_FORM)
+
+            // Refresh the list so the new business appears
+            await fetchBusinesses(true)
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Business added', {
+                description: `${createdName} has been registered successfully.`,
+            })
+        } catch (err) {
+            const message =
+                err instanceof Error
+                    ? err.message
+                    : 'Failed to add business.'
+
+            setAddError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not add business', {
+                description: message,
+            })
+        } finally {
+            setAddSaving(false)
+        }
+    }
 
     // ==================================================
     // FETCH DETAILS
@@ -1368,17 +1562,28 @@ export default function AdminBusinessesPage() {
                             </p>
                         </div>
 
-                        <button
-                            type="button"
-                            onClick={() => fetchBusinesses(true)}
-                            disabled={refreshing || loading}
-                            className="rounded-lg border border-white/10 bg-white/[0.04] p-2 transition hover:bg-white/[0.08] disabled:opacity-50"
-                        >
-                            <RefreshCw
-                                className={`h-5 w-5 text-gray-400 ${refreshing ? 'animate-spin' : ''
-                                    }`}
-                            />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={openAddModal}
+                                className="inline-flex items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3.5 py-2 text-sm font-medium text-amber-400 transition hover:bg-amber-400/20"
+                            >
+                                <Plus className="h-4 w-4" />
+                                Add Business
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => fetchBusinesses(true)}
+                                disabled={refreshing || loading}
+                                className="rounded-lg border border-white/10 bg-white/[0.04] p-2 transition hover:bg-white/[0.08] disabled:opacity-50"
+                            >
+                                <RefreshCw
+                                    className={`h-5 w-5 text-gray-400 ${refreshing ? 'animate-spin' : ''
+                                        }`}
+                                />
+                            </button>
+                        </div>
                     </div>
 
                     {/* Filters */}
@@ -1458,7 +1663,7 @@ export default function AdminBusinessesPage() {
                     ) : businesses.length === 0 ? (
                         <EmptyState
                             title="No businesses found"
-                            description="Try adjusting your search or filters, or wait for new businesses to register."
+                            description="Try adjusting your search or filters, or click 'Add Business' to create one."
                             icon={Building2}
                         />
                     ) : (
@@ -1911,6 +2116,356 @@ export default function AdminBusinessesPage() {
                                         })}
                                     </div>
                                 )}
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* ---------- Add Business Modal ---------- */}
+            <AnimatePresence>
+                {showAddModal && (
+                    <motion.div
+                        className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                    >
+                        <div
+                            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                            onClick={closeAddModal}
+                        />
+
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            transition={{ duration: 0.15 }}
+                            className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0a0a0a]"
+                        >
+                            {/* Modal header */}
+                            <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
+                                <div>
+                                    <h3 className="text-sm font-semibold text-white">
+                                        Add Business
+                                    </h3>
+                                    <p className="mt-0.5 text-xs text-gray-600">
+                                        Register a new business and owner
+                                        account.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={closeAddModal}
+                                    disabled={addSaving}
+                                    className="rounded-lg border border-white/10 bg-white/[0.04] p-1.5 text-gray-400 transition hover:bg-white/[0.08] disabled:opacity-50"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+
+                            {addError && (
+                                <div className="mx-5 mt-4 flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+                                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                                    <span>{addError}</span>
+                                </div>
+                            )}
+
+                            {/* Modal body */}
+                            <div className="flex-1 overflow-y-auto px-5 py-5">
+                                {/* Owner details */}
+                                <div className="mb-5">
+                                    <div className="mb-2 flex items-center gap-2">
+                                        <User className="h-4 w-4 text-amber-400" />
+                                        <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                                            Owner Account
+                                        </h3>
+                                    </div>
+                                    <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-4 py-4">
+                                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                            <Field label="Full Name" required>
+                                                <input
+                                                    className={inputCls}
+                                                    value={addForm.fullName}
+                                                    onChange={(e) =>
+                                                        updateAddField(
+                                                            'fullName',
+                                                            e.target.value
+                                                        )
+                                                    }
+                                                    placeholder="e.g. Alok Abhigyan"
+                                                    disabled={addSaving}
+                                                />
+                                            </Field>
+                                            <Field label="Email" required>
+                                                <input
+                                                    type="email"
+                                                    className={inputCls}
+                                                    value={addForm.email}
+                                                    onChange={(e) =>
+                                                        updateAddField(
+                                                            'email',
+                                                            e.target.value
+                                                        )
+                                                    }
+                                                    placeholder="owner@example.com"
+                                                    disabled={addSaving}
+                                                />
+                                            </Field>
+                                            <Field label="Phone" required>
+                                                <input
+                                                    className={inputCls}
+                                                    value={addForm.phone}
+                                                    onChange={(e) =>
+                                                        updateAddField(
+                                                            'phone',
+                                                            e.target.value
+                                                        )
+                                                    }
+                                                    placeholder="9876543210"
+                                                    disabled={addSaving}
+                                                />
+                                            </Field>
+                                            <Field label="Password" required>
+                                                <div className="relative">
+                                                    <input
+                                                        type={
+                                                            showPassword
+                                                                ? 'text'
+                                                                : 'password'
+                                                        }
+                                                        className={`${inputCls} pr-10`}
+                                                        value={addForm.password}
+                                                        onChange={(e) =>
+                                                            updateAddField(
+                                                                'password',
+                                                                e.target.value
+                                                            )
+                                                        }
+                                                        placeholder="Min. 8 characters"
+                                                        disabled={addSaving}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setShowPassword(
+                                                                (v) => !v
+                                                            )
+                                                        }
+                                                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-500 transition hover:text-gray-300"
+                                                    >
+                                                        {showPassword ? (
+                                                            <EyeOff className="h-4 w-4" />
+                                                        ) : (
+                                                            <Eye className="h-4 w-4" />
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </Field>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Company details */}
+                                <div className="mb-5">
+                                    <div className="mb-2 flex items-center gap-2">
+                                        <Building2 className="h-4 w-4 text-amber-400" />
+                                        <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                                            Company Details
+                                        </h3>
+                                    </div>
+                                    <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-4 py-4">
+                                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                            <Field
+                                                label="Company Name"
+                                                required
+                                            >
+                                                <input
+                                                    className={inputCls}
+                                                    value={
+                                                        addForm.companyName
+                                                    }
+                                                    onChange={(e) =>
+                                                        updateAddField(
+                                                            'companyName',
+                                                            e.target.value
+                                                        )
+                                                    }
+                                                    placeholder="e.g. NyayMitra Technologies Pvt Ltd"
+                                                    disabled={addSaving}
+                                                />
+                                            </Field>
+                                            <Field
+                                                label="Legal Name"
+                                                required
+                                            >
+                                                <input
+                                                    className={inputCls}
+                                                    value={addForm.legalName}
+                                                    onChange={(e) =>
+                                                        updateAddField(
+                                                            'legalName',
+                                                            e.target.value
+                                                        )
+                                                    }
+                                                    placeholder="e.g. NyayMitra Technologies Private Limited"
+                                                    disabled={addSaving}
+                                                />
+                                            </Field>
+                                            <Field
+                                                label="Company Type"
+                                                required
+                                            >
+                                                <select
+                                                    className={inputCls}
+                                                    value={addForm.companyType}
+                                                    onChange={(e) =>
+                                                        updateAddField(
+                                                            'companyType',
+                                                            e.target.value
+                                                        )
+                                                    }
+                                                    disabled={addSaving}
+                                                >
+                                                    <option value="">
+                                                        Select...
+                                                    </option>
+                                                    {COMPANY_TYPES.map((c) => (
+                                                        <option
+                                                            key={c}
+                                                            value={c}
+                                                        >
+                                                            {c}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </Field>
+                                            <Field
+                                                label="Registration Status"
+                                                required
+                                            >
+                                                <select
+                                                    className={inputCls}
+                                                    value={
+                                                        addForm.registrationStatus
+                                                    }
+                                                    onChange={(e) =>
+                                                        updateAddField(
+                                                            'registrationStatus',
+                                                            e.target.value
+                                                        )
+                                                    }
+                                                    disabled={addSaving}
+                                                >
+                                                    {REGISTRATION_STATUSES.map(
+                                                        (r) => (
+                                                            <option
+                                                                key={r}
+                                                                value={r}
+                                                            >
+                                                                {r}
+                                                            </option>
+                                                        )
+                                                    )}
+                                                </select>
+                                            </Field>
+                                            <Field
+                                                label="Industry"
+                                                required
+                                            >
+                                                <input
+                                                    className={inputCls}
+                                                    value={addForm.industry}
+                                                    onChange={(e) =>
+                                                        updateAddField(
+                                                            'industry',
+                                                            e.target.value
+                                                        )
+                                                    }
+                                                    placeholder="e.g. LegalTech"
+                                                    disabled={addSaving}
+                                                />
+                                            </Field>
+                                            <Field label="Website">
+                                                <input
+                                                    className={inputCls}
+                                                    value={addForm.website}
+                                                    onChange={(e) =>
+                                                        updateAddField(
+                                                            'website',
+                                                            e.target.value
+                                                        )
+                                                    }
+                                                    placeholder="https://example.com"
+                                                    disabled={addSaving}
+                                                />
+                                            </Field>
+                                            <Field label="Company Email">
+                                                <input
+                                                    type="email"
+                                                    className={inputCls}
+                                                    value={
+                                                        addForm.companyEmail
+                                                    }
+                                                    onChange={(e) =>
+                                                        updateAddField(
+                                                            'companyEmail',
+                                                            e.target.value
+                                                        )
+                                                    }
+                                                    placeholder="contact@example.com"
+                                                    disabled={addSaving}
+                                                />
+                                            </Field>
+                                            <Field label="Company Phone">
+                                                <input
+                                                    className={inputCls}
+                                                    value={
+                                                        addForm.companyPhone
+                                                    }
+                                                    onChange={(e) =>
+                                                        updateAddField(
+                                                            'companyPhone',
+                                                            e.target.value
+                                                        )
+                                                    }
+                                                    placeholder="9876543210"
+                                                    disabled={addSaving}
+                                                />
+                                            </Field>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Sticky action bar */}
+                            <div className="flex items-center justify-end gap-2 border-t border-white/[0.06] bg-[#0a0a0a]/95 px-5 py-3 backdrop-blur">
+                                <button
+                                    type="button"
+                                    onClick={closeAddModal}
+                                    disabled={addSaving}
+                                    className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-medium text-gray-300 transition hover:bg-white/[0.08] disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleAddBusiness}
+                                    disabled={addSaving}
+                                    className="inline-flex items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-xs font-medium text-amber-400 transition hover:bg-amber-400/20 disabled:opacity-50"
+                                >
+                                    {addSaving ? (
+                                        <>
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                            Adding...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Plus className="h-3.5 w-3.5" />
+                                            Add Business
+                                        </>
+                                    )}
+                                </button>
                             </div>
                         </motion.div>
                     </motion.div>
