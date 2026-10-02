@@ -27,6 +27,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import { premiumToast } from "@/lib/premium-toast";
 
 const API_URL = "https://nyaymitra-backend-production.up.railway.app";
 
@@ -279,11 +280,17 @@ export default function TeamPage() {
     } catch (err) {
       console.error(err);
 
-      setError(
+      const message =
         err instanceof Error
           ? err.message
-          : "Failed to load your team."
-      );
+          : "Failed to load your team.";
+
+      setError(message);
+
+      // ===== ERROR TOAST =====
+      premiumToast.error("Could not load team", {
+        description: message,
+      });
     } finally {
       setLoading(false);
     }
@@ -399,15 +406,26 @@ export default function TeamPage() {
         "Team invitation created successfully."
       );
 
+      // ===== SUCCESS TOAST =====
+      premiumToast.success("Invitation sent", {
+        description: `An invite has been sent to ${payload.email}.`,
+      });
+
       await fetchTeam();
     } catch (err) {
       console.error(err);
 
-      setError(
+      const message =
         err instanceof Error
           ? err.message
-          : "Failed to invite team member."
-      );
+          : "Failed to invite team member.";
+
+      setError(message);
+
+      // ===== ERROR TOAST =====
+      premiumToast.error("Invitation failed", {
+        description: message,
+      });
     } finally {
       setActionLoading(false);
     }
@@ -454,15 +472,26 @@ export default function TeamPage() {
         "Team member updated successfully."
       );
 
+      // ===== SUCCESS TOAST =====
+      premiumToast.success("Member updated", {
+        description: "Access and permissions have been saved.",
+      });
+
       await fetchTeam();
     } catch (err) {
       console.error(err);
 
-      setError(
+      const message =
         err instanceof Error
           ? err.message
-          : "Failed to update team member."
-      );
+          : "Failed to update team member.";
+
+      setError(message);
+
+      // ===== ERROR TOAST =====
+      premiumToast.error("Update failed", {
+        description: message,
+      });
     } finally {
       setActionLoading(false);
     }
@@ -1208,11 +1237,21 @@ function InviteMemberModal({
 
     if (!email.trim()) {
       setFormError("Enter an email address.");
+
+      premiumToast.warning("Email required", {
+        description: "Enter an email address to send the invitation.",
+      });
+
       return;
     }
 
     if (!/^\S+@\S+\.\S+$/.test(email)) {
       setFormError("Enter a valid email address.");
+
+      premiumToast.warning("Invalid email", {
+        description: "Please check the email format and try again.",
+      });
+
       return;
     }
 

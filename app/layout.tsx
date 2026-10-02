@@ -1,5 +1,6 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
+import { Toaster } from 'sonner'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -14,8 +15,7 @@ export const metadata: Metadata = {
 
   openGraph: {
     title: 'NyayMitra - Enterprise Legal Operations',
-    description:
-      'Premium legal operations platform for growing businesses.',
+    description: 'Premium legal operations platform for growing businesses.',
     type: 'website',
   },
 }
@@ -41,6 +41,21 @@ export default function RootLayout({
     <html lang="en" className="dark bg-background scroll-smooth">
       <body className="bg-background text-foreground antialiased font-sans">
         {children}
+
+        {/* Global premium toast system */}
+        <Toaster
+          position="top-right"
+          theme="dark"
+          gap={12}
+          offset={20}
+          visibleToasts={4}
+          toastOptions={{
+            unstyled: true,
+            classNames: {
+              toast: 'w-full',
+            },
+          }}
+        />
 
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

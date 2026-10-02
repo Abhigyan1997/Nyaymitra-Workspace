@@ -1,4 +1,3 @@
-
 'use client'
 
 import { useEffect, useState, type ChangeEvent, type ReactNode } from 'react'
@@ -21,6 +20,7 @@ import {
   ShieldCheck,
   UserRound,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
@@ -323,9 +323,15 @@ export function ProfileSettings() {
     } catch (error: any) {
       console.error('Fetch business profile error:', error)
 
-      setErrorMessage(
+      const message =
         error?.message || 'Unable to load business profile.'
-      )
+
+      setErrorMessage(message)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Could not load profile', {
+        description: message,
+      })
     } finally {
       setLoading(false)
     }
@@ -507,16 +513,30 @@ export function ProfileSettings() {
         'Business profile updated successfully.'
       )
 
+      // ===== SUCCESS TOAST =====
+      premiumToast.success('Profile updated', {
+        description:
+          normalized.companyName
+            ? `Changes saved to ${normalized.companyName}.`
+            : 'Your business profile has been saved.',
+      })
+
       window.setTimeout(() => {
         setSuccessMessage('')
       }, 4000)
     } catch (error: any) {
       console.error('Update business profile error:', error)
 
-      setErrorMessage(
+      const message =
         error?.message ||
         'Failed to update business profile.'
-      )
+
+      setErrorMessage(message)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Save failed', {
+        description: message,
+      })
     } finally {
       setSaving(false)
     }
@@ -1487,4 +1507,3 @@ function LegalCard({
     </button>
   )
 }
-

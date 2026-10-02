@@ -1,23 +1,41 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
+import { premiumToast } from '@/lib/premium-toast'
 
 export default function LogoutPage() {
   const router = useRouter()
+  const hasRun = useRef(false)
 
   useEffect(() => {
-    // Clear ALL auth-related data from localStorage
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
-    localStorage.removeItem('userRole')
-    localStorage.removeItem('refreshToken')
+    // Prevent double-run in React 18 Strict Mode (dev)
+    if (hasRun.current) return
+    hasRun.current = true
 
-    // Clear session storage if used
+    // Clear ALL auth-related data
+    const keysToClear = [
+      'token',
+      'user',
+      'userId',
+      'userName',
+      'userEmail',
+      'userProfile',
+      'userType',
+      'userRole',
+      'refreshToken',
+    ]
+    keysToClear.forEach((key) => localStorage.removeItem(key))
     sessionStorage.clear()
 
-    // Redirect to login after delay
+    // ===== PREMIUM TOAST =====
+    premiumToast.success('Signed out successfully', {
+      description: 'Your session has been securely ended.',
+      duration: 3000,
+    })
+
+    // Redirect after the toast animation plays
     const timer = setTimeout(() => {
       router.push('/')
     }, 1500)
@@ -40,7 +58,9 @@ export default function LogoutPage() {
         >
           ✓
         </motion.div>
-        <h1 className="text-2xl font-bold text-foreground mb-2">Logged Out Successfully</h1>
+        <h1 className="text-2xl font-bold text-foreground mb-2">
+          Logged Out Successfully
+        </h1>
         <p className="text-muted-foreground">Redirecting you to the login page...</p>
       </motion.div>
     </main>

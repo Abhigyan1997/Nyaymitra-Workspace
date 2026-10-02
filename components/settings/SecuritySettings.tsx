@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion'
 import { Lock, Shield, CheckCircle, Loader, AlertTriangle, LogOut, Smartphone, Eye, EyeOff } from 'lucide-react'
 import { useState, useEffect, useCallback, memo } from 'react'
+import { premiumToast } from '@/lib/premium-toast'
 
 interface Session {
   _id: string
@@ -170,7 +171,15 @@ export function SecuritySettings() {
         setTwoFactorEnabled(settingsResult.data?.twoFactorEnabled || false)
       } catch (err: any) {
         console.error('Failed to fetch security data:', err)
-        setError(err.message || 'Failed to load security data')
+
+        const message = err.message || 'Failed to load security data'
+
+        setError(message)
+
+        // ===== ERROR TOAST =====
+        premiumToast.error('Could not load security data', {
+          description: message,
+        })
       } finally {
         setIsLoading(false)
       }
@@ -238,10 +247,22 @@ export function SecuritySettings() {
       })
       setSaveStatus('success')
       setTimeout(() => setSaveStatus('idle'), 3000)
+
+      // ===== SUCCESS TOAST =====
+      premiumToast.success('Password updated', {
+        description: 'Your account password has been changed.',
+      })
     } catch (err: any) {
-      setPasswordError(err.message || 'Failed to change password')
+      const message = err.message || 'Failed to change password'
+
+      setPasswordError(message)
       setSaveStatus('error')
       setTimeout(() => setSaveStatus('idle'), 3000)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Password change failed', {
+        description: message,
+      })
     } finally {
       setIsSaving(false)
     }
@@ -268,13 +289,33 @@ export function SecuritySettings() {
         throw new Error(errorData.message || 'Failed to update 2FA')
       }
 
-      setTwoFactorEnabled(!twoFactorEnabled)
+      const nowEnabled = !twoFactorEnabled
+
+      setTwoFactorEnabled(nowEnabled)
       setSaveStatus('success')
       setTimeout(() => setSaveStatus('idle'), 3000)
+
+      // ===== SUCCESS TOAST =====
+      if (nowEnabled) {
+        premiumToast.success('Two-factor enabled', {
+          description: 'Your account is now protected with 2FA.',
+        })
+      } else {
+        premiumToast.info('Two-factor disabled', {
+          description: '2FA has been turned off for your account.',
+        })
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to update two-factor authentication')
+      const message = err.message || 'Failed to update two-factor authentication'
+
+      setError(message)
       setSaveStatus('error')
       setTimeout(() => setSaveStatus('idle'), 3000)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('2FA update failed', {
+        description: message,
+      })
     } finally {
       setToggling2FA(false)
     }
@@ -304,10 +345,22 @@ export function SecuritySettings() {
       setSessions(prev => prev.filter(s => s._id !== sessionId))
       setSaveStatus('success')
       setTimeout(() => setSaveStatus('idle'), 3000)
+
+      // ===== SUCCESS TOAST =====
+      premiumToast.success('Session signed out', {
+        description: 'The selected device has been signed out.',
+      })
     } catch (err: any) {
-      setError(err.message || 'Failed to revoke session')
+      const message = err.message || 'Failed to revoke session'
+
+      setError(message)
       setSaveStatus('error')
       setTimeout(() => setSaveStatus('idle'), 3000)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Sign out failed', {
+        description: message,
+      })
     }
   }
 
@@ -335,10 +388,22 @@ export function SecuritySettings() {
       setSessions(prev => prev.filter(s => s.isCurrent))
       setSaveStatus('success')
       setTimeout(() => setSaveStatus('idle'), 3000)
+
+      // ===== SUCCESS TOAST =====
+      premiumToast.success('All other sessions signed out', {
+        description: 'Only this device remains active.',
+      })
     } catch (err: any) {
-      setError(err.message || 'Failed to revoke sessions')
+      const message = err.message || 'Failed to revoke sessions'
+
+      setError(message)
       setSaveStatus('error')
       setTimeout(() => setSaveStatus('idle'), 3000)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Sign out failed', {
+        description: message,
+      })
     }
   }
 
@@ -474,8 +539,8 @@ export function SecuritySettings() {
             onClick={handleToggle2FA}
             disabled={toggling2FA}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${twoFactorEnabled
-                ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20'
-                : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20'
+              ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20'
+              : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20'
               }`}
           >
             {toggling2FA ? (
@@ -533,8 +598,8 @@ export function SecuritySettings() {
               <div
                 key={session._id}
                 className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border ${session.isCurrent
-                    ? 'bg-amber-500/5 border-amber-500/20'
-                    : 'bg-slate-900/50 border-white/5'
+                  ? 'bg-amber-500/5 border-amber-500/20'
+                  : 'bg-slate-900/50 border-white/5'
                   }`}
               >
                 <div>

@@ -1,16 +1,7 @@
 'use client'
 
-import {
-  useCallback,
-  useEffect,
-  useState,
-} from 'react'
-
-import {
-  motion,
-  AnimatePresence,
-} from 'framer-motion'
-
+import { useCallback, useEffect, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus,
   Search,
@@ -22,8 +13,8 @@ import {
   Save,
   Loader2,
 } from 'lucide-react'
-
 import { ComplianceCard } from '@/components/compliance/ComplianceCard'
+import { premiumToast } from '@/lib/premium-toast'
 
 const API_URL = 'https://nyaymitra-backend-production.up.railway.app'
 
@@ -78,12 +69,6 @@ interface ComplianceResponse {
       totalPages: number
     }
   }
-  message?: string
-}
-
-interface SingleComplianceResponse {
-  success: boolean
-  data: { item: ComplianceItem } | ComplianceItem
   message?: string
 }
 
@@ -161,9 +146,6 @@ export default function CompliancePage() {
   const [form, setForm] = useState<ComplianceForm>(emptyForm)
   const [formLoading, setFormLoading] = useState(false)
   const [formError, setFormError] = useState('')
-
-  /* DELETE */
-  const [deleteLoading, setDeleteLoading] = useState(false)
 
   /* STATUS */
   const [statusLoading, setStatusLoading] = useState<string | null>(null)
@@ -325,47 +307,63 @@ export default function CompliancePage() {
 
   /* CREATE */
   const createCompliance = async () => {
+    setFormError('')
+
+    if (!form.name.trim()) {
+      setFormError('Compliance name is required.')
+      premiumToast.warning('Missing information', {
+        description: 'Compliance name is required.',
+      })
+      return
+    }
+    if (!form.dueDate) {
+      setFormError('Due date is required.')
+      premiumToast.warning('Missing information', {
+        description: 'Due date is required.',
+      })
+      return
+    }
+
+    const payload: Record<string, unknown> = {
+      name: form.name.trim(),
+      organization: form.organization.trim(),
+      category: form.category,
+      description: form.description.trim(),
+      dueDate: form.dueDate,
+      priority: form.priority,
+      recurring: form.recurring,
+    }
+
+    if (form.assignedTo) payload.assignedTo = form.assignedTo
+    if (form.recurring && form.recurrence) payload.recurrence = form.recurrence
+
     try {
       setFormLoading(true)
-      setFormError('')
 
-      if (!form.name.trim()) {
-        setFormError('Compliance name is required.')
-        return
-      }
-      if (!form.dueDate) {
-        setFormError('Due date is required.')
-        return
-      }
-
-      const payload: Record<string, unknown> = {
-        name: form.name.trim(),
-        organization: form.organization.trim(),
-        category: form.category,
-        description: form.description.trim(),
-        dueDate: form.dueDate,
-        priority: form.priority,
-        recurring: form.recurring,
-      }
-
-      if (form.assignedTo) payload.assignedTo = form.assignedTo
-      if (form.recurring && form.recurrence) payload.recurrence = form.recurrence
-
-      const response = await fetch(`${API_URL}/api/v1/compliance`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify(payload),
-      })
-
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.message || 'Failed to create compliance item')
-      if (!result.success) throw new Error(result.message || 'Failed to create compliance item')
+      await premiumToast.promise(
+        fetch(`${API_URL}/api/v1/compliance`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify(payload),
+        }).then(async (response) => {
+          const result = await response.json()
+          if (!response.ok) throw new Error(result.message || 'Failed to create compliance item')
+          if (!result.success) throw new Error(result.message || 'Failed to create compliance item')
+          return result
+        }),
+        {
+          loading: 'Creating compliance item…',
+          success: `${form.name.trim()} added successfully`,
+          error: (err) => err.message || 'Failed to create compliance item',
+        },
+        { description: 'It will now appear in your tracker.' }
+      )
 
       closeModal()
       await Promise.all([fetchCompliance(), fetchStats()])
     } catch (err) {
+      // Toast already shown by promise; log silently
       console.error('Create compliance error:', err)
-      setFormError(err instanceof Error ? err.message : 'Failed to create compliance item')
     } finally {
       setFormLoading(false)
     }
@@ -374,46 +372,61 @@ export default function CompliancePage() {
   /* UPDATE */
   const updateCompliance = async () => {
     if (!selectedId) return
+    setFormError('')
+
+    if (!form.name.trim()) {
+      setFormError('Compliance name is required.')
+      premiumToast.warning('Missing information', {
+        description: 'Compliance name is required.',
+      })
+      return
+    }
+    if (!form.dueDate) {
+      setFormError('Due date is required.')
+      premiumToast.warning('Missing information', {
+        description: 'Due date is required.',
+      })
+      return
+    }
+
+    const payload: Record<string, unknown> = {
+      name: form.name.trim(),
+      organization: form.organization.trim(),
+      category: form.category,
+      description: form.description.trim(),
+      dueDate: form.dueDate,
+      priority: form.priority,
+      recurring: form.recurring,
+      assignedTo: form.assignedTo || null,
+      recurrence: form.recurring && form.recurrence ? form.recurrence : null,
+    }
+
     try {
       setFormLoading(true)
-      setFormError('')
 
-      if (!form.name.trim()) {
-        setFormError('Compliance name is required.')
-        return
-      }
-      if (!form.dueDate) {
-        setFormError('Due date is required.')
-        return
-      }
-
-      const payload: Record<string, unknown> = {
-        name: form.name.trim(),
-        organization: form.organization.trim(),
-        category: form.category,
-        description: form.description.trim(),
-        dueDate: form.dueDate,
-        priority: form.priority,
-        recurring: form.recurring,
-        assignedTo: form.assignedTo || null,
-        recurrence: form.recurring && form.recurrence ? form.recurrence : null,
-      }
-
-      const response = await fetch(`${API_URL}/api/v1/compliance/${selectedId}`, {
-        method: 'PATCH',
-        headers: getHeaders(),
-        body: JSON.stringify(payload),
-      })
-
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.message || 'Failed to update compliance item')
-      if (!result.success) throw new Error(result.message || 'Failed to update compliance item')
+      await premiumToast.promise(
+        fetch(`${API_URL}/api/v1/compliance/${selectedId}`, {
+          method: 'PATCH',
+          headers: getHeaders(),
+          body: JSON.stringify(payload),
+        }).then(async (response) => {
+          const result = await response.json()
+          if (!response.ok) throw new Error(result.message || 'Failed to update compliance item')
+          if (!result.success) throw new Error(result.message || 'Failed to update compliance item')
+          return result
+        }),
+        {
+          loading: 'Saving changes…',
+          success: 'Compliance item updated',
+          error: (err) => err.message || 'Failed to update compliance item',
+        },
+        { description: form.name.trim() }
+      )
 
       closeModal()
       await Promise.all([fetchCompliance(), fetchStats()])
     } catch (err) {
       console.error('Update compliance error:', err)
-      setFormError(err instanceof Error ? err.message : 'Failed to update compliance item')
     } finally {
       setFormLoading(false)
     }
@@ -424,9 +437,20 @@ export default function CompliancePage() {
     id: string,
     status: 'pending' | 'in-progress' | 'completed' | 'overdue'
   ) => {
+    const item = compliance.find((c) => c._id === id)
+    const itemName = item?.name || 'Compliance item'
+
     try {
       setStatusLoading(id)
       setError('')
+
+      const statusLabels: Record<typeof status, string> = {
+        'pending': 'Marked as pending',
+        'in-progress': 'Started',
+        'completed': 'Marked as completed',
+        'overdue': 'Marked as overdue',
+      }
+
       const response = await fetch(`${API_URL}/api/v1/compliance/${id}/status`, {
         method: 'PATCH',
         headers: getHeaders(),
@@ -437,46 +461,77 @@ export default function CompliancePage() {
       if (!response.ok) throw new Error(result.message || 'Failed to update status')
       if (!result.success) throw new Error(result.message || 'Failed to update status')
 
+      // Toast based on new status
+      if (status === 'completed') {
+        premiumToast.success('Compliance completed', {
+          description: itemName,
+        })
+      } else if (status === 'in-progress') {
+        premiumToast.info('Work started', {
+          description: itemName,
+        })
+      } else {
+        premiumToast.success(statusLabels[status], {
+          description: itemName,
+        })
+      }
+
       await Promise.all([fetchCompliance(), fetchStats()])
     } catch (err) {
       console.error('Status update error:', err)
-      setError(err instanceof Error ? err.message : 'Failed to update status')
+      const message = err instanceof Error ? err.message : 'Failed to update status'
+      setError(message)
+      premiumToast.error('Could not update status', {
+        description: message,
+      })
     } finally {
       setStatusLoading(null)
     }
   }
 
   /* DELETE */
-  const deleteCompliance = async (id: string) => {
-    const confirmed = window.confirm(
-      'Are you sure you want to delete this compliance item? This action cannot be undone.'
-    )
-    if (!confirmed) return
+  const deleteCompliance = (id: string) => {
+    const item = compliance.find((c) => c._id === id)
+    const itemName = item?.name || 'this compliance item'
 
-    try {
-      setDeleteLoading(true)
-      setError('')
-      const response = await fetch(`${API_URL}/api/v1/compliance/${id}`, {
-        method: 'DELETE',
-        headers: getHeaders(),
-      })
+    // Custom confirmation toast with action button
+    premiumToast.warning('Delete this item?', {
+      description: `"${itemName}" will be permanently removed.`,
+      duration: 8000,
+      action: {
+        label: 'Delete permanently',
+        onClick: async () => {
+          try {
+            const response = await fetch(`${API_URL}/api/v1/compliance/${id}`, {
+              method: 'DELETE',
+              headers: getHeaders(),
+            })
 
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.message || 'Failed to delete compliance item')
-      if (!result.success) throw new Error(result.message || 'Failed to delete compliance item')
+            const result = await response.json()
+            if (!response.ok) throw new Error(result.message || 'Failed to delete compliance item')
+            if (!result.success) throw new Error(result.message || 'Failed to delete compliance item')
 
-      if (compliance.length === 1 && page > 1) {
-        setPage((current) => Math.max(1, current - 1))
-      } else {
-        await fetchCompliance()
-      }
-      await fetchStats()
-    } catch (err) {
-      console.error('Delete compliance error:', err)
-      setError(err instanceof Error ? err.message : 'Failed to delete compliance item')
-    } finally {
-      setDeleteLoading(false)
-    }
+            premiumToast.success('Compliance item deleted', {
+              description: itemName,
+            })
+
+            if (compliance.length === 1 && page > 1) {
+              setPage((current) => Math.max(1, current - 1))
+            } else {
+              await fetchCompliance()
+            }
+            await fetchStats()
+          } catch (err) {
+            console.error('Delete compliance error:', err)
+            const message = err instanceof Error ? err.message : 'Failed to delete compliance item'
+            setError(message)
+            premiumToast.error('Delete failed', {
+              description: message,
+            })
+          }
+        },
+      },
+    })
   }
 
   /* CLOSE MODAL */
@@ -493,6 +548,14 @@ export default function CompliancePage() {
     try {
       setRefreshing(true)
       await Promise.all([fetchCompliance(), fetchStats()])
+      premiumToast.success('Refreshed', {
+        description: 'Latest compliance data loaded.',
+        duration: 2000,
+      })
+    } catch (err) {
+      premiumToast.error('Refresh failed', {
+        description: 'Could not load the latest data.',
+      })
     } finally {
       setRefreshing(false)
     }
@@ -549,7 +612,6 @@ export default function CompliancePage() {
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
       >
-        {/* Header row: stacks on mobile, side-by-side on larger screens */}
         <div className="flex flex-col gap-5 mb-8 sm:mb-10 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground mb-2 sm:mb-3 break-words">
@@ -560,7 +622,6 @@ export default function CompliancePage() {
             </p>
           </div>
 
-          {/* Actions: full-width row on mobile */}
           <div className="flex items-center gap-2 sm:gap-3 w-full lg:w-auto">
             <motion.button
               whileHover={{ scale: 1.03 }}
@@ -586,9 +647,8 @@ export default function CompliancePage() {
           </div>
         </div>
 
-        {/* STATS: 2 cols on mobile, 4 on md+ */}
+        {/* STATS */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
-          {/* Total */}
           <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
             <p className="text-xs sm:text-sm font-medium mb-2 sm:mb-3 text-muted-foreground">
               Total Items
@@ -602,7 +662,6 @@ export default function CompliancePage() {
             )}
           </div>
 
-          {/* Pending */}
           <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
             <div className="flex items-center gap-2 mb-2 sm:mb-3">
               <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-500 shrink-0" />
@@ -619,7 +678,6 @@ export default function CompliancePage() {
             )}
           </div>
 
-          {/* Overdue */}
           <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
             <div className="flex items-center gap-2 mb-2 sm:mb-3">
               <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-500 shrink-0" />
@@ -636,7 +694,6 @@ export default function CompliancePage() {
             )}
           </div>
 
-          {/* Completed */}
           <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
             <div className="flex items-center gap-2 mb-2 sm:mb-3">
               <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-accent shrink-0" />
@@ -672,7 +729,7 @@ export default function CompliancePage() {
           />
         </div>
 
-        {/* FILTER: horizontal scroll on mobile */}
+        {/* FILTER */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -687,8 +744,8 @@ export default function CompliancePage() {
               whileTap={{ scale: 0.97 }}
               onClick={() => handleStatusChange(status)}
               className={`px-3 sm:px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-all text-sm min-h-[40px] ${filterStatus === status
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-card border border-border text-foreground hover:border-primary/50'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-card border border-border text-foreground hover:border-primary/50'
                 }`}
             >
               {formatStatus(status)}
@@ -737,7 +794,6 @@ export default function CompliancePage() {
         </div>
       ) : compliance.length > 0 ? (
         <>
-          {/* CARDS */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -763,7 +819,6 @@ export default function CompliancePage() {
                   onDelete={deleteCompliance}
                 />
 
-                {/* STATUS ACTIONS */}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {item.status !== 'completed' && (
                     <button
@@ -796,7 +851,6 @@ export default function CompliancePage() {
             ))}
           </motion.div>
 
-          {/* PAGINATION */}
           {totalPages > 1 && (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-6 sm:mt-8">
               <p className="text-sm text-muted-foreground text-center sm:text-left">
@@ -814,9 +868,7 @@ export default function CompliancePage() {
               <div className="flex items-center justify-center gap-2">
                 <button
                   disabled={page <= 1}
-                  onClick={() =>
-                    setPage((current) => Math.max(1, current - 1))
-                  }
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
                   className="px-3 sm:px-4 py-2 rounded-lg border border-border bg-card text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted transition-colors min-h-[40px]"
                 >
                   Previous
@@ -828,9 +880,7 @@ export default function CompliancePage() {
 
                 <button
                   disabled={page >= totalPages}
-                  onClick={() =>
-                    setPage((current) => Math.min(totalPages, current + 1))
-                  }
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                   className="px-3 sm:px-4 py-2 rounded-lg border border-border bg-card text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted transition-colors min-h-[40px]"
                 >
                   Next
@@ -840,7 +890,6 @@ export default function CompliancePage() {
           )}
         </>
       ) : (
-        /* EMPTY */
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -869,9 +918,7 @@ export default function CompliancePage() {
         </motion.div>
       )}
 
-      {/* =====================================================
-          MODAL
-      ===================================================== */}
+      {/* MODAL */}
       <AnimatePresence>
         {showModal && (
           <motion.div
@@ -890,7 +937,6 @@ export default function CompliancePage() {
               transition={{ duration: 0.2 }}
               className="w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto bg-card border border-border rounded-t-2xl sm:rounded-xl shadow-xl"
             >
-              {/* HEADER */}
               <div className="sticky top-0 z-10 flex items-start justify-between gap-4 px-4 sm:px-6 py-4 border-b border-border bg-card">
                 <div className="min-w-0">
                   <h2 className="text-lg sm:text-xl font-semibold text-foreground">
@@ -918,7 +964,6 @@ export default function CompliancePage() {
                 </button>
               </div>
 
-              {/* BODY */}
               <div className="p-4 sm:p-6">
                 {formLoading && !selectedItem && modalMode !== 'create' ? (
                   <div className="py-12 flex justify-center">
@@ -933,7 +978,6 @@ export default function CompliancePage() {
                       </div>
                     )}
 
-                    {/* Name */}
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
                         Compliance Name *
@@ -950,7 +994,6 @@ export default function CompliancePage() {
                       />
                     </div>
 
-                    {/* Organization */}
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
                         Organization
@@ -967,7 +1010,6 @@ export default function CompliancePage() {
                       />
                     </div>
 
-                    {/* Category + Priority: stack on smallest, 2-col from sm */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-2">
@@ -1014,7 +1056,6 @@ export default function CompliancePage() {
                       </div>
                     </div>
 
-                    {/* Due Date */}
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
                         Due Date *
@@ -1030,7 +1071,6 @@ export default function CompliancePage() {
                       />
                     </div>
 
-                    {/* Assigned To */}
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
                         Assigned To
@@ -1056,7 +1096,6 @@ export default function CompliancePage() {
                       )}
                     </div>
 
-                    {/* Description */}
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
                         Description
@@ -1073,7 +1112,6 @@ export default function CompliancePage() {
                       />
                     </div>
 
-                    {/* Recurring */}
                     <div className="flex items-center gap-3">
                       <input
                         id="recurring-checkbox"
@@ -1097,7 +1135,6 @@ export default function CompliancePage() {
                       </label>
                     </div>
 
-                    {/* Recurrence */}
                     {form.recurring && (
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-2">
@@ -1121,7 +1158,6 @@ export default function CompliancePage() {
                       </div>
                     )}
 
-                    {/* VIEW DETAILS */}
                     {modalMode === 'view' && selectedItem && (
                       <div className="pt-4 border-t border-border space-y-4">
                         <div className="flex justify-between gap-4 text-sm">
@@ -1176,7 +1212,6 @@ export default function CompliancePage() {
                 )}
               </div>
 
-              {/* FOOTER: stacks on mobile */}
               <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-2 sm:gap-3 px-4 sm:px-6 py-4 border-t border-border bg-card sticky bottom-0">
                 <button
                   onClick={closeModal}

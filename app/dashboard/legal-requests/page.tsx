@@ -24,6 +24,7 @@ import {
   UserRound,
   X,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 /* =========================================================
    CONFIG
@@ -583,6 +584,11 @@ function NewLegalRequestModal({
       setError(
         'Please enter a request title.'
       )
+
+      premiumToast.warning('Request title required', {
+        description: 'Give your legal request a clear title.',
+      })
+
       return
     }
 
@@ -590,6 +596,11 @@ function NewLegalRequestModal({
       setError(
         'Please describe your legal requirement.'
       )
+
+      premiumToast.warning('Description required', {
+        description: 'Tell us what legal help you need.',
+      })
+
       return
     }
 
@@ -600,6 +611,11 @@ function NewLegalRequestModal({
       setError(
         'Please specify your legal matter.'
       )
+
+      premiumToast.warning('Specify the matter', {
+        description: 'Since you selected "Other", describe the category.',
+      })
+
       return
     }
 
@@ -679,13 +695,26 @@ function NewLegalRequestModal({
 
       onCreated(createdRequest)
 
+      // ===== SUCCESS TOAST =====
+      premiumToast.success('Legal request submitted', {
+        description: createdRequest?.requestNumber
+          ? `${createdRequest.requestNumber} is now with our legal team.`
+          : 'Our legal team has received your request.',
+      })
+
       resetForm()
     } catch (err) {
-      setError(
+      const message =
         err instanceof Error
           ? err.message
           : 'Failed to create legal request.'
-      )
+
+      setError(message)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Request failed', {
+        description: message,
+      })
     }
   }
 
@@ -1360,11 +1389,17 @@ export default function LegalRequestsPage() {
           err
         )
 
-        setFetchError(
+        const message =
           err instanceof Error
             ? err.message
             : 'Unable to load legal requests.'
-        )
+
+        setFetchError(message)
+
+        // ===== ERROR TOAST =====
+        premiumToast.error('Could not load requests', {
+          description: message,
+        })
       } finally {
         setLoading(false)
       }
@@ -1694,7 +1729,8 @@ export default function LegalRequestsPage() {
                       onClick={() =>
                         setActiveStatus(
                           item.value
-                        )}
+                        )
+                      }
                       className={`
                                                 shrink-0
                                                 rounded-xl

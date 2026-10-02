@@ -52,6 +52,8 @@ import {
     getContractVersionLabel,
 } from "@/lib/contracts"
 
+import { premiumToast } from "@/lib/premium-toast"
+
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -451,6 +453,12 @@ function FinalDocumentButton({
                 await downloadFromR2(result.url, filename)
 
                 setLoading(false)
+
+                // ===== SUCCESS TOAST =====
+                premiumToast.success('Download started', {
+                    description: filename,
+                })
+
                 return
             } catch (err) {
                 lastError = err
@@ -466,6 +474,11 @@ function FinalDocumentButton({
 
         setError(message)
         window.alert(message)
+
+        // ===== ERROR TOAST =====
+        premiumToast.error('Download failed', {
+            description: message,
+        })
     }
 
     return (
@@ -532,6 +545,11 @@ function ContractEditModal({
 
         if (!form.counterpartyName.trim()) {
             setError("Counterparty name is required.")
+
+            premiumToast.warning('Missing information', {
+                description: 'Counterparty name is required.',
+            })
+
             return
         }
 
@@ -573,13 +591,27 @@ function ContractEditModal({
 
             onSaved(updated)
             onClose()
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Contract updated', {
+                description: updated?.title
+                    ? `Changes saved to "${updated.title}".`
+                    : 'Your changes have been saved.',
+            })
         } catch (err) {
             console.error("Update contract error:", err)
-            setError(
+
+            const message =
                 err instanceof Error
                     ? err.message
                     : "Failed to update contract."
-            )
+
+            setError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Update failed', {
+                description: message,
+            })
         } finally {
             setSaving(false)
         }
@@ -1099,14 +1131,20 @@ export default function ContractDetailPage({
                     loadError
                 )
 
-                setError(
+                const message =
                     loadError instanceof Error
                         ? loadError.message
                         : "Failed to load contract."
-                )
+
+                setError(message)
 
                 if (!options?.silent) {
                     setPageState("error")
+
+                    // ===== ERROR TOAST =====
+                    premiumToast.error('Could not load contract', {
+                        description: message,
+                    })
                 }
             }
         },
@@ -1132,6 +1170,12 @@ export default function ContractDetailPage({
         try {
             setRefreshing(true)
             await loadContract(id, { silent: true })
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Refreshed', {
+                description: 'Latest contract data loaded.',
+                duration: 2000,
+            })
         } finally {
             setRefreshing(false)
         }
@@ -1161,6 +1205,23 @@ export default function ContractDetailPage({
                 ...current,
                 ...normalized,
             ])
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Comment posted', {
+                description: 'Your comment was added to the thread.',
+            })
+        } catch (err) {
+            const msg =
+                err instanceof Error
+                    ? err.message
+                    : 'Failed to add comment.'
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Comment failed', {
+                description: msg,
+            })
+
+            throw err
         } finally {
             setCommentSubmitting(false)
         }
@@ -1184,17 +1245,28 @@ export default function ContractDetailPage({
             )
 
             await loadContract(contract._id, { silent: true })
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Document uploaded', {
+                description: file.name,
+            })
         } catch (uploadErr) {
             console.error(
                 "Failed to upload supporting document:",
                 uploadErr
             )
 
-            setDocumentError(
+            const message =
                 uploadErr instanceof Error
                     ? uploadErr.message
                     : "Failed to upload document."
-            )
+
+            setDocumentError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Upload failed', {
+                description: message,
+            })
         } finally {
             setDocumentUploading(false)
         }
@@ -1594,6 +1666,11 @@ function ContractDocumentsTab({
 
         if (!confirmed) return
 
+        const doc = documents.find((d) => d._id === documentId)
+        const displayName = doc
+            ? getDocumentDisplayName(doc)
+            : "Document"
+
         try {
             setDeletingId(documentId)
             setRowError(null)
@@ -1603,6 +1680,11 @@ function ContractDocumentsTab({
                 documentId
             )
 
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Document deleted', {
+                description: displayName,
+            })
+
             window.location.reload()
         } catch (deleteErr) {
             console.error(
@@ -1610,11 +1692,17 @@ function ContractDocumentsTab({
                 deleteErr
             )
 
-            setRowError(
+            const message =
                 deleteErr instanceof Error
                     ? deleteErr.message
                     : "Failed to delete document."
-            )
+
+            setRowError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Delete failed', {
+                description: message,
+            })
         } finally {
             setDeletingId(null)
         }
@@ -1643,17 +1731,28 @@ function ContractDocumentsTab({
             }
 
             await downloadFromR2(result.url, name)
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Download started', {
+                description: name,
+            })
         } catch (downloadErr) {
             console.error(
                 "Failed to download document:",
                 downloadErr
             )
 
-            setRowError(
+            const message =
                 downloadErr instanceof Error
                     ? downloadErr.message
                     : "Failed to download document."
-            )
+
+            setRowError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Download failed', {
+                description: message,
+            })
         } finally {
             setDownloadingId(null)
         }

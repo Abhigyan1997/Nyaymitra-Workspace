@@ -42,6 +42,7 @@ import {
 import { createPortal } from 'react-dom'
 import axios from 'axios'
 import { Fraunces, Manrope } from 'next/font/google'
+import { premiumToast } from '@/lib/premium-toast'
 
 const display = Fraunces({
   subsets: ['latin'],
@@ -694,6 +695,12 @@ export default function DocumentsPage() {
         setError(
           'Authentication token not found. Please login again.'
         )
+
+        // ===== ERROR TOAST =====
+        premiumToast.error('Session expired', {
+          description: 'Please sign in again to access your vault.',
+        })
+
         return
       }
 
@@ -742,10 +749,16 @@ export default function DocumentsPage() {
           err.response?.data || err.message
         )
 
-        setError(
+        const message =
           err.response?.data?.message ||
           'Failed to load business information.'
-        )
+
+        setError(message)
+
+        // ===== ERROR TOAST =====
+        premiumToast.error('Could not load business profile', {
+          description: message,
+        })
       }
     }
 
@@ -871,6 +884,7 @@ export default function DocumentsPage() {
         err.response?.data?.message ||
         'Failed to fetch folders.'
       )
+      // Silent — the caller (fetchDocuments) will toast on its own failure
     }
   }
 
@@ -957,10 +971,16 @@ export default function DocumentsPage() {
         err.response?.data || err.message
       )
 
-      setError(
+      const message =
         err.response?.data?.message ||
         'Failed to fetch documents.'
-      )
+
+      setError(message)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Could not load documents', {
+        description: message,
+      })
     } finally {
       setLoading(false)
     }
@@ -998,11 +1018,21 @@ export default function DocumentsPage() {
   ) => {
     if (!businessId || !token) {
       setError('Missing business ID or authentication.')
+
+      premiumToast.error('Session error', {
+        description: 'Please sign in again to upload files.',
+      })
+
       return
     }
 
     if (!folderId) {
       setError('Please select a folder before uploading.')
+
+      premiumToast.warning('Select a folder first', {
+        description: 'Choose which folder to upload into.',
+      })
+
       return
     }
 
@@ -1012,6 +1042,11 @@ export default function DocumentsPage() {
 
     if (!selectedFolder) {
       setError('Selected folder not found.')
+
+      premiumToast.error('Folder not found', {
+        description: 'This folder no longer exists. Refresh and try again.',
+      })
+
       return
     }
 
@@ -1089,17 +1124,28 @@ export default function DocumentsPage() {
       )
 
       await fetchDocuments()
+
+      // ===== SUCCESS TOAST =====
+      premiumToast.success('File uploaded', {
+        description: `${file.name} added to ${selectedFolder.name}.`,
+      })
     } catch (err: any) {
       console.error(
         'Upload error:',
         err.response?.data || err.message
       )
 
-      setError(
+      const message =
         err.response?.data?.message ||
         err.message ||
         'Failed to upload file.'
-      )
+
+      setError(message)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Upload failed', {
+        description: message,
+      })
     } finally {
       setUploading(false)
       setUploadProgress({})
@@ -1161,6 +1207,10 @@ export default function DocumentsPage() {
         )
       } else {
         setError('No document URL available.')
+
+        premiumToast.warning('No preview available', {
+          description: 'This document has no viewable URL.',
+        })
       }
     } catch (err: any) {
       console.error(
@@ -1168,10 +1218,16 @@ export default function DocumentsPage() {
         err.response?.data || err.message
       )
 
-      setError(
+      const message =
         err.response?.data?.message ||
         'Failed to open document.'
-      )
+
+      setError(message)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Could not open document', {
+        description: message,
+      })
     }
   }
 
@@ -1204,6 +1260,11 @@ export default function DocumentsPage() {
 
       if (!downloadUrl) {
         setError('No download URL available.')
+
+        premiumToast.warning('No download available', {
+          description: 'This document has no download link.',
+        })
+
         return
       }
 
@@ -1227,16 +1288,27 @@ export default function DocumentsPage() {
       document.body.removeChild(link)
 
       window.URL.revokeObjectURL(url)
+
+      // ===== SUCCESS TOAST =====
+      premiumToast.success('Download started', {
+        description: doc.file || doc.name || 'Document',
+      })
     } catch (err: any) {
       console.error(
         'Error downloading document:',
         err.response?.data || err.message
       )
 
-      setError(
+      const message =
         err.response?.data?.message ||
         'Failed to download document.'
-      )
+
+      setError(message)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Download failed', {
+        description: message,
+      })
     }
   }
 
@@ -1249,6 +1321,9 @@ export default function DocumentsPage() {
     folderId: string
   ) => {
     if (!docId || !folderId) return
+
+    const doc = uploadedDocuments.find((d) => d.id === docId)
+    const targetFolder = folders.find((f) => f.id === folderId)
 
     try {
       setMovingDocument(docId)
@@ -1287,17 +1362,28 @@ export default function DocumentsPage() {
       )
 
       await fetchFolders()
+
+      // ===== SUCCESS TOAST =====
+      premiumToast.success('Document moved', {
+        description: `${doc?.name || 'Document'} moved to ${targetFolder?.name || 'folder'}.`,
+      })
     } catch (err: any) {
       console.error(
         'Error moving document:',
         err.response?.data || err.message
       )
 
-      setError(
+      const message =
         err.response?.data?.message ||
         err.message ||
         'Failed to move document.'
-      )
+
+      setError(message)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Move failed', {
+        description: message,
+      })
     } finally {
       setMovingDocument(null)
     }
@@ -1313,6 +1399,8 @@ export default function DocumentsPage() {
     ) {
       return
     }
+
+    const doc = uploadedDocuments.find((d) => d.id === docId)
 
     try {
       await axios.delete(
@@ -1340,16 +1428,27 @@ export default function DocumentsPage() {
       )
 
       await fetchFolders()
+
+      // ===== SUCCESS TOAST =====
+      premiumToast.success('Document removed', {
+        description: doc?.name || 'Document deleted from vault.',
+      })
     } catch (err: any) {
       console.error(
         'Error deleting document:',
         err.response?.data || err.message
       )
 
-      setError(
+      const message =
         err.response?.data?.message ||
         'Failed to delete document.'
-      )
+
+      setError(message)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Delete failed', {
+        description: message,
+      })
     }
   }
 
@@ -1366,6 +1465,11 @@ export default function DocumentsPage() {
 
     if (!businessId || !token) {
       setError('Missing business ID or authentication.')
+
+      premiumToast.error('Session error', {
+        description: 'Please sign in again to create folders.',
+      })
+
       return
     }
 
@@ -1395,16 +1499,27 @@ export default function DocumentsPage() {
       setShowNewFolder(false)
 
       await fetchFolders()
+
+      // ===== SUCCESS TOAST =====
+      premiumToast.success('Folder created', {
+        description: `"${name}" is ready for files.`,
+      })
     } catch (err: any) {
       console.error(
         'Error creating folder:',
         err.response?.data || err.message
       )
 
-      setError(
+      const message =
         err.response?.data?.message ||
         'Failed to create folder.'
-      )
+
+      setError(message)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Could not create folder', {
+        description: message,
+      })
     } finally {
       setCreatingFolder(false)
     }
@@ -1432,13 +1547,15 @@ export default function DocumentsPage() {
       return
     }
 
+    const newName = renameValue.trim()
+
     try {
       setSavingRename(true)
       setError(null)
 
       const response = await axios.patch(
         `${API_BASE_URL}/api/v1/folders/${renamingFolder}`,
-        { name: renameValue.trim() },
+        { name: newName },
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -1458,16 +1575,27 @@ export default function DocumentsPage() {
       setRenameValue('')
 
       await fetchFolders()
+
+      // ===== SUCCESS TOAST =====
+      premiumToast.success('Folder renamed', {
+        description: `Now called "${newName}".`,
+      })
     } catch (err: any) {
       console.error(
         'Error renaming folder:',
         err.response?.data || err.message
       )
 
-      setError(
+      const message =
         err.response?.data?.message ||
         'Failed to rename folder.'
-      )
+
+      setError(message)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Rename failed', {
+        description: message,
+      })
     } finally {
       setSavingRename(false)
     }
@@ -1488,6 +1616,11 @@ export default function DocumentsPage() {
 
     if (folderDocs.length > 0) {
       setError('Empty the folder before deleting it.')
+
+      premiumToast.warning('Folder is not empty', {
+        description: 'Move or delete its files first.',
+      })
+
       return
     }
 
@@ -1512,16 +1645,27 @@ export default function DocumentsPage() {
       }
 
       await fetchFolders()
+
+      // ===== SUCCESS TOAST =====
+      premiumToast.success('Folder deleted', {
+        description: `"${folder.name}" removed from vault.`,
+      })
     } catch (err: any) {
       console.error(
         'Error deleting folder:',
         err.response?.data || err.message
       )
 
-      setError(
+      const message =
         err.response?.data?.message ||
         'Failed to delete folder.'
-      )
+
+      setError(message)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Delete failed', {
+        description: message,
+      })
     }
   }
 

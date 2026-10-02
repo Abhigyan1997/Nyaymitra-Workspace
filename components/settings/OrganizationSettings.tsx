@@ -1,4 +1,3 @@
-
 'use client'
 
 import { useEffect, useState, type ChangeEvent, type ReactNode } from 'react'
@@ -17,6 +16,7 @@ import {
   Save,
   ShieldCheck,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
@@ -238,10 +238,16 @@ export function OrganizationSettings() {
         error
       )
 
-      setErrorMessage(
+      const message =
         error?.message ||
         'Failed to load business information.'
-      )
+
+      setErrorMessage(message)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Could not load organization', {
+        description: message,
+      })
     } finally {
       setLoading(false)
     }
@@ -375,6 +381,13 @@ export function OrganizationSettings() {
         'Organization details updated successfully.'
       )
 
+      // ===== SUCCESS TOAST =====
+      premiumToast.success('Organization updated', {
+        description: normalized.companyName
+          ? `Changes saved to ${normalized.companyName}.`
+          : 'Your organization details have been saved.',
+      })
+
       setTimeout(() => {
         setSuccessMessage('')
       }, 4000)
@@ -384,10 +397,16 @@ export function OrganizationSettings() {
         error
       )
 
-      setErrorMessage(
+      const message =
         error?.message ||
         'Failed to update organization.'
-      )
+
+      setErrorMessage(message)
+
+      // ===== ERROR TOAST =====
+      premiumToast.error('Save failed', {
+        description: message,
+      })
     } finally {
       setSaving(false)
     }
@@ -1036,4 +1055,3 @@ function Select({
     </div>
   )
 }
-

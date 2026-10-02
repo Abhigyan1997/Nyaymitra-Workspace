@@ -35,6 +35,8 @@ import {
     type ContractType,
 } from "@/lib/services/contract.service"
 
+import { premiumToast } from "@/lib/premium-toast"
+
 
 /* -------------------------------------------------------------------------- */
 /* Upload contract modal                                                       */
@@ -117,6 +119,11 @@ function UploadContractModal({
         // Validate title
         if (!title.trim()) {
             setError("Contract title is required.")
+
+            premiumToast.warning("Missing information", {
+                description: "Contract title is required.",
+            })
+
             return
         }
 
@@ -124,6 +131,11 @@ function UploadContractModal({
         // Validate contract type
         if (!contractType) {
             setError("Please select a contract type.")
+
+            premiumToast.warning("Missing information", {
+                description: "Please select a contract type.",
+            })
+
             return
         }
 
@@ -131,6 +143,11 @@ function UploadContractModal({
         // Validate file
         if (!file) {
             setError("Please choose a file to upload.")
+
+            premiumToast.warning("Missing file", {
+                description: "Please choose a file to upload.",
+            })
+
             return
         }
 
@@ -151,6 +168,10 @@ function UploadContractModal({
             setError(
                 "Please upload a PDF, DOC, DOCX, or image file."
             )
+
+            premiumToast.warning("Unsupported file type", {
+                description: "Please upload a PDF, DOC, DOCX, or image file.",
+            })
 
             return
         }
@@ -206,6 +227,12 @@ function UploadContractModal({
             onUploaded(created)
 
 
+            // ===== SUCCESS TOAST =====
+            premiumToast.success("Contract uploaded", {
+                description: `${created.title || title.trim()} added to your workspace.`,
+            })
+
+
             // Reset modal
             reset()
 
@@ -220,11 +247,19 @@ function UploadContractModal({
                 err
             )
 
-            setError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : "Unable to upload contract."
-            )
+
+
+            setError(message)
+
+
+            // ===== ERROR TOAST =====
+            premiumToast.error("Upload failed", {
+                description: message,
+            })
 
         } finally {
             setSaving(false)
@@ -619,11 +654,19 @@ export default function ContractsPage() {
                 )
 
 
-                setError(
+                const message =
                     err instanceof Error
                         ? err.message
                         : "Failed to load contracts."
-                )
+
+
+                setError(message)
+
+
+                // ===== ERROR TOAST =====
+                premiumToast.error("Could not load contracts", {
+                    description: message,
+                })
 
             } finally {
 
@@ -827,6 +870,15 @@ export default function ContractsPage() {
             ])
 
 
+            // ===== SUCCESS TOAST =====
+            premiumToast.success("Legal request created", {
+                description:
+                    newRequest?.title
+                        ? `"${newRequest.title}" is now in your request queue.`
+                        : "It is now in your request queue.",
+            })
+
+
             setShowRequestModal(false)
 
             setView("requests")
@@ -851,6 +903,13 @@ export default function ContractsPage() {
 
 
             setError(message)
+
+
+            // ===== ERROR TOAST =====
+            premiumToast.error("Request failed", {
+                description: message,
+            })
+
 
             throw err
 

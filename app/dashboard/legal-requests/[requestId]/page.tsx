@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 
 import { useParams, useRouter } from 'next/navigation'
+import { premiumToast } from '@/lib/premium-toast'
 
 const API_BASE_URL = (
     process.env.NEXT_PUBLIC_API_URL ||
@@ -208,13 +209,19 @@ export default function LegalRequestDetailPage() {
                 error
             )
 
-            setCommentsError(
+            const message =
                 error instanceof Error
                     ? error.message
                     : 'Failed to fetch comments.'
-            )
+
+            setCommentsError(message)
 
             setComments([])
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load comments', {
+                description: message,
+            })
         } finally {
             setCommentsLoading(false)
         }
@@ -261,6 +268,16 @@ export default function LegalRequestDetailPage() {
                 error
             )
             setAttachments([])
+
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : 'Failed to fetch attachments.'
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load attachments', {
+                description: message,
+            })
         }
     }, [requestId])
 
@@ -346,11 +363,17 @@ export default function LegalRequestDetailPage() {
                     error
                 )
 
-                setError(
+                const message =
                     error instanceof Error
                         ? error.message
                         : 'Failed to load legal request.'
-                )
+
+                setError(message)
+
+                // ===== ERROR TOAST =====
+                premiumToast.error('Could not load request', {
+                    description: message,
+                })
             } finally {
                 setLoading(false)
                 setCommentsLoading(false)
@@ -412,17 +435,28 @@ export default function LegalRequestDetailPage() {
             ])
 
             setCommentText('')
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Comment posted', {
+                description: 'Your comment has been added to the request.',
+            })
         } catch (error) {
             console.error(
                 'Add comment error:',
                 error
             )
 
-            setCommentsError(
+            const message =
                 error instanceof Error
                     ? error.message
                     : 'Failed to add comment.'
-            )
+
+            setCommentsError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Comment failed', {
+                description: message,
+            })
         } finally {
             setCommentPosting(false)
         }
@@ -436,9 +470,15 @@ export default function LegalRequestDetailPage() {
 
         const MAX_MB = 25
         if (file.size > MAX_MB * 1024 * 1024) {
-            setUploadError(
-                `File is too large. Max ${MAX_MB} MB allowed.`
-            )
+            const message = `File is too large. Max ${MAX_MB} MB allowed.`
+
+            setUploadError(message)
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning('File too large', {
+                description: message,
+            })
+
             return
         }
 
@@ -518,6 +558,11 @@ export default function LegalRequestDetailPage() {
 
             await fetchAttachments()
 
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Document uploaded', {
+                description: file.name,
+            })
+
             setTimeout(() => {
                 setUploadSuccess('')
                 setUploadProgress(null)
@@ -528,13 +573,19 @@ export default function LegalRequestDetailPage() {
                 error
             )
 
-            setUploadError(
+            const message =
                 error instanceof Error
                     ? error.message
                     : 'Failed to upload document.'
-            )
+
+            setUploadError(message)
 
             setUploadProgress(null)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Upload failed', {
+                description: message,
+            })
         } finally {
             setUploading(false)
         }

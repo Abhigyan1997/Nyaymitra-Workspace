@@ -7,9 +7,9 @@ import { z } from 'zod'
 import { motion, type Variants } from 'framer-motion'
 import Link from 'next/link'
 import { Mail, Lock, Loader2, Eye, EyeOff, Scale, ArrowRight } from 'lucide-react'
-import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import axios from 'axios'
+import { premiumToast } from '@/lib/premium-toast'
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -63,8 +63,10 @@ export function LoginForm() {
       localStorage.setItem('userProfile', JSON.stringify(user))
       localStorage.setItem('userType', user.role || 'user')
 
-      toast.success(message || 'Logged in successfully!', {
-        description: `Welcome back, ${user.fullName}!`,
+      // ===== SUCCESS TOAST (premium) =====
+      premiumToast.success(message || 'Welcome back', {
+        description: `Signed in as ${user.fullName} · ${user.role || 'User'}`,
+        duration: 4000,
       })
 
       // Role-based redirection
@@ -74,43 +76,76 @@ export function LoginForm() {
         if (redirectTo) {
           router.push(redirectTo)
         } else {
-          // Redirect based on role
           const userRole = user.role?.toLowerCase() || ''
 
           if (userRole === 'admin' || userRole === 'superadmin') {
             router.push('/admin-dashboard')
-          } else if (userRole === 'lawyer' || userRole === 'attorney' || userRole === 'legal') {
+          } else if (
+            userRole === 'lawyer' ||
+            userRole === 'attorney' ||
+            userRole === 'legal'
+          ) {
             router.push('/lawyer-dashboard')
-          } else if (userRole === 'business' || userRole === 'client' || userRole === 'user') {
+          } else if (
+            userRole === 'business' ||
+            userRole === 'client' ||
+            userRole === 'user'
+          ) {
             router.push('/dashboard')
           } else {
-            // Default fallback
             router.push('/dashboard')
           }
         }
       }, 1000)
     } catch (err: any) {
       let errorMessage = 'An error occurred during login'
+      let errorType: 'auth' | 'network' | 'validation' | 'server' = 'server'
 
       if (axios.isAxiosError(err)) {
         if (err.response?.status === 401) {
-          errorMessage = 'Invalid email or password'
+          errorMessage = 'Invalid email or password. Please try again.'
+          errorType = 'auth'
         } else if (err.response?.status === 403) {
-          errorMessage = 'Account not verified. Please check your email.'
+          errorMessage = 'Account not verified. Please check your email inbox.'
+          errorType = 'auth'
+        } else if (err.response?.status === 429) {
+          errorMessage = 'Too many attempts. Please wait a moment and try again.'
+          errorType = 'validation'
         } else if (err.response?.data?.message) {
           errorMessage = err.response.data.message
+          errorType = 'server'
         } else if (err.code === 'ECONNABORTED') {
-          errorMessage = 'Request timed out. Please try again.'
+          errorMessage = 'Request timed out. The server is taking too long to respond.'
+          errorType = 'network'
         } else if (!err.response) {
-          errorMessage = 'Network error. Please check your connection.'
+          errorMessage = 'Network error. Please check your connection and try again.'
+          errorType = 'network'
         }
       } else if (err instanceof Error) {
         errorMessage = err.message
+        errorType = 'server'
       }
 
       setError(errorMessage)
-      toast.error('Login Failed', {
+
+      // ===== ERROR TOAST (premium, context-aware) =====
+      const errorTitles: Record<typeof errorType, string> = {
+        auth: 'Authentication failed',
+        network: 'Connection error',
+        validation: 'Invalid input',
+        server: 'Sign in failed',
+      }
+
+      premiumToast.error(errorTitles[errorType], {
         description: errorMessage,
+        duration: 5000,
+        action:
+          errorType === 'auth'
+            ? {
+              label: 'Reset password',
+              onClick: () => router.push('/forgot-password'),
+            }
+            : undefined,
       })
     } finally {
       setIsLoading(false)
@@ -168,7 +203,10 @@ export function LoginForm() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             {/* Email Field */}
             <motion.div variants={itemVariants} className="space-y-2">
-              <label htmlFor="email" className="block text-xs font-semibold text-gray-300 uppercase tracking-wider">
+              <label
+                htmlFor="email"
+                className="block text-xs font-semibold text-gray-300 uppercase tracking-wider"
+              >
                 Email
               </label>
               <div className="relative group">
@@ -190,7 +228,10 @@ export function LoginForm() {
             {/* Password Field */}
             <motion.div variants={itemVariants} className="space-y-2">
               <div className="flex items-center justify-between">
-                <label htmlFor="password" className="block text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                <label
+                  htmlFor="password"
+                  className="block text-xs font-semibold text-gray-300 uppercase tracking-wider"
+                >
                   Password
                 </label>
                 <Link
@@ -224,7 +265,7 @@ export function LoginForm() {
               )}
             </motion.div>
 
-            {/* Error Message */}
+            {/* Inline Error Message */}
             {error && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
