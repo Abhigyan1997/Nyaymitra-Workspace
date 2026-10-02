@@ -10,6 +10,7 @@ import {
     Users,
 } from "lucide-react";
 import { useParams } from "next/navigation";
+import { premiumToast } from "@/lib/premium-toast";
 
 const API_URL =
     "https://nyaymitra-backend-production.up.railway.app";
@@ -135,11 +136,17 @@ export default function InvitationPage() {
             } catch (err) {
                 console.error(err);
 
-                setError(
+                const message =
                     err instanceof Error
                         ? err.message
-                        : "Unable to load invitation."
-                );
+                        : "Unable to load invitation.";
+
+                setError(message);
+
+                // ===== ERROR TOAST =====
+                premiumToast.error('Invitation unavailable', {
+                    description: message,
+                });
             } finally {
                 setLoading(false);
             }
@@ -162,6 +169,12 @@ export default function InvitationPage() {
 
         if (!fullName.trim()) {
             setError("Please enter your full name.");
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning('Name required', {
+                description: 'Please enter your full name.',
+            });
+
             return;
         }
 
@@ -169,6 +182,12 @@ export default function InvitationPage() {
             setError(
                 "Password must contain at least 8 characters."
             );
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning('Password too short', {
+                description: 'Password must contain at least 8 characters.',
+            });
+
             return;
         }
 
@@ -176,6 +195,12 @@ export default function InvitationPage() {
             setError(
                 "Passwords do not match."
             );
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning("Passwords don't match", {
+                description: 'New password and confirmation do not match.',
+            });
+
             return;
         }
 
@@ -210,6 +235,12 @@ export default function InvitationPage() {
                     result.code ===
                     "ACCOUNT_EXISTS"
                 ) {
+                    // ===== INFO TOAST =====
+                    premiumToast.info('Account already exists', {
+                        description:
+                            'Log in with that account to accept the invitation.',
+                    });
+
                     throw new Error(
                         "An account already exists with this email. Please log in with that account and accept the invitation."
                     );
@@ -223,6 +254,14 @@ export default function InvitationPage() {
 
             setSuccess(
                 "Your account has been created and you have joined the workspace. Redirecting..."
+            );
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success(
+                `Welcome to ${invitation?.business?.companyName || 'NyayMitra'}`,
+                {
+                    description: 'Your account has been created.',
+                }
             );
 
             // ------------------------------------------
@@ -240,11 +279,24 @@ export default function InvitationPage() {
         } catch (err) {
             console.error(err);
 
-            setError(
+            const message =
                 err instanceof Error
                     ? err.message
-                    : "Registration failed."
-            );
+                    : "Registration failed.";
+
+            setError(message);
+
+            // ===== ERROR TOAST =====
+            // (skip if we already fired the info toast for ACCOUNT_EXISTS)
+            if (
+                !message
+                    .toLowerCase()
+                    .includes('already exists')
+            ) {
+                premiumToast.error('Registration failed', {
+                    description: message,
+                });
+            }
         } finally {
             setSubmitting(false);
         }
