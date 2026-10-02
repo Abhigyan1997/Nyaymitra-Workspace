@@ -23,6 +23,8 @@ import {
     X,
 } from "lucide-react";
 
+import { premiumToast } from "@/lib/premium-toast";
+
 
 const API_BASE = (
     process.env.NEXT_PUBLIC_API_URL ||
@@ -604,11 +606,17 @@ export default function AdminCompliancePage() {
                     err
                 );
 
-                setError(
+                const message =
                     err instanceof Error
                         ? err.message
-                        : "Failed to fetch compliance."
-                );
+                        : "Failed to fetch compliance.";
+
+                setError(message);
+
+                // ===== ERROR TOAST =====
+                premiumToast.error('Could not load compliance', {
+                    description: message,
+                });
             } finally {
                 setLoading(false);
             }
@@ -653,6 +661,16 @@ export default function AdminCompliancePage() {
                     "Compliance stats:",
                     err
                 );
+
+                const message =
+                    err instanceof Error
+                        ? err.message
+                        : "Failed to load statistics.";
+
+                // ===== ERROR TOAST =====
+                premiumToast.error('Could not load statistics', {
+                    description: message,
+                });
             } finally {
                 setStatsLoading(
                     false
@@ -708,6 +726,16 @@ export default function AdminCompliancePage() {
                     "Fetch lawyers:",
                     err
                 );
+
+                const message =
+                    err instanceof Error
+                        ? err.message
+                        : "Failed to load lawyers.";
+
+                // ===== ERROR TOAST =====
+                premiumToast.error('Could not load lawyers', {
+                    description: message,
+                });
             } finally {
                 setLawyersLoading(
                     false
@@ -743,6 +771,12 @@ export default function AdminCompliancePage() {
                 fetchStats(),
                 fetchLawyers(),
             ]);
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Refreshed', {
+                description: 'Latest compliance data loaded.',
+                duration: 2000,
+            });
         } finally {
             setRefreshing(
                 false
@@ -779,8 +813,18 @@ export default function AdminCompliancePage() {
                     result.data
                 );
             }
-        } catch {
-            // Keep list item as fallback
+        } catch (err) {
+            // Keep list item as fallback — but tell the user
+
+            const message =
+                err instanceof Error
+                    ? err.message
+                    : 'Failed to load details.'
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load details', {
+                description: message,
+            });
         } finally {
             setDetailLoading(
                 false
@@ -807,8 +851,18 @@ export default function AdminCompliancePage() {
                 setAssignError(
                     "Please select a lawyer."
                 );
+
+                // ===== WARNING TOAST =====
+                premiumToast.warning('Select a lawyer', {
+                    description: 'Choose a lawyer before assigning.',
+                });
+
                 return;
             }
+
+            const lawyerName =
+                lawyers.find((l) => l._id === selectedLawyer)?.fullName ||
+                'Lawyer';
 
             try {
                 setAssignLoading(
@@ -861,12 +915,23 @@ export default function AdminCompliancePage() {
                 }
 
                 await fetchStats();
+
+                // ===== SUCCESS TOAST =====
+                premiumToast.success('Lawyer assigned', {
+                    description: `${lawyerName} is now assigned to this compliance item.`,
+                });
             } catch (err) {
-                setAssignError(
+                const message =
                     err instanceof Error
                         ? err.message
                         : "Failed to assign lawyer."
-                );
+
+                setAssignError(message);
+
+                // ===== ERROR TOAST =====
+                premiumToast.error('Assignment failed', {
+                    description: message,
+                });
             } finally {
                 setAssignLoading(
                     false
@@ -937,12 +1002,23 @@ export default function AdminCompliancePage() {
                 }
 
                 await fetchStats();
+
+                // ===== SUCCESS TOAST =====
+                premiumToast.success('Status updated', {
+                    description: `Marked as ${formatStatus(status)}.`,
+                });
             } catch (err) {
-                setError(
+                const message =
                     err instanceof Error
                         ? err.message
                         : "Failed to update status."
-                );
+
+                setError(message);
+
+                // ===== ERROR TOAST =====
+                premiumToast.error('Status update failed', {
+                    description: message,
+                });
             } finally {
                 setStatusLoading(
                     null

@@ -33,6 +33,7 @@ import {
     Download,
     FileText,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 // ==================================================
 // API BASE
@@ -583,11 +584,17 @@ export default function AdminSupportPage() {
                 lawyerTickets: payload.lawyerTickets ?? 0,
             })
         } catch (err) {
-            setStatsError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to load support stats.'
-            )
+
+            setStatsError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load support stats', {
+                description: message,
+            })
         } finally {
             setStatsLoading(false)
         }
@@ -653,11 +660,24 @@ export default function AdminSupportPage() {
                 })
             } catch (err) {
                 if ((err as Error)?.name === 'AbortError') return
-                setListError(
+
+                const message =
                     err instanceof Error
                         ? err.message
                         : 'Failed to load support tickets.'
-                )
+
+                setListError(message)
+
+                // ===== ERROR TOAST (context-aware) =====
+                if (isRefresh) {
+                    premiumToast.error('Refresh failed', {
+                        description: message,
+                    })
+                } else {
+                    premiumToast.error('Could not load tickets', {
+                        description: message,
+                    })
+                }
             } finally {
                 setListLoading(false)
                 setListRefreshing(false)
@@ -723,12 +743,19 @@ export default function AdminSupportPage() {
             )
         } catch (err) {
             if ((err as Error)?.name === 'AbortError') return
-            setDetailError(
+
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to load ticket details.'
-            )
+
+            setDetailError(message)
             setTicket(null)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load ticket', {
+                description: message,
+            })
         } finally {
             setDetailLoading(false)
         }
@@ -761,12 +788,18 @@ export default function AdminSupportPage() {
                 : []
             setMessages(list)
         } catch (err) {
-            setMessagesError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to load messages.'
-            )
+
+            setMessagesError(message)
             setMessages([])
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load messages', {
+                description: message,
+            })
         } finally {
             setMessagesLoading(false)
         }
@@ -830,14 +863,25 @@ export default function AdminSupportPage() {
             if (!res.ok) throw new Error(await parseError(res))
             const json = await res.json().catch(() => ({}))
 
-            setReplyText('')
-            setComposerSuccess(
+            const successMsg =
                 json?.message ||
                 (replyMode === 'internal'
                     ? 'Internal note added.'
                     : 'Reply sent.')
-            )
+
+            setReplyText('')
+            setComposerSuccess(successMsg)
             window.setTimeout(() => setComposerSuccess(null), 3500)
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success(
+                replyMode === 'internal'
+                    ? 'Internal note added'
+                    : 'Reply sent',
+                {
+                    description: 'Ticket updated with your message.',
+                }
+            )
 
             // Refresh detail + messages + list
             await Promise.all([
@@ -847,9 +891,15 @@ export default function AdminSupportPage() {
                 fetchStats(),
             ])
         } catch (err) {
-            setComposerError(
+            const message =
                 err instanceof Error ? err.message : 'Failed to send.'
-            )
+
+            setComposerError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Send failed', {
+                description: message,
+            })
         } finally {
             setSending(false)
         }
@@ -896,12 +946,23 @@ export default function AdminSupportPage() {
                 fetchTickets(true),
                 fetchStats(),
             ])
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Status updated', {
+                description: `Ticket marked as ${humanStatus(status)}.`,
+            })
         } catch (err) {
-            setComposerError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to update status.'
-            )
+
+            setComposerError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Status update failed', {
+                description: message,
+            })
         } finally {
             setStatusUpdating(false)
         }
@@ -917,12 +978,23 @@ export default function AdminSupportPage() {
                 fetchDetail(selectedId!),
                 fetchTickets(true),
             ])
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Priority updated', {
+                description: `Ticket set to ${priority.charAt(0).toUpperCase() + priority.slice(1)} priority.`,
+            })
         } catch (err) {
-            setComposerError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to update priority.'
-            )
+
+            setComposerError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Priority update failed', {
+                description: message,
+            })
         } finally {
             setPriorityUpdating(false)
         }
@@ -937,12 +1009,28 @@ export default function AdminSupportPage() {
                 fetchDetail(selectedId!),
                 fetchTickets(true),
             ])
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success(
+                assignedTo ? 'Ticket assigned' : 'Ticket unassigned',
+                {
+                    description: assignedTo
+                        ? 'The assignee has been updated.'
+                        : 'The ticket is now unassigned.',
+                }
+            )
         } catch (err) {
-            setComposerError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to assign ticket.'
-            )
+
+            setComposerError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Assignment failed', {
+                description: message,
+            })
         } finally {
             setAssignUpdating(false)
         }
@@ -952,13 +1040,20 @@ export default function AdminSupportPage() {
     // REFRESH ALL
     // ==================================================
 
-    const refreshAll = () => {
-        fetchStats()
-        fetchTickets(true)
-        if (selectedId) {
-            fetchDetail(selectedId)
-            fetchMessages(selectedId)
-        }
+    const refreshAll = async () => {
+        await Promise.all([
+            fetchStats(),
+            fetchTickets(true),
+            ...(selectedId
+                ? [fetchDetail(selectedId), fetchMessages(selectedId)]
+                : []),
+        ])
+
+        // ===== SUCCESS TOAST =====
+        premiumToast.success('Refreshed', {
+            description: 'Latest support data loaded.',
+            duration: 2000,
+        })
     }
 
     // ==================================================

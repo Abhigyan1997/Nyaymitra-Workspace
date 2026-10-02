@@ -42,6 +42,7 @@ import {
     StatStrip,
     StatusBadge,
 } from '@/components/admin/AdminUI'
+import { premiumToast } from '@/lib/premium-toast'
 
 type StatusFilter = 'all' | 'active' | 'pending' | 'suspended' | 'inactive'
 
@@ -83,8 +84,10 @@ export default function AdminLawyersPage() {
 
     const loadLawyers = useCallback(
         async (opts?: { silent?: boolean }) => {
+            const isSilent = Boolean(opts?.silent)
+
             try {
-                if (opts?.silent) setRefreshing(true)
+                if (isSilent) setRefreshing(true)
                 else setLoading(true)
 
                 setError(null)
@@ -110,16 +113,37 @@ export default function AdminLawyersPage() {
                         )
                     )
                 )
+
+                // ===== SUCCESS TOAST (only on manual refresh) =====
+                if (isSilent) {
+                    premiumToast.success('Refreshed', {
+                        description: `Loaded ${raw.length} lawyer${raw.length === 1 ? '' : 's'}.`,
+                        duration: 2000,
+                    })
+                }
             } catch (err) {
                 if (err instanceof ApiError && err.status === 401) {
                     router.push('/signin')
                     return
                 }
-                setError(
+
+                const message =
                     err instanceof Error
                         ? err.message
                         : 'Failed to load lawyers.'
-                )
+
+                setError(message)
+
+                // ===== ERROR TOAST (context-aware) =====
+                if (isSilent) {
+                    premiumToast.error('Refresh failed', {
+                        description: message,
+                    })
+                } else {
+                    premiumToast.error('Could not load lawyers', {
+                        description: message,
+                    })
+                }
             } finally {
                 setLoading(false)
                 setRefreshing(false)
@@ -179,12 +203,28 @@ export default function AdminLawyersPage() {
     )
 
     const handleVerify = async (id: string) => {
+        const lawyerName =
+            lawyers.find((l) => l.id === id)?.fullName || 'Lawyer'
+
         try {
             setActionId(id)
             await adminApi.verifyLawyer(id)
             await loadLawyers({ silent: true })
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Lawyer verified', {
+                description: `${lawyerName} is now active on the platform.`,
+            })
         } catch (err) {
-            alert(err instanceof Error ? err.message : 'Action failed')
+            const message =
+                err instanceof Error ? err.message : 'Action failed'
+
+            alert(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Verification failed', {
+                description: message,
+            })
         } finally {
             setActionId(null)
             setMenuOpenId(null)
@@ -193,12 +233,29 @@ export default function AdminLawyersPage() {
 
     const handleSuspend = async (id: string) => {
         if (!confirm('Suspend this lawyer?')) return
+
+        const lawyerName =
+            lawyers.find((l) => l.id === id)?.fullName || 'Lawyer'
+
         try {
             setActionId(id)
             await adminApi.suspendLawyer(id)
             await loadLawyers({ silent: true })
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Lawyer suspended', {
+                description: `${lawyerName}'s access has been revoked.`,
+            })
         } catch (err) {
-            alert(err instanceof Error ? err.message : 'Action failed')
+            const message =
+                err instanceof Error ? err.message : 'Action failed'
+
+            alert(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Suspend failed', {
+                description: message,
+            })
         } finally {
             setActionId(null)
             setMenuOpenId(null)
@@ -206,12 +263,28 @@ export default function AdminLawyersPage() {
     }
 
     const handleActivate = async (id: string) => {
+        const lawyerName =
+            lawyers.find((l) => l.id === id)?.fullName || 'Lawyer'
+
         try {
             setActionId(id)
             await adminApi.activateLawyer(id)
             await loadLawyers({ silent: true })
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Lawyer activated', {
+                description: `${lawyerName} can now access the platform.`,
+            })
         } catch (err) {
-            alert(err instanceof Error ? err.message : 'Action failed')
+            const message =
+                err instanceof Error ? err.message : 'Action failed'
+
+            alert(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Activation failed', {
+                description: message,
+            })
         } finally {
             setActionId(null)
             setMenuOpenId(null)

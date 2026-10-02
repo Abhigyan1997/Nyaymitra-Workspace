@@ -32,6 +32,7 @@ import {
     UserRound,
     X,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 type PortalMode = 'admin' | 'lawyer'
 
@@ -600,12 +601,19 @@ export default function LegalRequestManagementPage({
                 })
             } catch (err) {
                 console.error('LOAD ERROR:', err)
-                setRequests([])
-                setError(
+
+                const message =
                     err instanceof Error
                         ? err.message
                         : 'Failed to load legal requests.'
-                )
+
+                setRequests([])
+                setError(message)
+
+                // ===== ERROR TOAST =====
+                premiumToast.error('Could not load requests', {
+                    description: message,
+                })
             } finally {
                 setLoading(false)
             }
@@ -655,11 +663,17 @@ export default function LegalRequestManagementPage({
 
                 await loadComments(requestId)
             } catch (err) {
-                setError(
+                const message =
                     err instanceof Error
                         ? err.message
                         : 'Failed to load request.'
-                )
+
+                setError(message)
+
+                // ===== ERROR TOAST =====
+                premiumToast.error('Could not load request', {
+                    description: message,
+                })
             } finally {
                 setDetailLoading(false)
             }
@@ -684,6 +698,16 @@ export default function LegalRequestManagementPage({
             setComments(data?.comments || data?.items || [])
         } catch (err) {
             console.error('Failed to load comments:', err)
+
+            const message =
+                err instanceof Error
+                    ? err.message
+                    : 'Failed to load comments.'
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load comments', {
+                description: message,
+            })
         }
     }
 
@@ -741,14 +765,20 @@ export default function LegalRequestManagementPage({
             setAssignTotal(total)
             setAssignHasMore(normalized.length < total)
         } catch (err) {
-            setProfessionalsError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to load professionals.'
-            )
+
+            setProfessionalsError(message)
             setProfessionals([])
             setAssignTotal(0)
             setAssignHasMore(false)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load professionals', {
+                description: message,
+            })
         } finally {
             setProfessionalsLoading(false)
         }
@@ -802,11 +832,17 @@ export default function LegalRequestManagementPage({
                 normalized.length >= ASSIGN_PAGE_SIZE
             )
         } catch (err) {
-            setProfessionalsError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to load more.'
-            )
+
+            setProfessionalsError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load more', {
+                description: message,
+            })
         } finally {
             setProfessionalsLoadingMore(false)
         }
@@ -838,6 +874,12 @@ export default function LegalRequestManagementPage({
         if (selectedRequest?._id) {
             await loadRequest(selectedRequest._id)
         }
+
+        // ===== SUCCESS TOAST =====
+        premiumToast.success('Refreshed', {
+            description: 'Latest request data loaded.',
+            duration: 2000,
+        })
     }
 
     // ----------------------------------------------------------------
@@ -856,6 +898,12 @@ export default function LegalRequestManagementPage({
             // Sanity: make sure we actually have a request ID
             if (!selectedRequest._id) {
                 setError('Missing request ID — cannot assign.')
+
+                // ===== WARNING TOAST =====
+                premiumToast.warning('Missing request ID', {
+                    description: 'Cannot assign without a request ID.',
+                })
+
                 return
             }
 
@@ -885,14 +933,25 @@ export default function LegalRequestManagementPage({
             )
             setAssignOpen(false)
 
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Assigned', {
+                description: `${professional.fullName} is now assigned to this request.`,
+            })
+
             await loadRequest(selectedRequest._id)
             await loadRequests(pagination.page)
         } catch (err) {
-            setError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to assign professional.'
-            )
+
+            setError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Assignment failed', {
+                description: message,
+            })
         } finally {
             setAssigningId(null)
         }
@@ -926,14 +985,25 @@ export default function LegalRequestManagementPage({
                 'Request status updated successfully.'
             )
 
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Status updated', {
+                description: `Request marked as ${formatStatus(status)}.`,
+            })
+
             await loadRequest(selectedRequest._id)
             await loadRequests(pagination.page)
         } catch (err) {
-            setError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to update status.'
-            )
+
+            setError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Status update failed', {
+                description: message,
+            })
         } finally {
             setUpdatingStatus(false)
         }
@@ -947,11 +1017,23 @@ export default function LegalRequestManagementPage({
 
         if (!editForm.title.trim()) {
             setError('Request title is required.')
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning('Title required', {
+                description: 'Request title cannot be empty.',
+            })
+
             return
         }
 
         if (!editForm.description.trim()) {
             setError('Request description is required.')
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning('Description required', {
+                description: 'Request description cannot be empty.',
+            })
+
             return
         }
 
@@ -995,14 +1077,25 @@ export default function LegalRequestManagementPage({
             )
             setEditMode(false)
 
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Request updated', {
+                description: 'Your changes have been saved.',
+            })
+
             await loadRequest(selectedRequest._id)
             await loadRequests(pagination.page)
         } catch (err) {
-            setError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to update request.'
-            )
+
+            setError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Save failed', {
+                description: message,
+            })
         } finally {
             setSaving(false)
         }
@@ -1039,14 +1132,27 @@ export default function LegalRequestManagementPage({
             setCommentText('')
             setSuccessMessage('Comment added successfully.')
 
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Comment added', {
+                description: isInternalComment
+                    ? 'Internal note added.'
+                    : 'Your comment has been posted.',
+            })
+
             await loadComments(selectedRequest._id)
             await loadRequest(selectedRequest._id)
         } catch (err) {
-            setError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to add comment.'
-            )
+
+            setError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Comment failed', {
+                description: message,
+            })
         } finally {
             setCommentLoading(false)
         }
@@ -1091,14 +1197,25 @@ export default function LegalRequestManagementPage({
                 'Attachment uploaded successfully.'
             )
 
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Attachment uploaded', {
+                description: selectedFile.name,
+            })
+
             await loadRequest(selectedRequest._id)
             await loadRequests(pagination.page)
         } catch (err) {
-            setError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to upload attachment.'
-            )
+
+            setError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Upload failed', {
+                description: message,
+            })
         } finally {
             setUploading(false)
         }

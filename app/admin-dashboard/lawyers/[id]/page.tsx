@@ -56,6 +56,7 @@ import {
     StatStrip,
     StatusBadge,
 } from '@/components/admin/AdminUI'
+import { premiumToast } from '@/lib/premium-toast'
 
 type Tab = 'overview' | 'work' | 'contracts' | 'compliance'
 
@@ -65,6 +66,12 @@ const TABS: { label: string; value: Tab }[] = [
     { label: 'Contracts', value: 'contracts' },
     { label: 'Compliance', value: 'compliance' },
 ]
+
+const TAB_LABELS: Record<'work' | 'contracts' | 'compliance', string> = {
+    work: 'work items',
+    contracts: 'contracts',
+    compliance: 'compliance items',
+}
 
 export default function AdminLawyerDetailPage() {
     const params = useParams<{ id: string }>()
@@ -107,8 +114,10 @@ export default function AdminLawyerDetailPage() {
                 return
             }
 
+            const isSilent = Boolean(opts?.silent)
+
             try {
-                if (opts?.silent) setRefreshing(true)
+                if (isSilent) setRefreshing(true)
                 else setLoading(true)
 
                 setError(null)
@@ -123,16 +132,37 @@ export default function AdminLawyerDetailPage() {
 
                 setRaw(lawyerRaw)
                 setLawyer(normalizeLawyer(lawyerRaw))
+
+                // ===== SUCCESS TOAST (only on manual refresh) =====
+                if (isSilent) {
+                    premiumToast.success('Refreshed', {
+                        description: 'Latest lawyer data loaded.',
+                        duration: 2000,
+                    })
+                }
             } catch (err) {
                 if (err instanceof ApiError && err.status === 401) {
                     router.push('/signin')
                     return
                 }
-                setError(
+
+                const message =
                     err instanceof Error
                         ? err.message
                         : 'Failed to load lawyer.'
-                )
+
+                setError(message)
+
+                // ===== ERROR TOAST (context-aware) =====
+                if (isSilent) {
+                    premiumToast.error('Refresh failed', {
+                        description: message,
+                    })
+                } else {
+                    premiumToast.error('Could not load lawyer', {
+                        description: message,
+                    })
+                }
             } finally {
                 setLoading(false)
                 setRefreshing(false)
@@ -199,6 +229,19 @@ export default function AdminLawyerDetailPage() {
             } catch (err) {
                 // Non-fatal — the tab will show the empty state.
                 console.warn(`[lawyer/${which}] fetch failed:`, err)
+
+                const message =
+                    err instanceof Error
+                        ? err.message
+                        : `Failed to load ${TAB_LABELS[which]}.`
+
+                // ===== ERROR TOAST =====
+                premiumToast.error(
+                    `Could not load ${TAB_LABELS[which]}`,
+                    {
+                        description: message,
+                    }
+                )
             } finally {
                 setTabLoading((prev) => ({ ...prev, [which]: false }))
             }
@@ -211,12 +254,27 @@ export default function AdminLawyerDetailPage() {
     // ==================================================
     const handleVerify = async () => {
         if (!id) return
+        const lawyerName = lawyer?.fullName || 'Lawyer'
+
         try {
             setActionId(id)
             await adminApi.verifyLawyer(id)
             await load({ silent: true })
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Lawyer verified', {
+                description: `${lawyerName} is now active.`,
+            })
         } catch (err) {
-            alert(err instanceof Error ? err.message : 'Action failed')
+            const message =
+                err instanceof Error ? err.message : 'Action failed'
+
+            alert(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Verification failed', {
+                description: message,
+            })
         } finally {
             setActionId(null)
         }
@@ -225,12 +283,28 @@ export default function AdminLawyerDetailPage() {
     const handleSuspend = async () => {
         if (!id) return
         if (!confirm('Suspend this lawyer?')) return
+
+        const lawyerName = lawyer?.fullName || 'Lawyer'
+
         try {
             setActionId(id)
             await adminApi.suspendLawyer(id)
             await load({ silent: true })
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Lawyer suspended', {
+                description: `${lawyerName}'s access has been revoked.`,
+            })
         } catch (err) {
-            alert(err instanceof Error ? err.message : 'Action failed')
+            const message =
+                err instanceof Error ? err.message : 'Action failed'
+
+            alert(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Suspend failed', {
+                description: message,
+            })
         } finally {
             setActionId(null)
         }
@@ -238,12 +312,27 @@ export default function AdminLawyerDetailPage() {
 
     const handleActivate = async () => {
         if (!id) return
+        const lawyerName = lawyer?.fullName || 'Lawyer'
+
         try {
             setActionId(id)
             await adminApi.activateLawyer(id)
             await load({ silent: true })
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Lawyer activated', {
+                description: `${lawyerName} can now access the platform.`,
+            })
         } catch (err) {
-            alert(err instanceof Error ? err.message : 'Action failed')
+            const message =
+                err instanceof Error ? err.message : 'Action failed'
+
+            alert(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Activation failed', {
+                description: message,
+            })
         } finally {
             setActionId(null)
         }

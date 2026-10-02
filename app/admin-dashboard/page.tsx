@@ -23,6 +23,7 @@ import {
     Users,
     Inbox,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 // ---------- API base ----------
 const API_BASE =
@@ -376,7 +377,19 @@ export default function AdminDashboardPage() {
                 err instanceof Error
                     ? err.message
                     : 'Something went wrong while fetching stats.'
+
             setError(message)
+
+            // ===== ERROR TOAST (context-aware) =====
+            if (isRefresh) {
+                premiumToast.error('Refresh failed', {
+                    description: message,
+                })
+            } else {
+                premiumToast.error('Could not load dashboard', {
+                    description: message,
+                })
+            }
         } finally {
             setLoading(false)
             setRefreshing(false)
@@ -387,7 +400,15 @@ export default function AdminDashboardPage() {
         fetchStats()
     }, [fetchStats])
 
-    const handleRefresh = () => fetchStats(true)
+    const handleRefresh = async () => {
+        await fetchStats(true)
+
+        // ===== SUCCESS TOAST =====
+        premiumToast.success('Refreshed', {
+            description: 'Latest admin stats loaded.',
+            duration: 2000,
+        })
+    }
 
     // ----- Derive stat cards -----
     const statCards: StatCard[] = useMemo(() => {

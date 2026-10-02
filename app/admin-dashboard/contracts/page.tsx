@@ -20,6 +20,7 @@ import {
     UserRoundCheck,
     X,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 const API_BASE = (
     process.env.NEXT_PUBLIC_API_URL ||
@@ -592,12 +593,19 @@ export default function AdminContractsPage() {
             )
         } catch (error) {
             console.error('Fetch contract requests:', error)
-            setError(
+
+            const message =
                 error instanceof Error
                     ? error.message
                     : 'Failed to fetch contract requests.'
-            )
+
+            setError(message)
             setRequests([])
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load requests', {
+                description: message,
+            })
         } finally {
             setLoading(false)
         }
@@ -653,6 +661,16 @@ export default function AdminContractsPage() {
             setLawyers(collected)
         } catch (error) {
             console.error('Fetch lawyers:', error)
+
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : 'Failed to fetch lawyers.'
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load lawyers', {
+                description: message,
+            })
         } finally {
             setLawyersLoading(false)
         }
@@ -670,6 +688,12 @@ export default function AdminContractsPage() {
         setRefreshing(true)
         try {
             await Promise.all([fetchRequests(), fetchLawyers()])
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Refreshed', {
+                description: 'Latest contract data loaded.',
+                duration: 2000,
+            })
         } finally {
             setRefreshing(false)
         }
@@ -690,12 +714,19 @@ export default function AdminContractsPage() {
             setDetails(result?.data || request)
         } catch (error) {
             console.error('Fetch contract details:', error)
-            setDetailsError(
+
+            const message =
                 error instanceof Error
                     ? error.message
                     : 'Failed to load contract details.'
-            )
+
+            setDetailsError(message)
             setDetails(request)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load details', {
+                description: message,
+            })
         } finally {
             setDetailsLoading(false)
         }
@@ -751,13 +782,25 @@ export default function AdminContractsPage() {
                     )
                 )
             }
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Status updated', {
+                description: `Contract marked as ${newStatus}.`,
+            })
         } catch (error) {
             console.error('Update contract status:', error)
-            setStatusError(
+
+            const message =
                 error instanceof Error
                     ? error.message
                     : 'Failed to update status.'
-            )
+
+            setStatusError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Status update failed', {
+                description: message,
+            })
         } finally {
             setStatusUpdating(false)
         }
@@ -791,8 +834,18 @@ export default function AdminContractsPage() {
         if (!selectedRequest) return
         if (!selectedLawyer) {
             setAssignError('Please select a lawyer.')
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning('Select a lawyer', {
+                description: 'Choose a lawyer before assigning.',
+            })
+
             return
         }
+
+        const lawyerName =
+            lawyers.find((l) => l._id === selectedLawyer)?.fullName ||
+            'Lawyer'
 
         try {
             setAssigning(true)
@@ -828,13 +881,25 @@ export default function AdminContractsPage() {
             }
 
             closeAssignModal()
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Lawyer assigned', {
+                description: `${lawyerName} is now assigned to this contract.`,
+            })
         } catch (error) {
             console.error('Assign lawyer:', error)
-            setAssignError(
+
+            const message =
                 error instanceof Error
                     ? error.message
                     : 'Failed to assign lawyer.'
-            )
+
+            setAssignError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Assignment failed', {
+                description: message,
+            })
         } finally {
             setAssigning(false)
         }
@@ -921,13 +986,27 @@ export default function AdminContractsPage() {
             }
 
             closeEditModal()
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Contract updated', {
+                description: editForm.title.trim()
+                    ? `Changes saved to "${editForm.title.trim()}".`
+                    : 'Your changes have been saved.',
+            })
         } catch (error) {
             console.error('Update contract:', error)
-            setEditError(
+
+            const message =
                 error instanceof Error
                     ? error.message
                     : 'Failed to update contract.'
-            )
+
+            setEditError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Save failed', {
+                description: message,
+            })
         } finally {
             setSaving(false)
         }
@@ -947,6 +1026,8 @@ export default function AdminContractsPage() {
 
     const confirmDelete = async () => {
         if (!deleteRequest) return
+
+        const deletedTitle = deleteRequest.title
 
         try {
             setDeleting(true)
@@ -971,13 +1052,25 @@ export default function AdminContractsPage() {
             }
 
             closeDeleteModal()
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Request deleted', {
+                description: deletedTitle,
+            })
         } catch (error) {
             console.error('Delete contract:', error)
-            setDeleteError(
+
+            const message =
                 error instanceof Error
                     ? error.message
                     : 'Failed to delete contract.'
-            )
+
+            setDeleteError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Delete failed', {
+                description: message,
+            })
         } finally {
             setDeleting(false)
         }

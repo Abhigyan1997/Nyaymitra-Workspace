@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import { Mail, ArrowLeft, Loader2, CheckCircle2 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -59,14 +60,23 @@ export function ForgotPasswordForm() {
       }
 
       setIsSubmitted(true)
+
+      // ===== SUCCESS TOAST =====
+      premiumToast.success('Reset link sent', {
+        description: `Check your inbox at ${data.email.trim().toLowerCase()}`,
+      })
     } catch (error) {
       console.error('Forgot password error:', error)
 
-      alert(
+      const message =
         error instanceof Error
           ? error.message
           : 'Unable to process password reset request'
-      )
+
+      // ===== ERROR TOAST (replaces the previous alert) =====
+      premiumToast.error('Request failed', {
+        description: message,
+      })
     } finally {
       setIsLoading(false)
     }

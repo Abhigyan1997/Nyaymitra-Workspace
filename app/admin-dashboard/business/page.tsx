@@ -34,6 +34,7 @@ import {
     FileText,
     ExternalLink,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 // ==================================================
 // API BASE
@@ -678,13 +679,34 @@ export default function AdminBusinessesPage() {
                     total: json?.pagination?.total ?? list.length,
                     pages: json?.pagination?.pages ?? 1,
                 })
+
+                // ===== SUCCESS TOAST (only on manual refresh) =====
+                if (isRefresh) {
+                    premiumToast.success('Refreshed', {
+                        description: `Loaded ${list.length} business${list.length === 1 ? '' : 'es'}.`,
+                        duration: 2000,
+                    })
+                }
             } catch (err) {
                 if ((err as Error)?.name === 'AbortError') return
-                setListError(
+
+                const message =
                     err instanceof Error
                         ? err.message
                         : 'Failed to load businesses.'
-                )
+
+                setListError(message)
+
+                // ===== ERROR TOAST (context-aware) =====
+                if (isRefresh) {
+                    premiumToast.error('Refresh failed', {
+                        description: message,
+                    })
+                } else {
+                    premiumToast.error('Could not load businesses', {
+                        description: message,
+                    })
+                }
             } finally {
                 setLoading(false)
                 setRefreshing(false)
@@ -754,11 +776,17 @@ export default function AdminBusinessesPage() {
 
             setDetail(payload)
         } catch (err) {
-            setDetailError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to load business details.'
-            )
+
+            setDetailError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load details', {
+                description: message,
+            })
         } finally {
             setDetailLoading(false)
         }
@@ -871,11 +899,17 @@ export default function AdminBusinessesPage() {
                     name: 'Assigned Lawyer',
                 })
             } catch (err) {
-                setAssignedLawyerError(
+                const message =
                     err instanceof Error
                         ? err.message
                         : 'Failed to load assigned lawyer.'
-                )
+
+                setAssignedLawyerError(message)
+
+                // ===== ERROR TOAST =====
+                premiumToast.error('Could not load assigned lawyer', {
+                    description: message,
+                })
             } finally {
                 setAssignedLawyerLoading(false)
             }
@@ -922,9 +956,15 @@ export default function AdminBusinessesPage() {
 
             setLawyers(rawList.map(mapLawyer))
         } catch (err) {
-            setLawyersError(
+            const message =
                 err instanceof Error ? err.message : 'Failed to load lawyers.'
-            )
+
+            setLawyersError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load lawyers', {
+                description: message,
+            })
         } finally {
             setLawyersLoading(false)
         }
@@ -1010,13 +1050,24 @@ export default function AdminBusinessesPage() {
                 await fetchDetails(detailId)
             }
 
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Lawyer assigned', {
+                description: `${lawyer.fullName} is now assigned to this business.`,
+            })
+
             window.setTimeout(() => setSuccessMessage(null), 4000)
         } catch (err) {
-            setAssignError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to assign lawyer.'
-            )
+
+            setAssignError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Assignment failed', {
+                description: message,
+            })
         } finally {
             setAssigning(false)
         }
@@ -1028,6 +1079,11 @@ export default function AdminBusinessesPage() {
             !window.confirm('Remove the assigned lawyer from this business?')
         )
             return
+
+        const removedName =
+            assignedLawyer?.fullName ||
+            assignedLawyer?.name ||
+            'Lawyer'
 
         setRemovingLawyer(true)
         setAssignedLawyerError(null)
@@ -1060,13 +1116,24 @@ export default function AdminBusinessesPage() {
                 await fetchDetails(detailId)
             }
 
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Lawyer removed', {
+                description: `${removedName} is no longer assigned.`,
+            })
+
             window.setTimeout(() => setSuccessMessage(null), 4000)
         } catch (err) {
-            setAssignedLawyerError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to remove lawyer.'
-            )
+
+            setAssignedLawyerError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Remove failed', {
+                description: message,
+            })
         } finally {
             setRemovingLawyer(false)
         }
@@ -1246,11 +1313,26 @@ export default function AdminBusinessesPage() {
                 fetchBusinesses(true),
             ])
 
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Business updated', {
+                description: form.companyName?.trim()
+                    ? `Changes saved to "${form.companyName.trim()}".`
+                    : 'Your changes have been saved.',
+            })
+
             window.setTimeout(() => setSuccessMessage(null), 4000)
         } catch (err) {
-            setSaveError(
-                err instanceof Error ? err.message : 'Failed to save changes.'
-            )
+            const message =
+                err instanceof Error
+                    ? err.message
+                    : 'Failed to save changes.'
+
+            setSaveError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Save failed', {
+                description: message,
+            })
         } finally {
             setSaving(false)
         }

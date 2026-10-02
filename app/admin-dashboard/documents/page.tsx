@@ -29,6 +29,7 @@ import {
     Eye,
     Ban,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 // ==================================================
 // API
@@ -712,7 +713,13 @@ export default function AdminDocumentsPage() {
                 err instanceof AdminApiError
                     ? err.message
                     : 'Unable to load document statistics.'
+
             setStatsError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load statistics', {
+                description: message,
+            })
         } finally {
             setStatsLoading(false)
         }
@@ -746,11 +753,24 @@ export default function AdminDocumentsPage() {
                 setPagination(res.pagination)
             } catch (err) {
                 if ((err as Error)?.name === 'AbortError') return
+
                 const message =
                     err instanceof AdminApiError
                         ? err.message
                         : 'Unable to load documents.'
+
                 setListError(message)
+
+                // ===== ERROR TOAST (context-aware) =====
+                if (isRefresh) {
+                    premiumToast.error('Refresh failed', {
+                        description: message,
+                    })
+                } else {
+                    premiumToast.error('Could not load documents', {
+                        description: message,
+                    })
+                }
             } finally {
                 setListLoading(false)
                 setListRefreshing(false)
@@ -786,11 +806,18 @@ export default function AdminDocumentsPage() {
             setDetail(data)
         } catch (err) {
             if ((err as Error)?.name === 'AbortError') return
+
             const message =
                 err instanceof AdminApiError
                     ? err.message
                     : 'Unable to load document metadata.'
+
             setDetailError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load metadata', {
+                description: message,
+            })
         } finally {
             setDetailLoading(false)
         }
@@ -811,10 +838,18 @@ export default function AdminDocumentsPage() {
     // REFRESH
     // ==================================================
 
-    const handleRefresh = () => {
-        loadStats()
-        loadDocuments(true)
-        if (openDocId) loadDetail(openDocId)
+    const handleRefresh = async () => {
+        await Promise.all([
+            loadStats(),
+            loadDocuments(true),
+            ...(openDocId ? [loadDetail(openDocId)] : []),
+        ])
+
+        // ===== SUCCESS TOAST =====
+        premiumToast.success('Refreshed', {
+            description: 'Latest document data loaded.',
+            duration: 2000,
+        })
     }
 
     // ==================================================

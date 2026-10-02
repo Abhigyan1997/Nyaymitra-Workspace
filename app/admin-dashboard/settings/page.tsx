@@ -29,6 +29,7 @@ import {
     updateAdminProfile,
     type AdminProfile,
 } from "@/lib/adminApi";
+import { premiumToast } from "@/lib/premium-toast";
 
 type SettingsSection =
     | "profile"
@@ -368,11 +369,17 @@ export default function AdminSettingsPage() {
                 error
             );
 
-            setProfileError(
+            const message =
                 error instanceof Error
                     ? error.message
-                    : "Unable to load admin profile."
-            );
+                    : "Unable to load admin profile.";
+
+            setProfileError(message);
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load profile', {
+                description: message,
+            });
         } finally {
             setLoading(false);
         }
@@ -440,15 +447,26 @@ export default function AdminSettingsPage() {
                 "Profile updated successfully."
             );
 
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Profile updated', {
+                description: 'Your administrator profile has been saved.',
+            });
+
             window.setTimeout(() => {
                 setProfileMessage("");
             }, 3000);
         } catch (error) {
-            setProfileError(
+            const message =
                 error instanceof Error
                     ? error.message
-                    : "Unable to update profile."
-            );
+                    : "Unable to update profile.";
+
+            setProfileError(message);
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Profile save failed', {
+                description: message,
+            });
         } finally {
             setSavingProfile(false);
         }
@@ -470,6 +488,12 @@ export default function AdminSettingsPage() {
             setPasswordMessage(
                 "Please fill in all password fields."
             );
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning('Missing fields', {
+                description: 'Please fill in all password fields.',
+            });
+
             return;
         }
 
@@ -477,6 +501,12 @@ export default function AdminSettingsPage() {
             setPasswordMessage(
                 "New password must contain at least 8 characters."
             );
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning('Password too short', {
+                description: 'New password must contain at least 8 characters.',
+            });
+
             return;
         }
 
@@ -484,6 +514,12 @@ export default function AdminSettingsPage() {
             setPasswordMessage(
                 "New password and confirmation do not match."
             );
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning("Passwords don't match", {
+                description: 'New password and confirmation do not match.',
+            });
+
             return;
         }
 
@@ -542,12 +578,23 @@ export default function AdminSettingsPage() {
                 result.message ||
                 "Password updated successfully."
             );
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Password updated', {
+                description: 'Your account password has been changed.',
+            });
         } catch (error) {
-            setPasswordMessage(
+            const message =
                 error instanceof Error
                     ? error.message
-                    : "Unable to change password."
-            );
+                    : "Unable to change password.";
+
+            setPasswordMessage(message);
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Password change failed', {
+                description: message,
+            });
         } finally {
             setPasswordLoading(false);
         }
@@ -559,6 +606,11 @@ export default function AdminSettingsPage() {
             "accessToken"
         );
         localStorage.removeItem("user");
+
+        // ===== SUCCESS TOAST =====
+        premiumToast.success('Signed out', {
+            description: 'You have been signed out of your account.',
+        });
 
         window.location.href =
             "/auth/login";

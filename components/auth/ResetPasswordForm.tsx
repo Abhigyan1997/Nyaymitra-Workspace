@@ -15,6 +15,7 @@ import {
     Eye,
     EyeOff,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 const resetPasswordSchema = z
     .object({
@@ -61,6 +62,12 @@ export default function ResetPasswordForm() {
     const onSubmit = async (data: ResetPasswordData) => {
         if (!token) {
             setErrorMessage('Invalid or missing password reset token.')
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning('Invalid reset link', {
+                description: 'This password reset link is invalid or missing a token.',
+            })
+
             return
         }
 
@@ -91,14 +98,25 @@ export default function ResetPasswordForm() {
             }
 
             setIsSuccess(true)
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Password reset', {
+                description: 'You can now sign in with your new password.',
+            })
         } catch (error) {
             console.error('Reset password error:', error)
 
-            setErrorMessage(
+            const message =
                 error instanceof Error
                     ? error.message
                     : 'Unable to reset your password'
-            )
+
+            setErrorMessage(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Reset failed', {
+                description: message,
+            })
         } finally {
             setIsLoading(false)
         }
