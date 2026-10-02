@@ -25,6 +25,7 @@ import {
     UserRound,
     X,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 const API_BASE =
     process.env.NEXT_PUBLIC_API_URL ||
@@ -683,6 +684,13 @@ export default function LawyerCompliancePage() {
                         : 'Failed to load compliance items'
 
                 setError(message)
+
+                // ===== ERROR TOAST =====
+                if (message !== 'NO_TOKEN') {
+                    premiumToast.error('Could not load compliance', {
+                        description: message,
+                    })
+                }
             } finally {
                 setLoading(false)
                 setRefreshing(false)
@@ -724,6 +732,7 @@ export default function LawyerCompliancePage() {
                         'Compliance detail error:',
                         err
                     )
+                    // Silent — non-blocking background refresh
                 } finally {
                     setDetailLoading(false)
                 }
@@ -761,6 +770,7 @@ export default function LawyerCompliancePage() {
                         'Compliance documents error:',
                         err
                     )
+                    // Silent — non-blocking
                 }
             },
             []
@@ -796,6 +806,7 @@ export default function LawyerCompliancePage() {
                         'Compliance activity error:',
                         err
                     )
+                    // Silent — non-blocking
                 }
             },
             []
@@ -958,6 +969,21 @@ export default function LawyerCompliancePage() {
                         selectedItem.id
                     ),
                 ])
+
+                // ===== SUCCESS TOAST =====
+                if (status === 'Completed') {
+                    premiumToast.success('Compliance completed', {
+                        description: selectedItem.name,
+                    })
+                } else if (status === 'In Progress') {
+                    premiumToast.info('Work started', {
+                        description: selectedItem.name,
+                    })
+                } else {
+                    premiumToast.success('Status updated', {
+                        description: `${selectedItem.name} → ${status}`,
+                    })
+                }
             } catch (err) {
                 const message =
                     err instanceof Error
@@ -965,6 +991,11 @@ export default function LawyerCompliancePage() {
                         : 'Failed to update compliance status'
 
                 setError(message)
+
+                // ===== ERROR TOAST =====
+                premiumToast.error('Status update failed', {
+                    description: message,
+                })
             } finally {
                 setChangingStatus(false)
             }
@@ -1012,6 +1043,16 @@ export default function LawyerCompliancePage() {
                         '_blank',
                         'noopener,noreferrer'
                     )
+
+                    // ===== SUCCESS TOAST =====
+                    premiumToast.success('Download started', {
+                        description: document.name,
+                    })
+                } else {
+                    // ===== WARNING TOAST =====
+                    premiumToast.warning('No download available', {
+                        description: `"${document.name}" has no download link.`,
+                    })
                 }
             } catch (err) {
                 const message =
@@ -1020,6 +1061,11 @@ export default function LawyerCompliancePage() {
                         : 'Failed to download document'
 
                 setError(message)
+
+                // ===== ERROR TOAST =====
+                premiumToast.error('Download failed', {
+                    description: message,
+                })
             } finally {
                 setDownloadingDocumentId(
                     ''
@@ -1111,6 +1157,12 @@ export default function LawyerCompliancePage() {
                             onClick={async () => {
                                 setRefreshing(true)
                                 await fetchCompliance()
+
+                                // ===== SUCCESS TOAST =====
+                                premiumToast.success('Refreshed', {
+                                    description: 'Latest compliance data loaded.',
+                                    duration: 2000,
+                                })
                             }}
                             className="flex items-center gap-2 self-start rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-xs text-zinc-400 hover:bg-white/[0.05] disabled:opacity-50 lg:self-auto"
                         >

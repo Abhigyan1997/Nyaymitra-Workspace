@@ -31,6 +31,7 @@ import {
     X,
     Loader2,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 /**
  * Lawyer Contracts
@@ -892,6 +893,11 @@ function ContractEditModal({
 
         if (!form.counterpartyName.trim()) {
             setError('Counterparty name is required.')
+
+            premiumToast.warning('Missing information', {
+                description: 'Counterparty name is required.',
+            })
+
             return
         }
 
@@ -970,13 +976,27 @@ function ContractEditModal({
                 mapContractDetail(updatedRaw || {}, contract)
             )
             onClose()
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Contract updated', {
+                description: form.title.trim()
+                    ? `Changes saved to "${form.title.trim()}".`
+                    : 'Your changes have been saved.',
+            })
         } catch (err) {
             console.error('Update contract error:', err)
-            setError(
+
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to update contract.'
-            )
+
+            setError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Update failed', {
+                description: message,
+            })
         } finally {
             setSaving(false)
         }
@@ -1403,6 +1423,13 @@ export default function LawyerContractPage() {
                     ? err.message
                     : 'Failed to load contracts'
             setError(message)
+
+            // ===== ERROR TOAST =====
+            if (message !== 'NO_TOKEN') {
+                premiumToast.error('Could not load contracts', {
+                    description: message,
+                })
+            }
         } finally {
             setLoading(false)
             setRefreshing(false)
@@ -1434,6 +1461,7 @@ export default function LawyerContractPage() {
                 })
             } catch (err) {
                 console.error('Contract detail error:', err)
+                // Silent — non-blocking background refresh
             } finally {
                 setDetailLoading(false)
             }
@@ -1465,6 +1493,7 @@ export default function LawyerContractPage() {
                 )
             } catch (err) {
                 console.error('Contract activity error:', err)
+                // Silent — non-blocking
             } finally {
                 setActivityLoading(false)
             }
@@ -1496,6 +1525,7 @@ export default function LawyerContractPage() {
                 )
             } catch (err) {
                 console.error('Contract comments error:', err)
+                // Silent — non-blocking
             } finally {
                 setCommentsLoading(false)
             }
@@ -1527,6 +1557,7 @@ export default function LawyerContractPage() {
                 )
             } catch (err) {
                 console.error('Contract documents error:', err)
+                // Silent — non-blocking
             } finally {
                 setDocumentsLoading(false)
             }
@@ -1646,12 +1677,22 @@ export default function LawyerContractPage() {
                 fetchContractComments(selectedContract.id),
                 fetchContractActivity(selectedContract.id),
             ])
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Comment posted', {
+                description: 'Your comment has been added to the thread.',
+            })
         } catch (err) {
             const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to add comment'
             setError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Comment failed', {
+                description: message,
+            })
         } finally {
             setSendingComment(false)
         }
@@ -1730,12 +1771,22 @@ export default function LawyerContractPage() {
                 fetchContractDocuments(contractId),
                 fetchContractActivity(contractId),
             ])
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Document uploaded', {
+                description: file.name,
+            })
         } catch (err) {
             const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to upload document'
             setError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Upload failed', {
+                description: message,
+            })
         } finally {
             setUploadingDocument(false)
         }
@@ -1756,6 +1807,12 @@ export default function LawyerContractPage() {
                     '_blank',
                     'noopener,noreferrer'
                 )
+
+                // ===== SUCCESS TOAST =====
+                premiumToast.success('Download started', {
+                    description: document.name,
+                })
+
                 return
             }
 
@@ -1776,19 +1833,30 @@ export default function LawyerContractPage() {
 
             if (url) {
                 window.open(url, '_blank', 'noopener,noreferrer')
+
+                // ===== SUCCESS TOAST =====
+                premiumToast.success('Download started', {
+                    description: document.name,
+                })
+
                 return
             }
 
-            console.warn(
-                'Download API returned no URL for document',
-                document.id
-            )
+            // ===== WARNING TOAST =====
+            premiumToast.warning('No download available', {
+                description: `"${document.name}" has no download link.`,
+            })
         } catch (err) {
             const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to download document'
             setError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Download failed', {
+                description: message,
+            })
         } finally {
             setDownloadingDocumentId('')
         }
@@ -1875,6 +1943,12 @@ export default function LawyerContractPage() {
                             onClick={async () => {
                                 setRefreshing(true)
                                 await fetchContracts()
+
+                                // ===== SUCCESS TOAST =====
+                                premiumToast.success('Refreshed', {
+                                    description: 'Latest contract data loaded.',
+                                    duration: 2000,
+                                })
                             }}
                             className="flex items-center gap-2 self-start rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-xs text-zinc-400 hover:bg-white/[0.05] disabled:opacity-50 lg:self-auto"
                         >

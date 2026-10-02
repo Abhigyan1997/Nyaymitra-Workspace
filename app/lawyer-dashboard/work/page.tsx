@@ -33,6 +33,7 @@ import {
     Users,
     X,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 // =========================================================
 // API CONFIGURATION
@@ -1338,6 +1339,17 @@ export default function LawyerMyWorkPage() {
 
                 setError(message)
 
+                // ===== ERROR TOAST =====
+                if (
+                    !message
+                        .toLowerCase()
+                        .includes('authentication')
+                ) {
+                    premiumToast.error('Could not load work', {
+                        description: message,
+                    })
+                }
+
                 if (
                     message
                         .toLowerCase()
@@ -1407,12 +1419,18 @@ export default function LawyerMyWorkPage() {
 
                     setActivities([])
 
-                    setActivityError(
+                    const message =
                         err instanceof
                             Error
                             ? err.message
                             : 'Failed to fetch activity.'
-                    )
+
+                    setActivityError(message)
+
+                    // ===== ERROR TOAST =====
+                    premiumToast.error('Could not load activity', {
+                        description: message,
+                    })
                 } finally {
                     setActivityLoading(
                         false
@@ -1451,11 +1469,18 @@ export default function LawyerMyWorkPage() {
                     err
                 )
                 setWorkClient(null)
-                setClientError(
+
+                const message =
                     err instanceof Error
                         ? err.message
                         : 'Failed to fetch client.'
-                )
+
+                setClientError(message)
+
+                // ===== ERROR TOAST =====
+                premiumToast.error('Could not load client', {
+                    description: message,
+                })
             } finally {
                 setClientLoading(false)
             }
@@ -1563,17 +1588,34 @@ export default function LawyerMyWorkPage() {
             await fetchWorkActivity(
                 selectedId
             )
+
+            // ===== SUCCESS TOAST =====
+            if (status === 'Completed') {
+                premiumToast.success('Work completed', {
+                    description: selectedItem?.title || 'Work item',
+                })
+            } else {
+                premiumToast.success('Status updated', {
+                    description: `Marked as ${status}.`,
+                })
+            }
         } catch (err) {
             console.error(
                 'Update lawyer work status error:',
                 err
             )
 
-            window.alert(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to update work status.'
-            )
+
+            window.alert(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Status update failed', {
+                description: message,
+            })
         } finally {
             setStatusUpdating(
                 false
@@ -1773,6 +1815,12 @@ export default function LawyerMyWorkPage() {
                         nextId
                     )
                 }
+
+                // ===== SUCCESS TOAST =====
+                premiumToast.success('Refreshed', {
+                    description: 'Latest work data loaded.',
+                    duration: 2000,
+                })
             } finally {
                 setRefreshing(
                     false
@@ -3020,11 +3068,31 @@ function DocumentsPanel({
                 }
 
                 await fetchDocuments()
+
+                // ===== SUCCESS TOAST =====
+                premiumToast.success(
+                    list.length === 1
+                        ? 'Document uploaded'
+                        : `${list.length} documents uploaded`,
+                    {
+                        description:
+                            list.length === 1
+                                ? list[0].name
+                                : 'All files were added successfully.',
+                    }
+                )
             } catch (err) {
                 console.error('Upload document error:', err)
-                setError(
+
+                const message =
                     err instanceof Error ? err.message : 'Upload failed.'
-                )
+
+                setError(message)
+
+                // ===== ERROR TOAST =====
+                premiumToast.error('Upload failed', {
+                    description: message,
+                })
             } finally {
                 setUploading(false)
                 setUploadProgress(0)
@@ -3052,6 +3120,9 @@ function DocumentsPanel({
         if (!window.confirm('Delete this document?')) return
         if (!requestId) return
 
+        const doc = documents.find((d) => d.id === docId)
+        const docName = doc?.name || 'Document'
+
         try {
             setDeletingId(docId)
             await apiRequest(
@@ -3059,11 +3130,23 @@ function DocumentsPanel({
                 { method: 'DELETE' }
             )
             setDocuments((curr) => curr.filter((d) => d.id !== docId))
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Document deleted', {
+                description: docName,
+            })
         } catch (err) {
             console.error('Delete document error:', err)
-            window.alert(
+
+            const message =
                 err instanceof Error ? err.message : 'Failed to delete document.'
-            )
+
+            window.alert(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Delete failed', {
+                description: message,
+            })
         } finally {
             setDeletingId(null)
         }
@@ -3344,11 +3427,23 @@ function CommentsPanel({
             requestAnimationFrame(() => {
                 bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
             })
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Comment posted', {
+                description: 'Your message has been added to the thread.',
+            })
         } catch (err) {
             console.error('Post comment error:', err)
-            setError(
+
+            const message =
                 err instanceof Error ? err.message : 'Failed to post comment.'
-            )
+
+            setError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Comment failed', {
+                description: message,
+            })
         } finally {
             setPosting(false)
         }

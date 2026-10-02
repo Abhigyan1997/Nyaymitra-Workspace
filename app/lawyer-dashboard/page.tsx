@@ -18,6 +18,7 @@ import {
     Users,
     Building2,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 const API_BASE =
     process.env.NEXT_PUBLIC_API_URL ||
@@ -508,6 +509,11 @@ export default function LawyerDashboardPage() {
                 setError('NO_TOKEN')
             } else {
                 setError(message)
+
+                // ===== ERROR TOAST =====
+                premiumToast.error('Could not load dashboard', {
+                    description: message,
+                })
             }
         } finally {
             setLoading(false)
@@ -646,6 +652,12 @@ export default function LawyerDashboardPage() {
                             onClick={async () => {
                                 setRefreshing(true)
                                 await fetchDashboard()
+
+                                // ===== SUCCESS TOAST =====
+                                premiumToast.success('Refreshed', {
+                                    description: 'Latest dashboard data loaded.',
+                                    duration: 2000,
+                                })
                             }}
                             disabled={refreshing}
                             className="rounded-lg border border-white/10 bg-white/[0.04] p-2 transition hover:bg-white/[0.08] disabled:opacity-50"

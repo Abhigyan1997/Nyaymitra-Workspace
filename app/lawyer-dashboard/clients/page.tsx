@@ -25,6 +25,7 @@ import {
     Loader2,
     RefreshCw,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 interface Client {
     id: string
@@ -601,7 +602,7 @@ export default function LawyerClientPage() {
     const [error, setError] = useState('')
     const [detailsError, setDetailsError] = useState('')
 
-    const loadClients = async () => {
+    const loadClients = async (options?: { silent?: boolean }) => {
         try {
             setLoading(true)
             setError('')
@@ -633,14 +634,28 @@ export default function LawyerClientPage() {
                     ? current
                     : normalizedClients[0]?.id || ''
             )
+
+            // ===== SUCCESS TOAST (only on manual refresh) =====
+            if (options?.silent) {
+                premiumToast.success('Clients refreshed', {
+                    description: `${normalizedClients.length} client${normalizedClients.length === 1 ? '' : 's'} loaded.`,
+                    duration: 2000,
+                })
+            }
         } catch (err) {
-            setError(
+            const message =
                 err instanceof Error
                     ? err.message
                     : 'Failed to load clients'
-            )
+
+            setError(message)
             setClients([])
             setSelectedClientId('')
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load clients', {
+                description: message,
+            })
         } finally {
             setLoading(false)
         }
@@ -725,11 +740,17 @@ export default function LawyerClientPage() {
                 )
             } catch (err) {
                 if (!cancelled) {
-                    setDetailsError(
+                    const message =
                         err instanceof Error
                             ? err.message
                             : 'Failed to load client details'
-                    )
+
+                    setDetailsError(message)
+
+                    // ===== ERROR TOAST =====
+                    premiumToast.error('Could not load client details', {
+                        description: message,
+                    })
                 }
             } finally {
                 if (!cancelled) setDetailsLoading(false)
@@ -886,7 +907,9 @@ export default function LawyerClientPage() {
 
                                     <button
                                         type="button"
-                                        onClick={() => void loadClients()}
+                                        onClick={() =>
+                                            void loadClients({ silent: true })
+                                        }
                                         disabled={loading}
                                         aria-label="Refresh clients"
                                         className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.025] text-zinc-500 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"

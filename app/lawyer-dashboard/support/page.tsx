@@ -20,6 +20,7 @@ import {
     X,
     type LucideIcon,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 type TicketStatus =
     | 'Open'
@@ -462,7 +463,7 @@ export default function LawyerSupportPage() {
     const [priority, setPriority] =
         useState('medium')
 
-    const loadTickets = async () => {
+    const loadTickets = async (options?: { silent?: boolean }) => {
         try {
             setLoading(true)
             setError('')
@@ -490,12 +491,27 @@ export default function LawyerSupportPage() {
 
                 return normalizedTickets[0]?.id || ''
             })
+
+            // ===== SUCCESS TOAST (only on manual refresh) =====
+            if (options?.silent) {
+                premiumToast.success('Refreshed', {
+                    description: `Loaded ${normalizedTickets.length} support request${normalizedTickets.length === 1 ? '' : 's'}.`,
+                    duration: 2000,
+                })
+            }
         } catch (err: any) {
             console.error('Support tickets load error:', err)
-            setError(
+
+            const message =
                 err?.message ||
                 'Failed to load support requests.'
-            )
+
+            setError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load tickets', {
+                description: message,
+            })
         } finally {
             setLoading(false)
         }
@@ -536,10 +552,16 @@ export default function LawyerSupportPage() {
                 err
             )
 
-            setActionError(
+            const message =
                 err?.message ||
                 'Failed to load ticket details.'
-            )
+
+            setActionError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load ticket', {
+                description: message,
+            })
         } finally {
             setDetailLoading(false)
         }
@@ -615,6 +637,12 @@ export default function LawyerSupportPage() {
     const handleCreateTicket = async () => {
         if (!subject.trim()) {
             setActionError('Subject is required.')
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning('Subject required', {
+                description: 'Give your support request a short subject.',
+            })
+
             return
         }
 
@@ -622,6 +650,12 @@ export default function LawyerSupportPage() {
             setActionError(
                 'Please describe the issue.'
             )
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning('Description required', {
+                description: 'Please describe the issue you are facing.',
+            })
+
             return
         }
 
@@ -662,16 +696,27 @@ export default function LawyerSupportPage() {
                 setMobileDetailOpen(true)
                 await loadTicketDetails(createdId)
             }
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Support request created', {
+                description: `"${subject.trim()}" is now with our support team.`,
+            })
         } catch (err: any) {
             console.error(
                 'Create support ticket error:',
                 err
             )
 
-            setActionError(
+            const message =
                 err?.message ||
                 'Failed to create support request.'
-            )
+
+            setActionError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Request failed', {
+                description: message,
+            })
         } finally {
             setSubmittingTicket(false)
         }
@@ -700,16 +745,27 @@ export default function LawyerSupportPage() {
             await loadTicketDetails(
                 selectedTicketId
             )
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Reply sent', {
+                description: 'Your message has been added to the thread.',
+            })
         } catch (err: any) {
             console.error(
                 'Support reply error:',
                 err
             )
 
-            setActionError(
+            const message =
                 err?.message ||
                 'Failed to send reply.'
-            )
+
+            setActionError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Reply failed', {
+                description: message,
+            })
         } finally {
             setReplyLoading(false)
         }
@@ -738,16 +794,27 @@ export default function LawyerSupportPage() {
             await loadTicketDetails(
                 selectedTicketId
             )
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Status updated', {
+                description: `Ticket marked as ${status}.`,
+            })
         } catch (err: any) {
             console.error(
                 'Support status update error:',
                 err
             )
 
-            setActionError(
+            const message =
                 err?.message ||
                 'Failed to update ticket status.'
-            )
+
+            setActionError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Status update failed', {
+                description: message,
+            })
         } finally {
             setStatusLoading(false)
         }
@@ -808,7 +875,7 @@ export default function LawyerSupportPage() {
                         </div>
 
                         <button
-                            onClick={loadTickets}
+                            onClick={() => loadTickets({ silent: true })}
                             className="rounded-lg border border-red-500/20 px-3 py-1.5 text-[10px] text-red-300 hover:bg-red-500/10"
                         >
                             Retry
@@ -878,7 +945,7 @@ export default function LawyerSupportPage() {
                                 </div>
 
                                 <button
-                                    onClick={loadTickets}
+                                    onClick={() => loadTickets({ silent: true })}
                                     disabled={loading}
                                     className="rounded-lg border border-white/[0.06] px-2.5 py-1.5 text-[10px] text-zinc-500 hover:text-white disabled:opacity-50"
                                 >

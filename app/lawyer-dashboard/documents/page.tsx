@@ -34,6 +34,7 @@ import {
     UserRound,
     X,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 const API_BASE =
     process.env.NEXT_PUBLIC_API_URL ||
@@ -736,6 +737,13 @@ export default function LawyerDocumentsPage() {
                         : 'Failed to load documents'
 
                 setError(message)
+
+                // ===== ERROR TOAST =====
+                if (message !== 'NO_TOKEN') {
+                    premiumToast.error('Could not load documents', {
+                        description: message,
+                    })
+                }
             } finally {
                 setLoading(false)
                 setRefreshing(false)
@@ -790,6 +798,7 @@ export default function LawyerDocumentsPage() {
                         'Document detail error:',
                         err
                     )
+                    // Silent — non-blocking background refresh
                 } finally {
                     setDetailLoading(false)
                 }
@@ -828,6 +837,7 @@ export default function LawyerDocumentsPage() {
                         'Document activity error:',
                         err
                     )
+                    // Silent — non-blocking
                 }
             },
             []
@@ -961,6 +971,9 @@ export default function LawyerDocumentsPage() {
         ) => {
             if (!documentId) return
 
+            const doc = documents.find((d) => d.id === documentId)
+            const docName = doc?.name || 'Document'
+
             try {
                 setDownloadingDocumentId(
                     documentId
@@ -983,6 +996,11 @@ export default function LawyerDocumentsPage() {
                     result?.signedUrl
 
                 if (!url) {
+                    // ===== WARNING TOAST =====
+                    premiumToast.warning('No download available', {
+                        description: `"${docName}" has no download link.`,
+                    })
+
                     throw new Error(
                         'Download URL was not returned by the server'
                     )
@@ -993,6 +1011,14 @@ export default function LawyerDocumentsPage() {
                     '_blank',
                     'noopener,noreferrer'
                 )
+
+                // ===== SUCCESS TOAST =====
+                premiumToast.success(
+                    preview ? 'Preview opened' : 'Download started',
+                    {
+                        description: docName,
+                    }
+                )
             } catch (err) {
                 const message =
                     err instanceof Error
@@ -1000,6 +1026,11 @@ export default function LawyerDocumentsPage() {
                         : 'Failed to download document'
 
                 setError(message)
+
+                // ===== ERROR TOAST =====
+                premiumToast.error('Download failed', {
+                    description: message,
+                })
             } finally {
                 setDownloadingDocumentId(
                     ''
@@ -1075,6 +1106,11 @@ export default function LawyerDocumentsPage() {
             await fetchDocumentActivity(
                 selectedDocument.id
             )
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Document reviewed', {
+                description: selectedDocument.name,
+            })
         } catch (err) {
             const message =
                 err instanceof Error
@@ -1082,6 +1118,11 @@ export default function LawyerDocumentsPage() {
                     : 'Failed to mark document reviewed'
 
             setError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Review failed', {
+                description: message,
+            })
         } finally {
             setActionLoading(false)
         }
@@ -1142,6 +1183,11 @@ export default function LawyerDocumentsPage() {
             await fetchDocumentActivity(
                 selectedDocument.id
             )
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Document shared', {
+                description: `${selectedDocument.name} is now visible to the client.`,
+            })
         } catch (err) {
             const message =
                 err instanceof Error
@@ -1149,6 +1195,11 @@ export default function LawyerDocumentsPage() {
                     : 'Failed to share document'
 
             setError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Share failed', {
+                description: message,
+            })
         } finally {
             setActionLoading(false)
         }
@@ -1260,6 +1311,12 @@ export default function LawyerDocumentsPage() {
                                     true
                                 )
                                 await fetchDocuments()
+
+                                // ===== SUCCESS TOAST =====
+                                premiumToast.success('Refreshed', {
+                                    description: 'Latest document data loaded.',
+                                    duration: 2000,
+                                })
                             }}
                             disabled={
                                 loading ||

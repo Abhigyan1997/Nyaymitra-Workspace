@@ -28,6 +28,7 @@ import {
     Shield,
     Users,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 // =========================================================
 // API
@@ -35,7 +36,7 @@ import {
 
 const API_BASE =
     process.env.NEXT_PUBLIC_API_URL ||
-    'http://localhost:5000/api/v1'
+    'https://nyaymitra-backend-production.up.railway.app/api/v1'
 
 function getToken() {
     if (typeof window === 'undefined') return null
@@ -514,11 +515,17 @@ export default function LawyerClientDetailPage() {
                         clientRes.value
                     setClient(normalizeClient(raw))
                 } else {
-                    setError(
+                    const message =
                         clientRes.reason instanceof Error
                             ? clientRes.reason.message
                             : 'Failed to load client.'
-                    )
+
+                    setError(message)
+
+                    // ===== ERROR TOAST (client fetch only) =====
+                    premiumToast.error('Could not load client', {
+                        description: message,
+                    })
                 }
 
                 if (contractsRes.status === 'fulfilled') {
@@ -553,11 +560,12 @@ export default function LawyerClientDetailPage() {
                     )
                 }
             } catch (err) {
-                setError(
+                const message =
                     err instanceof Error
                         ? err.message
                         : 'Failed to load client.'
-                )
+
+                setError(message)
             } finally {
                 if (showLoader) setLoading(false)
                 setRefreshing(false)
@@ -573,6 +581,12 @@ export default function LawyerClientDetailPage() {
     const refresh = async () => {
         setRefreshing(true)
         await fetchAll(false)
+
+        // ===== SUCCESS TOAST =====
+        premiumToast.success('Refreshed', {
+            description: 'Latest client data loaded.',
+            duration: 2000,
+        })
     }
 
     const counts = useMemo(
@@ -827,8 +841,8 @@ export default function LawyerClientDetailPage() {
                             >
                                 <RefreshCw
                                     className={`h-4 w-4 ${refreshing
-                                            ? 'animate-spin'
-                                            : ''
+                                        ? 'animate-spin'
+                                        : ''
                                         }`}
                                 />
                             </button>

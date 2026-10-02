@@ -31,6 +31,7 @@ import {
     Loader2,
     Upload,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 type SettingsSection =
     | 'profile'
@@ -599,9 +600,14 @@ export default function LawyerSettingsPage() {
                 error
             )
 
-            setProfileError(
-                formatError(error)
-            )
+            const message = formatError(error)
+
+            setProfileError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Could not load profile', {
+                description: message,
+            })
 
             // Fallback to local user object
             try {
@@ -801,6 +807,11 @@ export default function LawyerSettingsPage() {
                 'Profile updated successfully.'
             )
 
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Profile updated', {
+                description: 'Your professional profile has been saved.',
+            })
+
             window.setTimeout(() => {
                 setProfileMessage('')
             }, 3000)
@@ -810,9 +821,14 @@ export default function LawyerSettingsPage() {
                 error
             )
 
-            setProfileError(
-                formatError(error)
-            )
+            const message = formatError(error)
+
+            setProfileError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Profile save failed', {
+                description: message,
+            })
         } finally {
             setSavingProfile(false)
         }
@@ -838,6 +854,12 @@ export default function LawyerSettingsPage() {
             setProfileError(
                 'Please select a valid image file.'
             )
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning('Invalid image', {
+                description: 'Please select a valid image file.',
+            })
+
             return
         }
 
@@ -845,6 +867,12 @@ export default function LawyerSettingsPage() {
             setProfileError(
                 'Profile picture must be smaller than 5MB.'
             )
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning('Image too large', {
+                description: 'Profile picture must be smaller than 5 MB.',
+            })
+
             return
         }
 
@@ -926,6 +954,11 @@ export default function LawyerSettingsPage() {
                 'Profile picture updated successfully.'
             )
 
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Profile picture updated', {
+                description: 'Your new photo is now visible.',
+            })
+
             window.setTimeout(() => {
                 setProfileMessage('')
             }, 3000)
@@ -937,9 +970,14 @@ export default function LawyerSettingsPage() {
 
             setPhotoPreview('')
 
-            setProfileError(
-                formatError(error)
-            )
+            const message = formatError(error)
+
+            setProfileError(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Upload failed', {
+                description: message,
+            })
         } finally {
             setUploadingPhoto(false)
 
@@ -973,6 +1011,11 @@ export default function LawyerSettingsPage() {
             'Payment details saved locally.'
         )
 
+        // ===== SUCCESS TOAST =====
+        premiumToast.success('Payment details saved', {
+            description: 'Your payout information has been updated.',
+        })
+
         window.setTimeout(
             () => setProfileMessage(''),
             3000
@@ -994,6 +1037,12 @@ export default function LawyerSettingsPage() {
             setPasswordMessage(
                 'Please fill in all password fields.'
             )
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning('Missing fields', {
+                description: 'Please fill in all password fields.',
+            })
+
             return
         }
 
@@ -1001,6 +1050,12 @@ export default function LawyerSettingsPage() {
             setPasswordMessage(
                 'New password must contain at least 8 characters.'
             )
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning('Password too short', {
+                description: 'New password must contain at least 8 characters.',
+            })
+
             return
         }
 
@@ -1011,6 +1066,12 @@ export default function LawyerSettingsPage() {
             setPasswordMessage(
                 'New password and confirmation do not match.'
             )
+
+            // ===== WARNING TOAST =====
+            premiumToast.warning("Passwords don't match", {
+                description: 'New password and confirmation do not match.',
+            })
+
             return
         }
 
@@ -1037,15 +1098,25 @@ export default function LawyerSettingsPage() {
                 response?.message ||
                 'Password updated successfully.'
             )
+
+            // ===== SUCCESS TOAST =====
+            premiumToast.success('Password updated', {
+                description: 'Your account password has been changed.',
+            })
         } catch (error) {
             console.error(
                 'Change password error:',
                 error
             )
 
-            setPasswordMessage(
-                formatError(error)
-            )
+            const message = formatError(error)
+
+            setPasswordMessage(message)
+
+            // ===== ERROR TOAST =====
+            premiumToast.error('Password change failed', {
+                description: message,
+            })
         } finally {
             setPasswordLoading(false)
         }
@@ -1058,6 +1129,11 @@ export default function LawyerSettingsPage() {
     const handleSignOut = () => {
         localStorage.removeItem('token')
         localStorage.removeItem('user')
+
+        // ===== SUCCESS TOAST =====
+        premiumToast.success('Signed out', {
+            description: 'You have been signed out of your account.',
+        })
 
         window.location.href =
             '/auth/login'
