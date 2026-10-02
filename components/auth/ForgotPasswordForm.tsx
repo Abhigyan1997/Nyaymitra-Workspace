@@ -14,10 +14,16 @@ const forgotPasswordSchema = z.object({
 
 type ForgotPasswordData = z.infer<typeof forgotPasswordSchema>
 
+const API_BASE = (
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://localhost:5000/api/v1'
+).replace(/\/$/, '')
+
 export function ForgotPasswordForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [email, setEmail] = useState('')
+
   const {
     register,
     handleSubmit,
@@ -29,13 +35,38 @@ export function ForgotPasswordForm() {
   const onSubmit = async (data: ForgotPasswordData) => {
     setIsLoading(true)
     setEmail(data.email)
-    
+
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      const response = await fetch(
+        `${API_BASE}/auth/forgot-workspace-password`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: data.email.trim().toLowerCase(),
+          }),
+        }
+      )
+
+      const result = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(
+          result?.message || 'Unable to process password reset request'
+        )
+      }
+
       setIsSubmitted(true)
-    } catch (err) {
-      console.error('Error:', err)
+    } catch (error) {
+      console.error('Forgot password error:', error)
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Unable to process password reset request'
+      )
     } finally {
       setIsLoading(false)
     }
@@ -63,16 +94,26 @@ export function ForgotPasswordForm() {
                 className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors mb-6 w-fit"
               >
                 <ArrowLeft className="w-4 h-4" />
-                <span className="text-sm font-medium">Back to Login</span>
+                <span className="text-sm font-medium">
+                  Back to Login
+                </span>
               </Link>
-              <h1 className="text-2xl font-bold text-foreground mb-2">Reset Password</h1>
+
+              <h1 className="text-2xl font-bold text-foreground mb-2">
+                Reset Password
+              </h1>
+
               <p className="text-muted-foreground text-sm">
-                Enter your email address and we&apos;ll send you a link to reset your password.
+                Enter your email address and we&apos;ll send you a link
+                to reset your password.
               </p>
             </motion.div>
 
             {/* Form */}
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            <form
+              onSubmit={handleSubmit(onSubmit)}
+              className="space-y-5"
+            >
               {/* Email Field */}
               <motion.div
                 initial={{ opacity: 0 }}
@@ -80,11 +121,16 @@ export function ForgotPasswordForm() {
                 transition={{ delay: 0.15 }}
                 className="relative"
               >
-                <label htmlFor="email" className="block text-sm font-medium text-foreground mb-2">
+                <label
+                  htmlFor="email"
+                  className="block text-sm font-medium text-foreground mb-2"
+                >
                   Email Address
                 </label>
+
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+
                   <input
                     id="email"
                     {...register('email')}
@@ -93,8 +139,11 @@ export function ForgotPasswordForm() {
                     className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-colors"
                   />
                 </div>
+
                 {errors.email && (
-                  <p className="mt-1.5 text-xs text-destructive">{errors.email.message}</p>
+                  <p className="mt-1.5 text-xs text-destructive">
+                    {errors.email.message}
+                  </p>
                 )}
               </motion.div>
 
@@ -131,15 +180,24 @@ export function ForgotPasswordForm() {
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                transition={{ delay: 0.1, type: 'spring' }}
+                transition={{
+                  delay: 0.1,
+                  type: 'spring',
+                }}
                 className="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-4"
               >
                 <CheckCircle2 className="w-8 h-8 text-accent" />
               </motion.div>
 
-              <h2 className="text-2xl font-bold text-foreground mb-2">Check Your Email</h2>
+              <h2 className="text-2xl font-bold text-foreground mb-2">
+                Check Your Email
+              </h2>
+
               <p className="text-muted-foreground mb-6">
-                We&apos;ve sent a password reset link to <span className="font-semibold text-foreground">{email}</span>
+                We&apos;ve sent a password reset link to{' '}
+                <span className="font-semibold text-foreground">
+                  {email}
+                </span>
               </p>
 
               <div className="space-y-3">
@@ -147,7 +205,9 @@ export function ForgotPasswordForm() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   className="w-full bg-primary text-primary-foreground font-semibold py-2.5 rounded-lg hover:bg-primary/90 transition-all duration-200"
-                  onClick={() => window.location.href = '/'}
+                  onClick={() => {
+                    window.location.href = '/'
+                  }}
                 >
                   Back to Login
                 </motion.button>
