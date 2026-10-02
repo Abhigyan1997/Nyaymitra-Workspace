@@ -22,6 +22,7 @@ import {
   Users,
   XCircle,
 } from 'lucide-react'
+import { premiumToast } from '@/lib/premium-toast'
 
 /* =========================================================
    CONFIG
@@ -1730,11 +1731,24 @@ export default function DashboardPage() {
         setDashboard(normalizeDashboard(result.data))
       } catch (err) {
         console.error('Dashboard fetch error:', err)
-        setError(
+
+        const message =
           err instanceof Error
             ? err.message
             : 'Something went wrong while loading the dashboard.'
-        )
+
+        setError(message)
+
+        // ===== ERROR TOAST (skip when a manual refresh, handled below) =====
+        if (!showRefresh) {
+          premiumToast.error('Could not load dashboard', {
+            description: message,
+          })
+        } else {
+          premiumToast.error('Refresh failed', {
+            description: message,
+          })
+        }
       } finally {
         setIsLoading(false)
         setIsRefreshing(false)
@@ -1831,7 +1845,15 @@ export default function DashboardPage() {
 
             <div className="flex items-center gap-2">
               <button
-                onClick={() => fetchDashboard(true)}
+                onClick={async () => {
+                  await fetchDashboard(true)
+
+                  // ===== SUCCESS TOAST =====
+                  premiumToast.success('Refreshed', {
+                    description: 'Latest dashboard data loaded.',
+                    duration: 2000,
+                  })
+                }}
                 disabled={isRefreshing}
                 className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.025] text-xs text-slate-400 hover:text-white hover:bg-white/[0.05] transition disabled:opacity-50"
               >
