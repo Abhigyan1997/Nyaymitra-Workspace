@@ -1773,7 +1773,8 @@ export default function DocumentsPage() {
           'radial-gradient(ellipse 70% 35% at 50% 0%, rgba(250,204,21,0.08), transparent 70%)',
       }}
     >
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10">
+      {/* ===== FULL WIDTH — removed max-w-3xl, kept only edge padding ===== */}
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-10">
         {/* Hidden file input */}
         <input
           ref={fileInputRef}
@@ -1985,7 +1986,8 @@ export default function DocumentsPage() {
             <>
               {/* Folder grid */}
               <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-[#17181a] to-[#0d0d0e] p-3 sm:p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_30px_60px_-30px_rgba(0,0,0,0.9)]">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+                {/* ===== Widened: up to 5 columns on XL screens ===== */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
                   {folders.map((folder) => {
                     const docs = docsIn(folder.id)
 
