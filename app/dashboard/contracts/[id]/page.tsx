@@ -352,6 +352,22 @@ function buildEditForm(contract: Contract): EditFormState {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Locked statuses (edit disabled)                                            */
+/* -------------------------------------------------------------------------- */
+
+const LOCKED_STATUSES: ContractStatus[] = [
+    "Executed",
+    "Terminated",
+    "Expired",
+    "Active",
+    "Archived",
+]
+
+function isContractLocked(contract: Contract): boolean {
+    return LOCKED_STATUSES.includes(contract.status)
+}
+
+/* -------------------------------------------------------------------------- */
 /* Final document download (R2)                                               */
 /* -------------------------------------------------------------------------- */
 
@@ -1379,6 +1395,8 @@ export default function ContractDetailPage({
     /* Contract page                                                           */
     /* ---------------------------------------------------------------------- */
 
+    const locked = isContractLocked(contract)
+
     return (
         <main className="contracts-theme min-h-screen bg-black text-zinc-100">
             <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 lg:px-8">
@@ -1440,14 +1458,16 @@ export default function ContractDetailPage({
                         </div>
 
                         <div className="flex items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setEditOpen(true)}
-                                className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 px-3 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
-                            >
-                                <Pencil className="size-4" />
-                                Edit
-                            </button>
+                            {!locked && (
+                                <button
+                                    type="button"
+                                    onClick={() => setEditOpen(true)}
+                                    className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 px-3 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
+                                >
+                                    <Pencil className="size-4" />
+                                    Edit
+                                </button>
+                            )}
 
                             <FinalDocumentButton
                                 contractId={contract._id}
@@ -1575,7 +1595,7 @@ export default function ContractDetailPage({
             </div>
 
             {/* Inline edit modal */}
-            {editOpen && (
+            {editOpen && !locked && (
                 <ContractEditModal
                     contract={contract}
                     onClose={() => setEditOpen(false)}
