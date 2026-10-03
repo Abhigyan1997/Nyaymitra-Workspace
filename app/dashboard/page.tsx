@@ -685,9 +685,9 @@ const StatCard = ({
     <motion.button
       whileHover={{ y: -2 }}
       onClick={onClick}
-      className="text-left w-full"
+      className="text-left w-full h-full"
     >
-      <Card className="p-4 sm:p-5 h-full hover:border-white/[0.13] hover:bg-white/[0.04] transition-all">
+      <Card className="p-4 sm:p-5 h-full hover:border-white/[0.13] hover:bg-white/[0.04] transition-all flex flex-col">
         <div className="flex items-start justify-between gap-3">
           <div
             className={`w-9 h-9 rounded-xl border flex items-center justify-center ${accentMap[accent]}`}
@@ -856,14 +856,14 @@ const LegalHealthCard = ({
           : 'At risk'
 
   return (
-    <Card className="p-5 sm:p-6 h-full">
+    <Card className="p-5 sm:p-6 h-full flex flex-col">
       <SectionHeader
         eyebrow="Risk overview"
         title="Legal health"
         description="Current legal operations posture"
       />
 
-      <div className="flex items-center gap-6 mb-7">
+      <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 sm:gap-6 mb-6">
         <div className="relative w-28 h-28 flex-shrink-0">
           <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
             <circle
@@ -904,7 +904,7 @@ const LegalHealthCard = ({
           </div>
         </div>
 
-        <div>
+        <div className="text-center sm:text-left flex-1">
           <p className="text-sm font-semibold text-white">{scoreLabel}</p>
           <p className="text-xs text-slate-500 mt-1 leading-5">
             Based on contracts, compliance and documentation.
@@ -919,7 +919,7 @@ const LegalHealthCard = ({
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-4 flex-1">
         <HealthBar label="Contracts" value={safe.contracts} />
         <HealthBar label="Compliance" value={safe.compliance} />
         <HealthBar label="Documentation" value={safe.documentation} />
@@ -993,7 +993,7 @@ const LegalRequestsCard = ({
   }
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden flex flex-col h-full">
       <div className="p-5 sm:p-6">
         <SectionHeader
           eyebrow="Requests"
@@ -1030,7 +1030,7 @@ const LegalRequestsCard = ({
           }
         />
       ) : (
-        <div className="border-t border-white/[0.06] divide-y divide-white/[0.05]">
+        <div className="border-t border-white/[0.06] divide-y divide-white/[0.05] flex-1">
           {safe.items.slice(0, 5).map((item) => (
             <div
               key={item.id}
@@ -1087,7 +1087,7 @@ const ContractRequestsCard = ({
   }
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden flex flex-col h-full">
       <div className="p-5 sm:p-6">
         <SectionHeader
           eyebrow="Contract intake"
@@ -1126,7 +1126,7 @@ const ContractRequestsCard = ({
           }
         />
       ) : (
-        <div className="border-t border-white/[0.06] divide-y divide-white/[0.05]">
+        <div className="border-t border-white/[0.06] divide-y divide-white/[0.05] flex-1">
           {safe.items.slice(0, 5).map((item) => (
             <div
               key={item.id}
@@ -1186,7 +1186,7 @@ const ContractsCard = ({
   }
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden flex flex-col h-full">
       <div className="p-5 sm:p-6">
         <SectionHeader
           eyebrow="Contract lifecycle"
@@ -1222,7 +1222,7 @@ const ContractsCard = ({
           description="Your contract workspace is currently clear."
         />
       ) : (
-        <div className="border-t border-white/[0.06] divide-y divide-white/[0.05]">
+        <div className="border-t border-white/[0.06] divide-y divide-white/[0.05] flex-1">
           {safe.items.slice(0, 5).map((contract) => (
             <div
               key={contract.id}
@@ -1278,7 +1278,7 @@ const ComplianceCard = ({
   }
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden flex flex-col h-full">
       <div className="p-5 sm:p-6">
         <SectionHeader
           eyebrow="Compliance"
@@ -1309,7 +1309,7 @@ const ComplianceCard = ({
           description="There are no compliance obligations to display."
         />
       ) : (
-        <div className="border-t border-white/[0.06] divide-y divide-white/[0.05]">
+        <div className="border-t border-white/[0.06] divide-y divide-white/[0.05] flex-1">
           {safe.items.slice(0, 5).map((item) => (
             <div
               key={item.id}
@@ -1369,7 +1369,7 @@ const DocumentsCard = ({
   const safe = data ?? { total: 0, recent: [], expiring: [] }
 
   return (
-    <Card className="p-5 sm:p-6">
+    <Card className="p-5 sm:p-6 flex flex-col h-full">
       <SectionHeader
         eyebrow="Secure vault"
         title="Recent documents"
@@ -1385,7 +1385,7 @@ const DocumentsCard = ({
         }
       />
 
-      <div className="space-y-2">
+      <div className="space-y-2 flex-1">
         {safe.recent.length === 0 ? (
           <EmptyState
             icon={FolderLock}
@@ -1450,7 +1450,7 @@ const TeamCard = ({
   }
 
   return (
-    <Card className="p-5 sm:p-6">
+    <Card className="p-5 sm:p-6 flex flex-col h-full">
       <SectionHeader
         eyebrow="Workspace"
         title="Legal team"
@@ -1492,12 +1492,12 @@ const TeamCard = ({
       </div>
 
       {safe.professionals.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-white/[0.08] p-5 text-center">
+        <div className="rounded-xl border border-dashed border-white/[0.08] p-5 text-center flex-1 flex flex-col justify-center">
           <Users className="w-5 h-5 mx-auto text-slate-600 mb-2" />
           <p className="text-xs text-slate-500">No professionals added yet.</p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 flex-1">
           {safe.professionals.slice(0, 3).map((member) => (
             <div
               key={member.id}
@@ -1559,14 +1559,14 @@ const OperationsCard = ({
       : 0
 
   return (
-    <Card className="p-5 sm:p-6">
+    <Card className="p-5 sm:p-6 flex flex-col h-full">
       <SectionHeader
         eyebrow="Operations"
         title="Monthly legal operations"
         description="Current month activity"
       />
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <OperationMetric label="Requests" value={safe.requestsReceived} />
         <OperationMetric
           label="Completed"
@@ -1739,7 +1739,6 @@ export default function DashboardPage() {
 
         setError(message)
 
-        // ===== ERROR TOAST (skip when a manual refresh, handled below) =====
         if (!showRefresh) {
           premiumToast.error('Could not load dashboard', {
             description: message,
@@ -1848,7 +1847,6 @@ export default function DashboardPage() {
                 onClick={async () => {
                   await fetchDashboard(true)
 
-                  // ===== SUCCESS TOAST =====
                   premiumToast.success('Refreshed', {
                     description: 'Latest dashboard data loaded.',
                     duration: 2000,
@@ -1915,11 +1913,25 @@ export default function DashboardPage() {
           </Card>
         </motion.section>
 
+        {/* ===== LEGAL HEALTH — NOW ON TOP (RESPONSIVE + SPACE-FILLING) ===== */}
+        {/* LEGAL HEALTH — moved to top, full width */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.13 }}
+          className="mb-6"
+        >
+          <LegalHealthCard
+            data={legalHealth}
+            businessScore={business.legalHealthScore}
+          />
+        </motion.section>
+
         {/* OVERVIEW METRICS */}
         <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+          transition={{ delay: 0.15 }}
           className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6"
         >
           <StatCard
@@ -1969,7 +1981,7 @@ export default function DashboardPage() {
           id="attention"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
+          transition={{ delay: 0.2 }}
           className="mb-6"
         >
           <AttentionPanel
@@ -1982,7 +1994,7 @@ export default function DashboardPage() {
         <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
+          transition={{ delay: 0.25 }}
           className="grid lg:grid-cols-2 gap-5 mb-6"
         >
           <LegalRequestsCard
@@ -1995,22 +2007,16 @@ export default function DashboardPage() {
           />
         </motion.section>
 
-        {/* CONTRACTS + LEGAL HEALTH */}
+        {/* CONTRACTS (full width now that health moved up) */}
         <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-          className="grid lg:grid-cols-3 gap-5 mb-6"
+          transition={{ delay: 0.3 }}
+          className="mb-6"
         >
-          <div className="lg:col-span-2">
-            <ContractsCard
-              data={contracts}
-              onViewAll={() => navigateTo('/dashboard/contracts')}
-            />
-          </div>
-          <LegalHealthCard
-            data={legalHealth}
-            businessScore={business.legalHealthScore}
+          <ContractsCard
+            data={contracts}
+            onViewAll={() => navigateTo('/dashboard/contracts')}
           />
         </motion.section>
 
@@ -2018,7 +2024,7 @@ export default function DashboardPage() {
         <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
+          transition={{ delay: 0.35 }}
           className="grid lg:grid-cols-2 gap-5 mb-6"
         >
           <ComplianceCard
@@ -2035,7 +2041,7 @@ export default function DashboardPage() {
         <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.35 }}
+          transition={{ delay: 0.4 }}
           className="grid lg:grid-cols-3 gap-5 mb-6"
         >
           <TeamCard data={team} onViewAll={() => navigateTo('/dashboard/team')} />
