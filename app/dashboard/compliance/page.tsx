@@ -744,8 +744,8 @@ export default function CompliancePage() {
               whileTap={{ scale: 0.97 }}
               onClick={() => handleStatusChange(status)}
               className={`px-3 sm:px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-all text-sm min-h-[40px] ${filterStatus === status
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-card border border-border text-foreground hover:border-primary/50'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-card border border-border text-foreground hover:border-primary/50'
                 }`}
             >
               {formatStatus(status)}
