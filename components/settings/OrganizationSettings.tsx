@@ -418,11 +418,11 @@ export function OrganizationSettings() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center">
+      <div className="flex min-h-[400px] items-center justify-center bg-black">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-amber-400" />
 
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-zinc-400">
             Loading organization information...
           </p>
         </div>
@@ -435,7 +435,7 @@ export function OrganizationSettings() {
   // ============================================================
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 bg-black">
 
       {/* ================================================== */}
       {/* HEADER */}
@@ -444,14 +444,14 @@ export function OrganizationSettings() {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5"
+        className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5"
       >
 
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
 
           <div className="flex items-center gap-4">
 
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-slate-700 bg-slate-800">
+            <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900">
               <Building2 className="h-7 w-7 text-amber-400" />
             </div>
 
@@ -470,7 +470,7 @@ export function OrganizationSettings() {
 
               </div>
 
-              <p className="mt-1 text-sm text-slate-400">
+              <p className="mt-1 text-sm text-zinc-400">
                 {profile.legalName ||
                   'Organization information'}
               </p>
@@ -483,7 +483,7 @@ export function OrganizationSettings() {
             <button
               type="button"
               onClick={handleEdit}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-amber-400"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-amber-400"
             >
               <Pencil className="h-4 w-4" />
               Edit Organization
@@ -495,7 +495,7 @@ export function OrganizationSettings() {
                 type="button"
                 onClick={handleCancel}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-5 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-700 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-5 py-2.5 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800 disabled:opacity-50"
               >
                 <RotateCcw className="h-4 w-4" />
                 Cancel
@@ -505,7 +505,7 @@ export function OrganizationSettings() {
                 type="button"
                 onClick={handleSave}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-amber-400 disabled:opacity-50"
               >
 
                 {saving ? (
@@ -859,7 +859,7 @@ export function OrganizationSettings() {
       {/* ================================================== */}
 
       {isEditing && (
-        <div className="sticky bottom-4 z-20 rounded-xl border border-slate-700 bg-slate-900/95 p-4 shadow-2xl backdrop-blur">
+        <div className="sticky bottom-4 z-20 rounded-xl border border-zinc-700 bg-zinc-950/95 p-4 shadow-2xl backdrop-blur">
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
@@ -868,7 +868,7 @@ export function OrganizationSettings() {
                 Editing organization details
               </p>
 
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-zinc-500">
                 Save your changes when you're finished.
               </p>
             </div>
@@ -879,7 +879,7 @@ export function OrganizationSettings() {
                 type="button"
                 onClick={handleCancel}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
               >
                 <RotateCcw className="h-4 w-4" />
                 Cancel
@@ -889,7 +889,7 @@ export function OrganizationSettings() {
                 type="button"
                 onClick={handleSave}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-black hover:bg-amber-400 disabled:opacity-50"
               >
 
                 {saving ? (
@@ -932,7 +932,7 @@ function Section({
     <motion.section
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg md:p-6"
+      className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-lg md:p-6"
     >
 
       <div className="mb-6 flex items-center gap-3">
@@ -977,14 +977,14 @@ function Input({
   return (
     <div>
 
-      <label className="mb-2 block text-sm font-medium text-slate-300">
+      <label className="mb-2 block text-sm font-medium text-zinc-300">
         {label}
       </label>
 
       <div className="relative">
 
         {icon && (
-          <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+          <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">
             {icon}
           </div>
         )}
@@ -994,7 +994,7 @@ function Input({
           value={value}
           onChange={onChange}
           disabled={disabled}
-          className={`w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 disabled:cursor-not-allowed disabled:bg-slate-900 disabled:text-slate-400 disabled:opacity-80 ${icon ? 'pl-10' : ''
+          className={`w-full rounded-lg border border-zinc-800 bg-black px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 disabled:cursor-not-allowed disabled:bg-zinc-900 disabled:text-zinc-400 disabled:opacity-80 ${icon ? 'pl-10' : ''
             }`}
         />
 
@@ -1026,7 +1026,7 @@ function Select({
   return (
     <div>
 
-      <label className="mb-2 block text-sm font-medium text-slate-300">
+      <label className="mb-2 block text-sm font-medium text-zinc-300">
         {label}
       </label>
 
@@ -1034,7 +1034,7 @@ function Select({
         value={value}
         onChange={onChange}
         disabled={disabled}
-        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none transition focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 disabled:cursor-not-allowed disabled:bg-slate-900 disabled:text-slate-400 disabled:opacity-80"
+        className="w-full rounded-lg border border-zinc-800 bg-black px-4 py-3 text-sm text-white outline-none transition focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 disabled:cursor-not-allowed disabled:bg-zinc-900 disabled:text-zinc-400 disabled:opacity-80"
       >
 
         <option value="">

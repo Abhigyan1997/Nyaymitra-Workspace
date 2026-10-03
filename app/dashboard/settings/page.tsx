@@ -54,17 +54,17 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row h-full min-h-screen">
+    <div className="flex flex-col lg:flex-row h-full min-h-screen bg-black">
       {/* Mobile Header with Dropdown */}
-      <div className="lg:hidden sticky top-0 z-30 bg-slate-950 border-b border-white/10 px-4 py-3">
+      <div className="lg:hidden sticky top-0 z-30 bg-black border-b border-zinc-800 px-4 py-3">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold text-white">Settings</h1>
-            <p className="text-xs text-gray-400">Manage your preferences</p>
+            <p className="text-xs text-zinc-400">Manage your preferences</p>
           </div>
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-2 rounded-lg bg-slate-900 border border-white/10 text-white hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-white hover:bg-zinc-800 transition-colors"
           >
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -78,7 +78,7 @@ export default function SettingsPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
-              className="absolute top-full left-0 right-0 mt-1 bg-slate-950 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-40"
+              className="absolute top-full left-0 right-0 mt-1 bg-black border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-40"
             >
               <div className="p-2 max-h-[70vh] overflow-y-auto">
                 {settingsTabs.map((tab) => (
@@ -87,7 +87,7 @@ export default function SettingsPage() {
                     onClick={() => handleTabSelect(tab.id as SettingsTab)}
                     className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all ${activeTab === tab.id
                       ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                      : 'text-gray-300 hover:bg-slate-900/50'
+                      : 'text-zinc-300 hover:bg-zinc-900/50'
                       }`}
                   >
                     <div className="flex items-center gap-3">
@@ -112,7 +112,7 @@ export default function SettingsPage() {
         <div className="flex items-center gap-2 mt-2 px-1">
           <span className="text-2xl">{getCurrentTabIcon()}</span>
           <span className="text-sm font-medium text-white">{getCurrentTabLabel()}</span>
-          <span className="text-xs text-gray-500 ml-auto">
+          <span className="text-xs text-zinc-500 ml-auto">
             {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
           </span>
         </div>
@@ -123,13 +123,13 @@ export default function SettingsPage() {
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.3 }}
-        className="hidden lg:block w-64 bg-slate-900/50 border-r border-white/10 p-6 sticky top-0 h-screen overflow-y-auto flex-shrink-0"
+        className="hidden lg:block w-64 bg-black border-r border-zinc-800 p-6 sticky top-0 h-screen overflow-y-auto flex-shrink-0"
       >
         <div className="mb-8">
           <h2 className="text-xl font-bold text-white" style={{ fontFamily: 'Cormorant Garamond' }}>
             Settings
           </h2>
-          <p className="text-xs text-gray-400 mt-1">Manage your preferences</p>
+          <p className="text-xs text-zinc-400 mt-1">Manage your preferences</p>
         </div>
         <nav className="space-y-1">
           {settingsTabs.map((tab) => (
@@ -140,7 +140,7 @@ export default function SettingsPage() {
               onClick={() => setActiveTab(tab.id as SettingsTab)}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all ${activeTab === tab.id
                 ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                : 'text-gray-400 hover:text-white hover:bg-slate-800/50'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/50'
                 }`}
             >
               <div className="flex items-center gap-3">
@@ -166,14 +166,14 @@ export default function SettingsPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="flex-1 p-4 sm:p-6 overflow-y-auto max-w-4xl mx-auto w-full"
+        className="flex-1 p-4 sm:p-6 overflow-y-auto max-w-4xl mx-auto w-full bg-black"
       >
         {/* Desktop Header */}
         <div className="hidden lg:block mb-8">
           <h1 className="text-3xl font-light tracking-tight text-white" style={{ fontFamily: 'Cormorant Garamond' }}>
             Settings
           </h1>
-          <p className="text-sm text-gray-400 mt-1">Manage your account and application preferences</p>
+          <p className="text-sm text-zinc-400 mt-1">Manage your account and application preferences</p>
         </div>
 
         {/* Tab Content */}

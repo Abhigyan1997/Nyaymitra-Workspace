@@ -47,14 +47,14 @@ const PasswordInput = memo(({
 }) => {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-400 mb-2">{label}</label>
+      <label className="block text-sm font-medium text-zinc-400 mb-2">{label}</label>
       <div className="relative">
         <input
           type={showPassword ? 'text' : 'password'}
           name={name}
           value={value}
           onChange={onChange}
-          className="w-full px-4 py-2 pr-12 bg-slate-900 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all placeholder-gray-500"
+          className="w-full px-4 py-2 pr-12 bg-black border border-zinc-800 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all placeholder-zinc-600"
           placeholder={placeholder}
           required={required}
           minLength={minLength}
@@ -63,7 +63,7 @@ const PasswordInput = memo(({
         <button
           type="button"
           onClick={onToggleVisibility}
-          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-zinc-400 hover:text-white transition-colors"
           tabIndex={-1}
         >
           {showPassword ? (
@@ -421,10 +421,10 @@ export function SecuritySettings() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex items-center justify-center min-h-[400px] bg-black">
         <div className="text-center">
           <Loader className="w-12 h-12 animate-spin text-amber-500 mx-auto mb-4" />
-          <p className="text-gray-400">Loading security settings...</p>
+          <p className="text-zinc-400">Loading security settings...</p>
         </div>
       </div>
     )
@@ -435,7 +435,7 @@ export function SecuritySettings() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
-      className="space-y-6"
+      className="space-y-6 bg-black"
     >
       {error && (
         <motion.div
@@ -453,7 +453,7 @@ export function SecuritySettings() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="bg-slate-900/50 border border-white/10 rounded-xl p-6"
+        className="bg-zinc-950 border border-zinc-800 rounded-xl p-6"
       >
         <div className="flex items-center gap-3 mb-6">
           <Lock className="w-5 h-5 text-amber-500" />
@@ -528,7 +528,7 @@ export function SecuritySettings() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="bg-slate-900/50 border border-white/10 rounded-xl p-6"
+        className="bg-zinc-950 border border-zinc-800 rounded-xl p-6"
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-3">
@@ -555,7 +555,7 @@ export function SecuritySettings() {
             )}
           </button>
         </div>
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-zinc-400">
           {twoFactorEnabled
             ? 'Two-factor authentication is enabled. Your account is more secure.'
             : 'Secure your account with two-factor authentication.'}
@@ -572,7 +572,7 @@ export function SecuritySettings() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="bg-slate-900/50 border border-white/10 rounded-xl p-6"
+        className="bg-zinc-950 border border-zinc-800 rounded-xl p-6"
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
           <h3 className="font-semibold text-white flex items-center gap-2">
@@ -592,14 +592,14 @@ export function SecuritySettings() {
 
         <div className="space-y-3">
           {sessions.length === 0 ? (
-            <p className="text-sm text-gray-400">No active sessions found.</p>
+            <p className="text-sm text-zinc-400">No active sessions found.</p>
           ) : (
             sessions.map((session) => (
               <div
                 key={session._id}
                 className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border ${session.isCurrent
                   ? 'bg-amber-500/5 border-amber-500/20'
-                  : 'bg-slate-900/50 border-white/5'
+                  : 'bg-zinc-900/50 border-zinc-800'
                   }`}
               >
                 <div>
@@ -609,10 +609,10 @@ export function SecuritySettings() {
                       <span className="text-xs px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded-full">Current</span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-zinc-500">
                     {session.userAgent || 'Unknown Browser'}
                   </p>
-                  <div className="flex flex-wrap gap-2 text-xs text-gray-500 mt-1">
+                  <div className="flex flex-wrap gap-2 text-xs text-zinc-500 mt-1">
                     <span>IP: {session.ip}</span>
                     <span>•</span>
                     <span>Last active: {formatDate(session.lastActive)}</span>

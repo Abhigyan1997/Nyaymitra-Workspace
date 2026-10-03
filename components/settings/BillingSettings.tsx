@@ -1,4 +1,3 @@
-
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -162,28 +161,28 @@ export function BillingSettings() {
         return {
           icon: CheckCircle2,
           className:
-            'text-green-600 bg-green-500/10 border-green-500/20',
+            'text-green-400 bg-green-500/10 border-green-500/20',
         }
 
       case 'trial':
         return {
           icon: Clock3,
           className:
-            'text-amber-600 bg-amber-500/10 border-amber-500/20',
+            'text-amber-400 bg-amber-500/10 border-amber-500/20',
         }
 
       case 'expired':
         return {
           icon: AlertCircle,
           className:
-            'text-red-600 bg-red-500/10 border-red-500/20',
+            'text-red-400 bg-red-500/10 border-red-500/20',
         }
 
       default:
         return {
           icon: AlertCircle,
           className:
-            'text-muted-foreground bg-muted border-border',
+            'text-zinc-400 bg-zinc-900 border-zinc-800',
         }
     }
   }
@@ -193,9 +192,9 @@ export function BillingSettings() {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="flex min-h-[300px] items-center justify-center"
+        className="flex min-h-[300px] items-center justify-center bg-black"
       >
-        <div className="flex items-center gap-3 text-muted-foreground">
+        <div className="flex items-center gap-3 text-zinc-400">
           <Loader2 className="h-5 w-5 animate-spin" />
           <span>Loading subscription details...</span>
         </div>
@@ -214,11 +213,11 @@ export function BillingSettings() {
           <AlertCircle className="mt-0.5 h-5 w-5 text-red-500" />
 
           <div>
-            <h3 className="font-semibold text-foreground">
+            <h3 className="font-semibold text-white">
               Unable to load billing information
             </h3>
 
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-sm text-zinc-400">
               {error}
             </p>
           </div>
@@ -241,34 +240,34 @@ export function BillingSettings() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
-      className="space-y-6"
+      className="space-y-6 bg-black"
     >
       {/* Current Plan */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="overflow-hidden rounded-xl border border-border bg-card"
+        className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950"
       >
         {/* Header */}
-        <div className="border-b border-border p-6">
+        <div className="border-b border-zinc-800 p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="mb-2 flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-primary" />
+                <Sparkles className="h-5 w-5 text-amber-400" />
 
-                <h3 className="font-semibold text-foreground">
+                <h3 className="font-semibold text-white">
                   Current Plan
                 </h3>
               </div>
 
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-zinc-400">
                 Your NyayMitra legal operations subscription
               </p>
             </div>
 
             <div
-              className={`inline - flex w - fit items - center gap - 2 rounded - full border px - 3 py - 1.5 text - xs font - medium ${statusStyle.className} `}
+              className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${statusStyle.className}`}
             >
               <StatusIcon className="h-3.5 w-3.5" />
 
@@ -282,21 +281,21 @@ export function BillingSettings() {
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="flex items-center gap-3">
-                <h2 className="text-3xl font-bold text-foreground">
+                <h2 className="text-3xl font-bold text-white">
                   {subscription?.plan || '—'}
                 </h2>
 
-                <span className="rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                <span className="rounded-md bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-400">
                   Business Plan
                 </span>
               </div>
 
-              <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+              <p className="mt-2 max-w-xl text-sm text-zinc-400">
                 {getPlanDescription(subscription?.plan || '')}
               </p>
 
               {business?.companyName && (
-                <p className="mt-3 text-sm font-medium text-foreground">
+                <p className="mt-3 text-sm font-medium text-white">
                   {business.companyName}
                 </p>
               )}
@@ -313,44 +312,44 @@ export function BillingSettings() {
 
           {/* Subscription Period */}
           <div className="mt-8 grid gap-4 md:grid-cols-3">
-            <div className="rounded-lg border border-border bg-background/50 p-4">
+            <div className="rounded-lg border border-zinc-800 bg-black/50 p-4">
               <div className="mb-2 flex items-center gap-2">
-                <CalendarDays className="h-4 w-4 text-primary" />
+                <CalendarDays className="h-4 w-4 text-amber-400" />
 
-                <span className="text-xs font-medium text-muted-foreground">
+                <span className="text-xs font-medium text-zinc-400">
                   Subscription Started
                 </span>
               </div>
 
-              <p className="font-semibold text-foreground">
+              <p className="font-semibold text-white">
                 {formatDate(subscription?.startDate || null)}
               </p>
             </div>
 
-            <div className="rounded-lg border border-border bg-background/50 p-4">
+            <div className="rounded-lg border border-zinc-800 bg-black/50 p-4">
               <div className="mb-2 flex items-center gap-2">
-                <CalendarDays className="h-4 w-4 text-primary" />
+                <CalendarDays className="h-4 w-4 text-amber-400" />
 
-                <span className="text-xs font-medium text-muted-foreground">
+                <span className="text-xs font-medium text-zinc-400">
                   Renewal Date
                 </span>
               </div>
 
-              <p className="font-semibold text-foreground">
+              <p className="font-semibold text-white">
                 {formatDate(subscription?.endDate || null)}
               </p>
             </div>
 
-            <div className="rounded-lg border border-border bg-background/50 p-4">
+            <div className="rounded-lg border border-zinc-800 bg-black/50 p-4">
               <div className="mb-2 flex items-center gap-2">
-                <Clock3 className="h-4 w-4 text-primary" />
+                <Clock3 className="h-4 w-4 text-amber-400" />
 
-                <span className="text-xs font-medium text-muted-foreground">
+                <span className="text-xs font-medium text-zinc-400">
                   Remaining
                 </span>
               </div>
 
-              <p className="font-semibold text-foreground">
+              <p className="font-semibold text-white">
                 {daysRemaining} days
               </p>
             </div>
@@ -359,16 +358,16 @@ export function BillingSettings() {
           {/* Subscription Progress */}
           <div className="mt-6">
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-sm font-medium text-white">
                 Subscription period
               </p>
 
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-zinc-400">
                 {progress}% used
               </p>
             </div>
 
-            <div className="h-2 w-full overflow-hidden rounded-full bg-border">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-800">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${progress}% ` }}
@@ -376,11 +375,11 @@ export function BillingSettings() {
                   delay: 0.2,
                   duration: 0.8,
                 }}
-                className="h-full rounded-full bg-primary"
+                className="h-full rounded-full bg-amber-500"
               />
             </div>
 
-            <div className="mt-2 flex justify-between text-xs text-muted-foreground">
+            <div className="mt-2 flex justify-between text-xs text-zinc-400">
               <span>
                 {formatDate(subscription?.startDate || null)}
               </span>
@@ -398,40 +397,40 @@ export function BillingSettings() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="rounded-xl border border-border bg-card p-6"
+        className="rounded-xl border border-zinc-800 bg-zinc-950 p-6"
       >
-        <h3 className="mb-4 font-semibold text-foreground">
+        <h3 className="mb-4 font-semibold text-white">
           Account & Workspace
         </h3>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="flex items-center gap-4 rounded-lg bg-background/50 p-4">
+          <div className="flex items-center gap-4 rounded-lg bg-black/50 p-4">
             <div className="rounded-lg bg-green-500/10 p-2.5">
               <ShieldCheck className="h-5 w-5 text-green-500" />
             </div>
 
             <div>
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-sm font-medium text-white">
                 Business Account
               </p>
 
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-xs text-zinc-400">
                 {business?.businessStatus || '—'}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 rounded-lg bg-background/50 p-4">
-            <div className="rounded-lg bg-primary/10 p-2.5">
-              <CheckCircle2 className="h-5 w-5 text-primary" />
+          <div className="flex items-center gap-4 rounded-lg bg-black/50 p-4">
+            <div className="rounded-lg bg-amber-500/10 p-2.5">
+              <CheckCircle2 className="h-5 w-5 text-amber-400" />
             </div>
 
             <div>
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-sm font-medium text-white">
                 Workspace
               </p>
 
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-xs text-zinc-400">
                 {business?.workspaceStatus || '—'}
               </p>
             </div>
@@ -444,29 +443,29 @@ export function BillingSettings() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="rounded-xl border border-border bg-card p-6"
+        className="rounded-xl border border-zinc-800 bg-zinc-950 p-6"
       >
         <div className="mb-4">
-          <h3 className="font-semibold text-foreground">
+          <h3 className="font-semibold text-white">
             Payment Method
           </h3>
 
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-zinc-400">
             Payment details associated with your subscription
           </p>
         </div>
 
-        <div className="flex items-center gap-4 rounded-lg bg-background/50 p-4">
-          <div className="rounded-lg bg-primary/10 p-2.5">
-            <CreditCard className="h-6 w-6 text-primary" />
+        <div className="flex items-center gap-4 rounded-lg bg-black/50 p-4">
+          <div className="rounded-lg bg-amber-500/10 p-2.5">
+            <CreditCard className="h-6 w-6 text-amber-400" />
           </div>
 
           <div className="flex-1">
-            <p className="font-medium text-foreground">
+            <p className="font-medium text-white">
               Payment information
             </p>
 
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-zinc-400">
               Payment details will appear here once billing is configured.
             </p>
           </div>
@@ -478,53 +477,53 @@ export function BillingSettings() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
-        className="rounded-xl border border-border bg-card p-6"
+        className="rounded-xl border border-zinc-800 bg-zinc-950 p-6"
       >
-        <h3 className="font-semibold text-foreground">
+        <h3 className="font-semibold text-white">
           Billing Information
         </h3>
 
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-sm text-zinc-400">
           Subscription and billing information for your business.
         </p>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
               Business
             </p>
 
-            <p className="mt-1 text-sm font-medium text-foreground">
+            <p className="mt-1 text-sm font-medium text-white">
               {business?.legalName || business?.companyName || '—'}
             </p>
           </div>
 
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
               Plan
             </p>
 
-            <p className="mt-1 text-sm font-medium text-foreground">
+            <p className="mt-1 text-sm font-medium text-white">
               {subscription?.plan || '—'}
             </p>
           </div>
 
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
               Subscription Status
             </p>
 
-            <p className="mt-1 text-sm font-medium text-foreground">
+            <p className="mt-1 text-sm font-medium text-white">
               {subscription?.status || '—'}
             </p>
           </div>
 
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
               Next Renewal
             </p>
 
-            <p className="mt-1 text-sm font-medium text-foreground">
+            <p className="mt-1 text-sm font-medium text-white">
               {formatDate(subscription?.endDate || null)}
             </p>
           </div>
@@ -533,4 +532,3 @@ export function BillingSettings() {
     </motion.div>
   )
 }
-
