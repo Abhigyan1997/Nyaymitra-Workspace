@@ -11,7 +11,6 @@ import {
   FileText,
   HelpCircle,
   MessageCircle,
-  MoreHorizontal,
   Plus,
   Search,
   Send,
@@ -122,8 +121,6 @@ interface ApiResponse<T = unknown> {
 }
 
 function extractTickets(data: ApiResponse): ApiTicket[] {
-  // Current business support API returns:
-  // { success: true, message: '...', data: [...] }
   if (Array.isArray(data?.data)) {
     return data.data as ApiTicket[]
   }
@@ -155,7 +152,6 @@ function extractTicket(data: ApiResponse): ApiTicket | null {
       return payload.ticket
     }
 
-    // Some APIs return the ticket directly inside `data`.
     if (payload._id || payload.id || payload.ticketNumber) {
       return payload as ApiTicket
     }
@@ -165,7 +161,6 @@ function extractTicket(data: ApiResponse): ApiTicket | null {
 }
 
 function extractMessages(data: ApiResponse): ApiMessage[] {
-  // Supports: { data: [...] } from GET /:ticketId/messages
   if (Array.isArray(data?.data)) {
     return data.data as ApiMessage[]
   }
@@ -202,13 +197,6 @@ const CATEGORY_OPTIONS = [
   { value: 'document', label: 'Document' },
   { value: 'compliance', label: 'Compliance' },
   { value: 'other', label: 'Other' },
-] as const
-
-const STATUS_OPTIONS = [
-  { value: 'open', label: 'Open' },
-  { value: 'in-progress', label: 'In Progress' },
-  { value: 'resolved', label: 'Resolved' },
-  { value: 'closed', label: 'Closed' },
 ] as const
 
 const PRIORITY_OPTIONS = [
@@ -305,7 +293,6 @@ function formatDateTime(value?: string) {
     minute: '2-digit',
   }).format(date)
 }
-
 
 function normalizeStatus(value?: string): TicketStatus {
   switch (value) {
@@ -419,20 +406,6 @@ function normalizeTicket(
   }
 }
 
-function statusToApi(status: TicketStatus) {
-  switch (status) {
-    case 'In Progress':
-      return 'in-progress'
-    case 'Resolved':
-      return 'resolved'
-    case 'Closed':
-      return 'closed'
-    case 'Open':
-    default:
-      return 'open'
-  }
-}
-
 function StatusBadge({
   status,
 }: {
@@ -535,8 +508,6 @@ export default function BusinessSupportPage() {
     useState(false)
   const [replyLoading, setReplyLoading] =
     useState(false)
-  const [statusLoading, setStatusLoading] =
-    useState(false)
   const [error, setError] = useState('')
   const [actionError, setActionError] = useState('')
 
@@ -615,9 +586,6 @@ export default function BusinessSupportPage() {
       setDetailLoading(true)
       setActionError('')
 
-      // Ticket details and conversation are separate backend endpoints.
-      // GET /:ticketId returns the ticket.
-      // GET /:ticketId/messages returns the conversation array.
       const [ticketData, messagesData] = await Promise.all([
         apiRequest<ApiResponse>(
           `${SUPPORT_API}/${ticketId}`
@@ -812,7 +780,7 @@ export default function BusinessSupportPage() {
 
       // ===== SUCCESS TOAST =====
       premiumToast.success('Support request created', {
-        description: `"${subject.trim()}" is now with our support team.`,
+        description: `"${createdSubject}" is now with our support team.`,
       })
     } catch (err: any) {
       console.error(
@@ -881,55 +849,6 @@ export default function BusinessSupportPage() {
       })
     } finally {
       setReplyLoading(false)
-    }
-  }
-
-  const handleStatusChange = async (
-    status: TicketStatus
-  ) => {
-    if (!selectedTicketId) return
-
-    try {
-      setStatusLoading(true)
-      setActionError('')
-
-      await apiRequest<ApiResponse>(
-        `${SUPPORT_API}/${selectedTicketId}/status`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({
-            status: statusToApi(status),
-          }),
-        }
-      )
-
-      await loadTickets()
-      await loadTicketDetails(
-        selectedTicketId
-      )
-
-      // ===== SUCCESS TOAST =====
-      premiumToast.success('Status updated', {
-        description: `Ticket marked as ${status}.`,
-      })
-    } catch (err: any) {
-      console.error(
-        'Support status update error:',
-        err
-      )
-
-      const message =
-        err?.message ||
-        'Failed to update ticket status.'
-
-      setActionError(message)
-
-      // ===== ERROR TOAST =====
-      premiumToast.error('Status update failed', {
-        description: message,
-      })
-    } finally {
-      setStatusLoading(false)
     }
   }
 
@@ -1228,12 +1147,6 @@ export default function BusinessSupportPage() {
               onReply={
                 handleReply
               }
-              onStatusChange={
-                handleStatusChange
-              }
-              statusLoading={
-                statusLoading
-              }
               replyLoading={
                 replyLoading
               }
@@ -1297,12 +1210,6 @@ export default function BusinessSupportPage() {
                   }
                   onReply={
                     handleReply
-                  }
-                  onStatusChange={
-                    handleStatusChange
-                  }
-                  statusLoading={
-                    statusLoading
                   }
                   replyLoading={
                     replyLoading
@@ -1497,17 +1404,11 @@ function SupportDetails({
   ticket,
   loading,
   onReply,
-  onStatusChange,
-  statusLoading,
   replyLoading,
 }: {
   ticket: SupportTicket | null
   loading: boolean
   onReply: (message: string) => Promise<void>
-  onStatusChange: (
-    status: TicketStatus
-  ) => Promise<void>
-  statusLoading: boolean
   replyLoading: boolean
 }) {
   const [reply, setReply] = useState('')
@@ -1558,26 +1459,6 @@ function SupportDetails({
               {ticket.createdAt}
             </p>
           </div>
-
-          <select
-            value={statusToApi(ticket.status)}
-            onChange={(e) =>
-              onStatusChange(
-                normalizeStatus(e.target.value)
-              )
-            }
-            disabled={statusLoading}
-            className="rounded-lg border border-white/[0.08] bg-[#0b0d10] px-3 py-2 text-xs text-white outline-none transition focus:border-amber-400/40 disabled:opacity-50"
-          >
-            {STATUS_OPTIONS.map((option) => (
-              <option
-                key={option.value}
-                value={option.value}
-              >
-                {option.label}
-              </option>
-            ))}
-          </select>
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -1794,4 +1675,3 @@ function SupportDetails({
     </div>
   )
 }
-
