@@ -11,7 +11,6 @@ import {
     FileText,
     HelpCircle,
     MessageCircle,
-    MoreHorizontal,
     Plus,
     Search,
     Send,
@@ -124,13 +123,6 @@ const CATEGORY_OPTIONS = [
     { value: 'other', label: 'Other' },
 ] as const
 
-const STATUS_OPTIONS = [
-    { value: 'open', label: 'Open' },
-    { value: 'in-progress', label: 'In Progress' },
-    { value: 'resolved', label: 'Resolved' },
-    { value: 'closed', label: 'Closed' },
-] as const
-
 const PRIORITY_OPTIONS = [
     { value: 'low', label: 'Low' },
     { value: 'medium', label: 'Medium' },
@@ -225,7 +217,6 @@ function formatDateTime(value?: string) {
         minute: '2-digit',
     }).format(date)
 }
-
 
 function normalizeStatus(value?: string): TicketStatus {
     switch (value) {
@@ -334,20 +325,6 @@ function normalizeTicket(
     }
 }
 
-function statusToApi(status: TicketStatus) {
-    switch (status) {
-        case 'In Progress':
-            return 'in-progress'
-        case 'Resolved':
-            return 'resolved'
-        case 'Closed':
-            return 'closed'
-        case 'Open':
-        default:
-            return 'open'
-    }
-}
-
 function StatusBadge({
     status,
 }: {
@@ -449,8 +426,6 @@ export default function LawyerSupportPage() {
     const [submittingTicket, setSubmittingTicket] =
         useState(false)
     const [replyLoading, setReplyLoading] =
-        useState(false)
-    const [statusLoading, setStatusLoading] =
         useState(false)
     const [error, setError] = useState('')
     const [actionError, setActionError] = useState('')
@@ -771,55 +746,6 @@ export default function LawyerSupportPage() {
         }
     }
 
-    const handleStatusChange = async (
-        status: TicketStatus
-    ) => {
-        if (!selectedTicketId) return
-
-        try {
-            setStatusLoading(true)
-            setActionError('')
-
-            await apiRequest<ApiResponse>(
-                `${API_BASE_URL}/${selectedTicketId}/status`,
-                {
-                    method: 'PATCH',
-                    body: JSON.stringify({
-                        status: statusToApi(status),
-                    }),
-                }
-            )
-
-            await loadTickets()
-            await loadTicketDetails(
-                selectedTicketId
-            )
-
-            // ===== SUCCESS TOAST =====
-            premiumToast.success('Status updated', {
-                description: `Ticket marked as ${status}.`,
-            })
-        } catch (err: any) {
-            console.error(
-                'Support status update error:',
-                err
-            )
-
-            const message =
-                err?.message ||
-                'Failed to update ticket status.'
-
-            setActionError(message)
-
-            // ===== ERROR TOAST =====
-            premiumToast.error('Status update failed', {
-                description: message,
-            })
-        } finally {
-            setStatusLoading(false)
-        }
-    }
-
     return (
         <div className="min-h-screen bg-[#06080b] text-white">
             <div className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -1115,12 +1041,6 @@ export default function LawyerSupportPage() {
                             onReply={
                                 handleReply
                             }
-                            onStatusChange={
-                                handleStatusChange
-                            }
-                            statusLoading={
-                                statusLoading
-                            }
                             replyLoading={
                                 replyLoading
                             }
@@ -1184,12 +1104,6 @@ export default function LawyerSupportPage() {
                                     }
                                     onReply={
                                         handleReply
-                                    }
-                                    onStatusChange={
-                                        handleStatusChange
-                                    }
-                                    statusLoading={
-                                        statusLoading
                                     }
                                     replyLoading={
                                         replyLoading
@@ -1384,17 +1298,11 @@ function SupportDetails({
     ticket,
     loading,
     onReply,
-    onStatusChange,
-    statusLoading,
     replyLoading,
 }: {
     ticket: SupportTicket | null
     loading: boolean
     onReply: (message: string) => Promise<void>
-    onStatusChange: (
-        status: TicketStatus
-    ) => Promise<void>
-    statusLoading: boolean
     replyLoading: boolean
 }) {
     const [reply, setReply] = useState('')
@@ -1444,42 +1352,6 @@ function SupportDetails({
                             {ticket.category} • Created{' '}
                             {ticket.createdAt}
                         </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <select
-                            value={
-                                statusToApi(
-                                    ticket.status
-                                )
-                            }
-                            onChange={(e) =>
-                                onStatusChange(
-                                    normalizeStatus(
-                                        e.target.value
-                                    )
-                                )
-                            }
-                            disabled={statusLoading}
-                            className="rounded-lg border border-white/[0.07] bg-[#0b0e12] px-2.5 py-2 text-[10px] text-zinc-300 outline-none disabled:opacity-50"
-                        >
-                            {STATUS_OPTIONS.map(
-                                (option) => (
-                                    <option
-                                        key={
-                                            option.value
-                                        }
-                                        value={
-                                            option.value
-                                        }
-                                    >
-                                        {option.label}
-                                    </option>
-                                )
-                            )}
-                        </select>
-
-                        <MoreHorizontal className="h-4 w-4 text-zinc-600" />
                     </div>
                 </div>
 
