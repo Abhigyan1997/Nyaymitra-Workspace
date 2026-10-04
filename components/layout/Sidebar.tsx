@@ -59,7 +59,7 @@ const navItems: NavItem[] = [
 
 const bottomItems = [
   { label: 'Settings', icon: Settings, href: '/dashboard/settings' },
-  { label: 'Profile', icon: User, href: '/dashboard/settings?tab=profile' },
+  { label: 'Support & Help', icon: HelpCircle, href: '/dashboard/support' },
   { label: 'Logout', icon: LogOut, href: '/logout' },
 ]
 
