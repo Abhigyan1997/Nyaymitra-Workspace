@@ -50,6 +50,32 @@ interface Notification {
   createdAt: string
 }
 
+
+interface GlobalSearchResult {
+  type: string
+  id: string
+  title: string
+  description?: string
+  url?: string
+  meta?: string
+}
+
+const SEARCH_TYPE_CONFIG: Record<
+  string,
+  {
+    label: string
+    icon: React.ComponentType<{ className?: string }>
+  }
+> = {
+  business: { label: 'Business', icon: Briefcase },
+  contract: { label: 'Contracts', icon: FileText },
+  document: { label: 'Documents', icon: FileText },
+  folder: { label: 'Folders', icon: FileText },
+  compliance: { label: 'Compliance', icon: CheckCircle },
+  contract_request: { label: 'Legal Requests', icon: Scale },
+  team: { label: 'Team', icon: UserCheck },
+}
+
 interface TopBarProps {
   onMenuClick?: () => void
 }
@@ -158,6 +184,13 @@ export function TopBar({ onMenuClick }: TopBarProps) {
 
   const notificationRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const desktopSearchRef = useRef<HTMLDivElement>(null)
+  const mobileSearchRef = useRef<HTMLDivElement>(null)
+
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<GlobalSearchResult[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchError, setSearchError] = useState('')
 
   /* =========================================================
      TOKEN + ROLE HELPERS
@@ -178,6 +211,268 @@ export function TopBar({ onMenuClick }: TopBarProps) {
       localStorage.getItem('userRole') ||
       'business'
     ).toLowerCase()
+  }
+
+
+  /* =========================================================
+     BUSINESS GLOBAL SEARCH
+     Uses the authenticated user's business workspace.
+  ========================================================= */
+  const fetchSearchResults = useCallback(async (query: string) => {
+    const trimmedQuery = query.trim()
+
+    if (trimmedQuery.length < 2) {
+      setSearchResults([])
+      setSearchError('')
+      setSearchLoading(false)
+      return
+    }
+
+    try {
+      setSearchLoading(true)
+      setSearchError('')
+
+      const token = getToken()
+
+      const params = new URLSearchParams({
+        q: trimmedQuery,
+        limit: '10',
+      })
+
+      const response = await fetch(
+        `${API_URL}/api/v1/business/search?${params.toString()}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token
+              ? { Authorization: `Bearer ${token}` }
+              : {}),
+          },
+          cache: 'no-store',
+        }
+      )
+
+      const result = await response.json()
+
+      if (!response.ok || !result?.success) {
+        throw new Error(
+          result?.message || `Search failed (${response.status})`
+        )
+      }
+
+      const results = Array.isArray(result?.data?.results)
+        ? result.data.results
+        : []
+
+      setSearchResults(results)
+    } catch (err) {
+      console.error('Business global search error:', err)
+
+      setSearchResults([])
+      setSearchError(
+        err instanceof Error ? err.message : 'Failed to search workspace'
+      )
+    } finally {
+      setSearchLoading(false)
+    }
+  }, [])
+
+  /* Debounced search */
+  useEffect(() => {
+    const value = searchQuery.trim()
+
+    if (value.length < 2) {
+      setSearchResults([])
+      setSearchError('')
+      setSearchLoading(false)
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      void fetchSearchResults(value)
+    }, 300)
+
+    return () => window.clearTimeout(timer)
+  }, [searchQuery, fetchSearchResults])
+
+  /* Close search dropdown when clicking outside */
+  useEffect(() => {
+    const handleSearchOutside = (event: MouseEvent) => {
+      const target = event.target as Node
+
+      const insideDesktop =
+        desktopSearchRef.current?.contains(target) ?? false
+
+      const insideMobile =
+        mobileSearchRef.current?.contains(target) ?? false
+
+      if (!insideDesktop && !insideMobile) {
+        setIsSearchActive(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleSearchOutside)
+
+    return () => {
+      document.removeEventListener('mousedown', handleSearchOutside)
+    }
+  }, [])
+
+  /* Ctrl/Cmd + K focuses the top-bar search */
+  useEffect(() => {
+    const handleSearchShortcut = (event: KeyboardEvent) => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === 'k'
+      ) {
+        event.preventDefault()
+        setIsMobileSearchOpen(false)
+        setIsSearchActive(true)
+        window.setTimeout(() => {
+          searchInputRef.current?.focus()
+        }, 0)
+      }
+
+      if (event.key === 'Escape') {
+        setIsSearchActive(false)
+        setSearchQuery('')
+        setSearchResults([])
+        searchInputRef.current?.blur()
+      }
+    }
+
+    document.addEventListener('keydown', handleSearchShortcut)
+
+    return () => {
+      document.removeEventListener('keydown', handleSearchShortcut)
+    }
+  }, [])
+
+  const handleSearchResultClick = (result: GlobalSearchResult) => {
+    if (!result.url) return
+
+    setIsSearchActive(false)
+    setIsMobileSearchOpen(false)
+    setSearchQuery('')
+    setSearchResults([])
+    setSearchError('')
+
+    router.push(result.url)
+  }
+
+  const groupedSearchResults = searchResults.reduce<
+    Record<string, GlobalSearchResult[]>
+  >((groups, result) => {
+    const key = result.type || 'other'
+
+    if (!groups[key]) {
+      groups[key] = []
+    }
+
+    groups[key].push(result)
+
+    return groups
+  }, {})
+
+  const renderSearchDropdown = (mobile = false) => {
+    if (
+      !isSearchActive ||
+      searchQuery.trim().length < 2
+    ) {
+      return null
+    }
+
+    return (
+      <AnimatePresence>
+        <motion.div
+          initial={{ opacity: 0, y: 8, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 8, scale: 0.98 }}
+          transition={{ duration: 0.16 }}
+          className={`absolute z-[100] overflow-hidden rounded-xl border border-border bg-card shadow-2xl ${mobile
+            ? 'left-0 right-0 top-[calc(100%+8px)]'
+            : 'left-0 right-0 top-[calc(100%+8px)]'
+            }`}
+        >
+          {searchLoading && searchResults.length === 0 ? (
+            <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+              Searching your workspace...
+            </div>
+          ) : searchError ? (
+            <div className="px-4 py-6 text-center text-sm text-red-400">
+              {searchError}
+            </div>
+          ) : searchResults.length === 0 ? (
+            <div className="px-4 py-7 text-center">
+              <Search className="w-5 h-5 mx-auto text-muted-foreground/50" />
+              <p className="mt-2 text-sm font-medium text-foreground">
+                No results found
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Try contracts, documents, compliance, team members or legal requests.
+              </p>
+            </div>
+          ) : (
+            <div className="max-h-[min(420px,60vh)] overflow-y-auto p-2">
+              {Object.entries(groupedSearchResults).map(
+                ([type, items]) => {
+                  const config =
+                    SEARCH_TYPE_CONFIG[type] || {
+                      label: type,
+                      icon: Search,
+                    }
+
+                  const TypeIcon = config.icon
+
+                  return (
+                    <div key={type} className="mb-2 last:mb-0">
+                      <div className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/60">
+                        {config.label}
+                      </div>
+
+                      {items.map((result) => (
+                        <button
+                          key={`${result.type}-${result.id}`}
+                          type="button"
+                          onMouseDown={(event) => {
+                            event.preventDefault()
+                          }}
+                          onClick={() => handleSearchResultClick(result)}
+                          className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-background"
+                        >
+                          <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
+                            <TypeIcon className="h-4 w-4" />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-foreground">
+                              {result.title}
+                            </p>
+
+                            {result.description && (
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                {result.description}
+                              </p>
+                            )}
+
+                            {result.meta && (
+                              <p className="mt-1 truncate text-[10px] text-muted-foreground/60">
+                                {result.meta}
+                              </p>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                }
+              )}
+            </div>
+          )}
+        </motion.div>
+      </AnimatePresence>
+    )
   }
 
   /* =========================================================
@@ -374,19 +669,61 @@ export function TopBar({ onMenuClick }: TopBarProps) {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.1 }}
             className="hidden sm:block flex-1 max-w-xs lg:max-w-md"
+            ref={desktopSearchRef}
           >
-            <div
-              className={`relative transition-all duration-200 ${isSearchActive ? 'ring-2 ring-primary/50' : ''
-                }`}
-            >
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search matters, documents..."
-                onFocus={() => setIsSearchActive(true)}
-                onBlur={() => setIsSearchActive(false)}
-                className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder-muted-foreground focus:outline-none transition-all duration-200"
-              />
+            <div className="relative">
+              <div
+                className={`relative transition-all duration-200 ${isSearchActive
+                  ? 'ring-2 ring-primary/50 rounded-lg'
+                  : ''
+                  }`}
+              >
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  placeholder="Search contracts, documents..."
+                  onChange={(event) => {
+                    setSearchQuery(event.target.value)
+                    setIsSearchActive(true)
+                  }}
+                  onFocus={() => setIsSearchActive(true)}
+                  className="w-full pl-10 pr-16 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder-muted-foreground focus:outline-none transition-all duration-200"
+                />
+
+                {searchLoading && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-amber-500" />
+                  </div>
+                )}
+
+                {!searchLoading && searchQuery && (
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      setSearchQuery('')
+                      setSearchResults([])
+                      setSearchError('')
+                      searchInputRef.current?.focus()
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-background hover:text-foreground"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+
+                {!searchQuery && (
+                  <span className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] text-muted-foreground lg:block">
+                    ⌘K
+                  </span>
+                )}
+              </div>
+
+              {renderSearchDropdown()}
             </div>
           </motion.div>
 
@@ -621,23 +958,62 @@ export function TopBar({ onMenuClick }: TopBarProps) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             className="sm:hidden fixed inset-x-0 top-0 z-50 bg-card border-b border-border p-4 shadow-xl"
+            ref={mobileSearchRef}
           >
-            <div className="flex items-center gap-3">
+            <div className="relative flex items-center gap-3">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+
                 <input
                   ref={searchInputRef}
                   type="text"
-                  placeholder="Search matters, documents..."
-                  className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  value={searchQuery}
+                  placeholder="Search contracts, documents..."
+                  onChange={(event) => {
+                    setSearchQuery(event.target.value)
+                    setIsSearchActive(true)
+                  }}
+                  onFocus={() => setIsSearchActive(true)}
+                  className="w-full pl-10 pr-12 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                 />
+
+                {searchLoading && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-amber-500" />
+                  </div>
+                )}
+
+                {!searchLoading && searchQuery && (
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      setSearchQuery('')
+                      setSearchResults([])
+                      setSearchError('')
+                      searchInputRef.current?.focus()
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-background hover:text-foreground"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
               </div>
+
               <button
-                onClick={() => setIsMobileSearchOpen(false)}
+                type="button"
+                onClick={() => {
+                  setIsMobileSearchOpen(false)
+                  setIsSearchActive(false)
+                }}
                 className="p-2 rounded-lg hover:bg-background transition-colors"
+                aria-label="Close search"
               >
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
+
+              {renderSearchDropdown(true)}
             </div>
           </motion.div>
         )}
