@@ -17,7 +17,7 @@ import {
   Upload,
   FileText,
 } from 'lucide-react'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
 const API_URL = 'https://nyaymitra-backend-production.up.railway.app'
@@ -60,20 +60,69 @@ interface GlobalSearchResult {
   meta?: string
 }
 
-const SEARCH_TYPE_CONFIG: Record<
-  string,
-  {
-    label: string
-    icon: React.ComponentType<{ className?: string }>
-  }
-> = {
-  business: { label: 'Business', icon: Briefcase },
-  contract: { label: 'Contracts', icon: FileText },
-  document: { label: 'Documents', icon: FileText },
-  folder: { label: 'Folders', icon: FileText },
-  compliance: { label: 'Compliance', icon: CheckCircle },
-  contract_request: { label: 'Legal Requests', icon: Scale },
-  team: { label: 'Team', icon: UserCheck },
+type SearchRole = 'business' | 'lawyer' | 'admin'
+
+interface SearchConfig {
+  endpoint: string
+  placeholder: string
+  emptyHint: string
+  typeConfig: Record<
+    string,
+    {
+      label: string
+      icon: React.ComponentType<{ className?: string }>
+    }
+  >
+}
+
+const SEARCH_CONFIGS: Record<SearchRole, SearchConfig> = {
+  business: {
+    endpoint: '/api/v1/business/search',
+    placeholder: 'Search contracts, documents, compliance...',
+    emptyHint:
+      'Try contracts, documents, compliance, team members or legal requests.',
+    typeConfig: {
+      business: { label: 'Business', icon: Briefcase },
+      contract: { label: 'Contracts', icon: FileText },
+      document: { label: 'Documents', icon: FileText },
+      folder: { label: 'Folders', icon: FileText },
+      compliance: { label: 'Compliance', icon: CheckCircle },
+      contract_request: { label: 'Legal Requests', icon: Scale },
+      team: { label: 'Team', icon: UserCheck },
+    },
+  },
+
+  lawyer: {
+    endpoint: '/api/v1/lawyer/search',
+    placeholder: 'Search clients, matters, documents...',
+    emptyHint:
+      'Try clients, matters, contracts, documents or legal requests.',
+    typeConfig: {
+      client: { label: 'Clients', icon: Briefcase },
+      matter: { label: 'Matters', icon: Scale },
+      contract: { label: 'Contracts', icon: FileText },
+      document: { label: 'Documents', icon: FileText },
+      legal_request: { label: 'Legal Requests', icon: Scale },
+      business: { label: 'Businesses', icon: Briefcase },
+      team: { label: 'Team', icon: UserCheck },
+    },
+  },
+
+  admin: {
+    endpoint: '/api/v1/admin/search',
+    placeholder: 'Search users, businesses, lawyers...',
+    emptyHint:
+      'Try users, businesses, lawyers, documents or support tickets.',
+    typeConfig: {
+      user: { label: 'Users', icon: UserCheck },
+      business: { label: 'Businesses', icon: Briefcase },
+      lawyer: { label: 'Lawyers', icon: Scale },
+      document: { label: 'Documents', icon: FileText },
+      contract: { label: 'Contracts', icon: FileText },
+      support: { label: 'Support', icon: Info },
+      team: { label: 'Team', icon: UserCheck },
+    },
+  },
 }
 
 interface TopBarProps {
@@ -204,13 +253,47 @@ export function TopBar({ onMenuClick }: TopBarProps) {
     )
   }
 
-  const getRole = () => {
+  const getRole = (): SearchRole => {
     if (typeof window === 'undefined') return 'business'
-    return (
+
+    const storedRole = (
       localStorage.getItem('role') ||
       localStorage.getItem('userRole') ||
-      'business'
+      ''
     ).toLowerCase()
+
+    if (
+      storedRole === 'lawyer' ||
+      storedRole === 'admin' ||
+      storedRole === 'business'
+    ) {
+      return storedRole
+    }
+
+    try {
+      const storedUser = localStorage.getItem('user')
+
+      if (storedUser) {
+        const user = JSON.parse(storedUser)
+        const userRole = String(user?.role || '').toLowerCase()
+
+        if (
+          userRole === 'lawyer' ||
+          userRole === 'admin' ||
+          userRole === 'business'
+        ) {
+          return userRole
+        }
+      }
+    } catch {
+      // Ignore invalid user data.
+    }
+
+    return 'business'
+  }
+
+  const getSearchConfig = (): SearchConfig => {
+    return SEARCH_CONFIGS[getRole()]
   }
 
 
@@ -239,8 +322,10 @@ export function TopBar({ onMenuClick }: TopBarProps) {
         limit: '10',
       })
 
+      const searchConfig = getSearchConfig()
+
       const response = await fetch(
-        `${API_URL}/api/v1/business/search?${params.toString()}`,
+        `${API_URL}${searchConfig.endpoint}?${params.toString()}`,
         {
           method: 'GET',
           headers: {
@@ -294,7 +379,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
     }, 300)
 
     return () => window.clearTimeout(timer)
-  }, [searchQuery, fetchSearchResults])
+  }, [searchQuery, fetchSearchResults, getRole()])
 
   /* Close search dropdown when clicking outside */
   useEffect(() => {
@@ -410,15 +495,17 @@ export function TopBar({ onMenuClick }: TopBarProps) {
                 No results found
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Try contracts, documents, compliance, team members or legal requests.
+                {getSearchConfig().emptyHint}
               </p>
             </div>
           ) : (
             <div className="max-h-[min(420px,60vh)] overflow-y-auto p-2">
               {Object.entries(groupedSearchResults).map(
                 ([type, items]) => {
+                  const searchConfig = getSearchConfig()
+
                   const config =
-                    SEARCH_TYPE_CONFIG[type] || {
+                    searchConfig.typeConfig[type] || {
                       label: type,
                       icon: Search,
                     }
@@ -684,7 +771,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
                   ref={searchInputRef}
                   type="text"
                   value={searchQuery}
-                  placeholder="Search contracts, documents..."
+                  placeholder={getSearchConfig().placeholder}
                   onChange={(event) => {
                     setSearchQuery(event.target.value)
                     setIsSearchActive(true)
@@ -968,7 +1055,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
                   ref={searchInputRef}
                   type="text"
                   value={searchQuery}
-                  placeholder="Search contracts, documents..."
+                  placeholder={getSearchConfig().placeholder}
                   onChange={(event) => {
                     setSearchQuery(event.target.value)
                     setIsSearchActive(true)
