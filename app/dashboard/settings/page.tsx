@@ -169,12 +169,12 @@ export default function SettingsPage() {
         className="flex-1 p-4 sm:p-6 overflow-y-auto max-w-4xl mx-auto w-full bg-black"
       >
         {/* Desktop Header */}
-        <div className="hidden lg:block mb-8">
+        {/* <div className="hidden lg:block mb-8">
           <h1 className="text-3xl font-light tracking-tight text-white" style={{ fontFamily: 'Cormorant Garamond' }}>
             Settings
           </h1>
           <p className="text-sm text-zinc-400 mt-1">Manage your account and application preferences</p>
-        </div>
+        </div> */}
 
         {/* Tab Content */}
         <AnimatePresence mode="wait">
