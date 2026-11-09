@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+
 import {
     CheckCircle2,
     Clock3,
@@ -9,6 +10,7 @@ import {
     ShieldCheck,
     Users,
 } from "lucide-react";
+
 import { useParams } from "next/navigation";
 import { premiumToast } from "@/lib/premium-toast";
 
@@ -17,14 +19,21 @@ const API_URL =
 
 const SITE_URL = "https://mynyaymitra.info";
 
+// ==================================================
+// TYPES
+// ==================================================
+
+type ProfessionalRole = "lawyer" | "CA" | "CS";
+
 interface InvitationData {
     invitation: {
         _id: string;
         email: string;
-        memberType: string;
+        role: ProfessionalRole;
         workspaceRole: string;
         permissions: string[];
         expiresAt: string;
+
         invitedBy?: {
             fullName?: string;
             email?: string;
@@ -44,39 +53,53 @@ interface InvitationResponse {
     message?: string;
 }
 
-const roleLabel = (role: string) => {
-    if (role === "legal_manager") {
-        return "Legal Manager";
-    }
+// ==================================================
+// ROLE HELPERS
+// ==================================================
 
-    if (role === "admin") {
-        return "Admin";
-    }
-
-    if (role === "viewer") {
-        return "Viewer";
-    }
-
-    return "Member";
+const isValidProfessionalRole = (
+    role: unknown
+): role is ProfessionalRole => {
+    return (
+        role === "lawyer" ||
+        role === "CA" ||
+        role === "CS"
+    );
 };
 
-const memberTypeLabel = (type: string) => {
+const professionalRoleLabel = (role: string) => {
     const labels: Record<string, string> = {
-        employee: "Employee",
         lawyer: "Lawyer",
         CA: "Chartered Accountant",
         CS: "Company Secretary",
-        consultant: "Consultant",
-        other: "Team Member",
     };
 
-    return labels[type] || "Team Member";
+    return labels[role] || "Invalid professional role";
 };
+
+const roleLabel = (role: string) => {
+    const labels: Record<string, string> = {
+        legal_manager: "Legal Manager",
+        admin: "Admin",
+        viewer: "Viewer",
+        member: "Member",
+    };
+
+    return labels[role] || "Member";
+};
+
+// ==================================================
+// MAIN COMPONENT
+// ==================================================
 
 export default function InvitationPage() {
     const params = useParams();
 
     const token = params?.token as string;
+
+    // ==================================================
+    // STATES
+    // ==================================================
 
     const [invitation, setInvitation] =
         useState<InvitationData | null>(null);
@@ -90,14 +113,11 @@ export default function InvitationPage() {
 
     const [success, setSuccess] = useState("");
 
-    const [fullName, setFullName] =
-        useState("");
+    const [fullName, setFullName] = useState("");
 
-    const [phone, setPhone] =
-        useState("");
+    const [phone, setPhone] = useState("");
 
-    const [password, setPassword] =
-        useState("");
+    const [password, setPassword] = useState("");
 
     const [confirmPassword, setConfirmPassword] =
         useState("");
@@ -107,7 +127,11 @@ export default function InvitationPage() {
     // ==================================================
 
     useEffect(() => {
-        if (!token) return;
+        if (!token) {
+            setError("Invitation token is missing or invalid.");
+            setLoading(false);
+            return;
+        }
 
         const loadInvitation = async () => {
             try {
@@ -132,9 +156,24 @@ export default function InvitationPage() {
                     );
                 }
 
+                // Validate professional role returned by backend
+                if (
+                    !isValidProfessionalRole(
+                        result.data.invitation?.role
+                    )
+                ) {
+                    throw new Error(
+                        "This invitation does not contain a valid professional role. Please ask the inviter to revoke it and send a new invitation."
+                    );
+                }
+
                 setInvitation(result.data);
+
             } catch (err) {
-                console.error(err);
+                console.error(
+                    "Load invitation error:",
+                    err
+                );
 
                 const message =
                     err instanceof Error
@@ -143,10 +182,13 @@ export default function InvitationPage() {
 
                 setError(message);
 
-                // ===== ERROR TOAST =====
-                premiumToast.error('Invitation unavailable', {
-                    description: message,
-                });
+                premiumToast.error(
+                    "Invitation unavailable",
+                    {
+                        description: message,
+                    }
+                );
+
             } finally {
                 setLoading(false);
             }
@@ -167,39 +209,76 @@ export default function InvitationPage() {
         setError("");
         setSuccess("");
 
+        // Validate invitation
+        if (
+            !invitation ||
+            !isValidProfessionalRole(
+                invitation.invitation.role
+            )
+        ) {
+            const message =
+                "This invitation has an invalid professional role. Please ask the inviter to send a new invitation.";
+
+            setError(message);
+
+            premiumToast.error(
+                "Invalid invitation",
+                {
+                    description: message,
+                }
+            );
+
+            return;
+        }
+
+        // Validate full name
         if (!fullName.trim()) {
-            setError("Please enter your full name.");
+            const message =
+                "Please enter your full name.";
 
-            // ===== WARNING TOAST =====
-            premiumToast.warning('Name required', {
-                description: 'Please enter your full name.',
-            });
+            setError(message);
+
+            premiumToast.warning(
+                "Name required",
+                {
+                    description: message,
+                }
+            );
 
             return;
         }
 
+        // Validate password
         if (password.length < 8) {
-            setError(
-                "Password must contain at least 8 characters."
-            );
+            const message =
+                "Password must contain at least 8 characters.";
 
-            // ===== WARNING TOAST =====
-            premiumToast.warning('Password too short', {
-                description: 'Password must contain at least 8 characters.',
-            });
+            setError(message);
+
+            premiumToast.warning(
+                "Password too short",
+                {
+                    description: message,
+                }
+            );
 
             return;
         }
 
+        // Validate confirm password
         if (password !== confirmPassword) {
-            setError(
-                "Passwords do not match."
-            );
+            const message =
+                "Passwords do not match.";
 
-            // ===== WARNING TOAST =====
-            premiumToast.warning("Passwords don't match", {
-                description: 'New password and confirmation do not match.',
-            });
+            setError(message);
+
+            premiumToast.warning(
+                "Passwords don't match",
+                {
+                    description:
+                        "New password and confirmation do not match.",
+                }
+            );
 
             return;
         }
@@ -213,13 +292,12 @@ export default function InvitationPage() {
                     method: "POST",
 
                     headers: {
-                        "Content-Type":
-                            "application/json",
+                        "Content-Type": "application/json",
                     },
 
                     body: JSON.stringify({
-                        fullName,
-                        phone,
+                        fullName: fullName.trim(),
+                        phone: phone.trim(),
                         password,
                     }),
                 }
@@ -232,14 +310,15 @@ export default function InvitationPage() {
                 !result.success
             ) {
                 if (
-                    result.code ===
-                    "ACCOUNT_EXISTS"
+                    result.code === "ACCOUNT_EXISTS"
                 ) {
-                    // ===== INFO TOAST =====
-                    premiumToast.info('Account already exists', {
-                        description:
-                            'Log in with that account to accept the invitation.',
-                    });
+                    premiumToast.info(
+                        "Account already exists",
+                        {
+                            description:
+                                "Log in with that account to accept the invitation.",
+                        }
+                    );
 
                     throw new Error(
                         "An account already exists with this email. Please log in with that account and accept the invitation."
@@ -252,32 +331,31 @@ export default function InvitationPage() {
                 );
             }
 
+            // Registration successful
             setSuccess(
                 "Your account has been created and you have joined the workspace. Redirecting..."
             );
 
-            // ===== SUCCESS TOAST =====
             premiumToast.success(
-                `Welcome to ${invitation?.business?.companyName || 'NyayMitra'}`,
+                `Welcome to ${invitation.business.companyName ||
+                "NyayMitra"
+                }`,
                 {
-                    description: 'Your account has been created.',
+                    description:
+                        "Your account has been created.",
                 }
             );
 
-            // ------------------------------------------
-            // REDIRECT TO MAIN SITE
-            // ------------------------------------------
-            //
-            // Full-page navigation (not router.push) so it
-            // works reliably across origins / subdomains
-            // and avoids the 404 you were seeing on /login.
-            // ------------------------------------------
-
+            // Redirect to main website
             setTimeout(() => {
                 window.location.href = SITE_URL;
             }, 1500);
+
         } catch (err) {
-            console.error(err);
+            console.error(
+                "Invitation registration error:",
+                err
+            );
 
             const message =
                 err instanceof Error
@@ -286,30 +364,33 @@ export default function InvitationPage() {
 
             setError(message);
 
-            // ===== ERROR TOAST =====
-            // (skip if we already fired the info toast for ACCOUNT_EXISTS)
             if (
                 !message
                     .toLowerCase()
-                    .includes('already exists')
+                    .includes("already exists")
             ) {
-                premiumToast.error('Registration failed', {
-                    description: message,
-                });
+                premiumToast.error(
+                    "Registration failed",
+                    {
+                        description: message,
+                    }
+                );
             }
+
         } finally {
             setSubmitting(false);
         }
     };
 
     // ==================================================
-    // LOADING
+    // LOADING SCREEN
     // ==================================================
 
     if (loading) {
         return (
             <main className="flex min-h-screen items-center justify-center bg-background px-6">
                 <div className="flex flex-col items-center text-center">
+
                     <Loader2 className="mb-4 h-8 w-8 animate-spin text-primary" />
 
                     <h1 className="text-lg font-semibold">
@@ -319,19 +400,22 @@ export default function InvitationPage() {
                     <p className="mt-1 text-sm text-muted-foreground">
                         Please wait...
                     </p>
+
                 </div>
             </main>
         );
     }
 
     // ==================================================
-    // ERROR
+    // INVITATION ERROR SCREEN
     // ==================================================
 
     if (error && !invitation) {
         return (
             <main className="flex min-h-screen items-center justify-center bg-background px-6">
+
                 <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
+
                     <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10 text-destructive">
                         <Clock3 className="h-7 w-7" />
                     </div>
@@ -352,7 +436,9 @@ export default function InvitationPage() {
                     >
                         Go to NyayMitra
                     </button>
+
                 </div>
+
             </main>
         );
     }
@@ -362,14 +448,18 @@ export default function InvitationPage() {
     }
 
     // ==================================================
-    // MAIN
+    // MAIN INVITATION PAGE
     // ==================================================
 
     return (
         <main className="min-h-screen bg-muted/30 px-4 py-10">
+
             <div className="mx-auto w-full max-w-lg">
+
                 {/* Brand */}
+
                 <div className="mb-8 text-center">
+
                     <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
                         <ShieldCheck className="h-6 w-6" />
                     </div>
@@ -382,70 +472,76 @@ export default function InvitationPage() {
                         You have been invited to join a
                         business workspace.
                     </p>
+
                 </div>
 
-                {/* Invitation information */}
+                {/* Invitation Information */}
+
                 <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+
                     <div className="flex items-start gap-4">
+
                         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                             <Users className="h-6 w-6" />
                         </div>
 
                         <div className="min-w-0">
+
                             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                                 Workspace invitation
                             </p>
 
                             <h2 className="mt-1 truncate text-lg font-semibold">
-                                {
-                                    invitation.business
-                                        .companyName
-                                }
+                                {invitation.business.companyName}
                             </h2>
 
                             <p className="mt-1 text-sm text-muted-foreground">
                                 Invited as{" "}
                                 <span className="font-medium text-foreground">
                                     {roleLabel(
-                                        invitation
-                                            .invitation
-                                            .workspaceRole
+                                        invitation.invitation.workspaceRole
                                     )}
                                 </span>
                             </p>
+
                         </div>
+
                     </div>
 
                     <div className="mt-6 space-y-3">
+
+                        {/* Invited Email */}
+
                         <div className="flex items-center gap-3 rounded-xl bg-muted/50 p-3">
+
                             <Mail className="h-4 w-4 text-muted-foreground" />
 
                             <div>
+
                                 <p className="text-xs text-muted-foreground">
                                     Invited email
                                 </p>
 
                                 <p className="text-sm font-medium">
-                                    {
-                                        invitation
-                                            .invitation
-                                            .email
-                                    }
+                                    {invitation.invitation.email}
                                 </p>
+
                             </div>
+
                         </div>
 
+                        {/* Professional Role and Workspace Role */}
+
                         <div className="flex items-center justify-between rounded-xl bg-muted/50 p-3">
+
                             <div>
                                 <p className="text-xs text-muted-foreground">
-                                    Member type
+                                    Professional role
                                 </p>
 
                                 <p className="text-sm font-medium">
-                                    {memberTypeLabel(
-                                        invitation
-                                            .invitation
-                                            .memberType
+                                    {professionalRoleLabel(
+                                        invitation.invitation.role
                                     )}
                                 </p>
                             </div>
@@ -457,19 +553,23 @@ export default function InvitationPage() {
 
                                 <p className="text-sm font-medium">
                                     {roleLabel(
-                                        invitation
-                                            .invitation
-                                            .workspaceRole
+                                        invitation.invitation.workspaceRole
                                     )}
                                 </p>
                             </div>
+
                         </div>
+
                     </div>
+
                 </div>
 
-                {/* Registration */}
+                {/* Registration Form */}
+
                 <div className="mt-5 rounded-2xl border border-border bg-card p-6 shadow-sm">
+
                     <div className="mb-6">
+
                         <h2 className="text-lg font-semibold">
                             Create your account
                         </h2>
@@ -478,7 +578,10 @@ export default function InvitationPage() {
                             Set up your account to access the
                             workspace.
                         </p>
+
                     </div>
+
+                    {/* Error */}
 
                     {error && (
                         <div className="mb-5 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -486,58 +589,70 @@ export default function InvitationPage() {
                         </div>
                     )}
 
+                    {/* Success */}
+
                     {success && (
                         <div className="mb-5 flex items-start gap-3 rounded-xl border border-green-500/20 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
+
                             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
 
                             <span>
                                 {success}
                             </span>
+
                         </div>
                     )}
+
+                    {/* Form */}
 
                     <form
                         onSubmit={handleSubmit}
                         className="space-y-5"
                     >
-                        {/* Full name */}
+
+                        {/* Full Name */}
+
                         <div>
+
                             <label className="mb-2 block text-sm font-medium">
                                 Full name
                             </label>
 
                             <input
+                                type="text"
                                 value={fullName}
                                 onChange={(e) =>
-                                    setFullName(
-                                        e.target.value
-                                    )
+                                    setFullName(e.target.value)
                                 }
-                                placeholder="Alok Abhigyan"
+                                placeholder="Enter your full name"
                                 autoComplete="name"
+                                required
                                 className="h-11 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                             />
+
                         </div>
 
                         {/* Email */}
+
                         <div>
+
                             <label className="mb-2 block text-sm font-medium">
                                 Email
                             </label>
 
                             <input
-                                value={
-                                    invitation
-                                        .invitation
-                                        .email
-                                }
+                                type="email"
+                                value={invitation.invitation.email}
                                 disabled
                                 className="h-11 w-full cursor-not-allowed rounded-lg border border-border bg-muted px-3 text-sm text-muted-foreground"
                             />
+
                         </div>
 
                         {/* Phone */}
+
                         <div>
+
                             <label className="mb-2 block text-sm font-medium">
                                 Phone
                             </label>
@@ -546,18 +661,19 @@ export default function InvitationPage() {
                                 type="tel"
                                 value={phone}
                                 onChange={(e) =>
-                                    setPhone(
-                                        e.target.value
-                                    )
+                                    setPhone(e.target.value)
                                 }
                                 placeholder="+91 XXXXX XXXXX"
                                 autoComplete="tel"
                                 className="h-11 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                             />
+
                         </div>
 
                         {/* Password */}
+
                         <div>
+
                             <label className="mb-2 block text-sm font-medium">
                                 Password
                             </label>
@@ -566,18 +682,21 @@ export default function InvitationPage() {
                                 type="password"
                                 value={password}
                                 onChange={(e) =>
-                                    setPassword(
-                                        e.target.value
-                                    )
+                                    setPassword(e.target.value)
                                 }
                                 placeholder="Minimum 8 characters"
                                 autoComplete="new-password"
+                                required
+                                minLength={8}
                                 className="h-11 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                             />
+
                         </div>
 
-                        {/* Confirm password */}
+                        {/* Confirm Password */}
+
                         <div>
+
                             <label className="mb-2 block text-sm font-medium">
                                 Confirm password
                             </label>
@@ -586,21 +705,30 @@ export default function InvitationPage() {
                                 type="password"
                                 value={confirmPassword}
                                 onChange={(e) =>
-                                    setConfirmPassword(
-                                        e.target.value
-                                    )
+                                    setConfirmPassword(e.target.value)
                                 }
                                 placeholder="Re-enter your password"
                                 autoComplete="new-password"
+                                required
+                                minLength={8}
                                 className="h-11 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                             />
+
                         </div>
+
+                        {/* Submit Button */}
 
                         <button
                             type="submit"
-                            disabled={submitting}
+                            disabled={
+                                submitting ||
+                                !isValidProfessionalRole(
+                                    invitation.invitation.role
+                                )
+                            }
                             className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                         >
+
                             {submitting ? (
                                 <>
                                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -609,7 +737,9 @@ export default function InvitationPage() {
                             ) : (
                                 "Accept invitation & join workspace"
                             )}
+
                         </button>
+
                     </form>
 
                     <p className="mt-5 text-center text-xs leading-5 text-muted-foreground">
@@ -617,8 +747,11 @@ export default function InvitationPage() {
                         use NyayMitra according to your assigned
                         workspace permissions.
                     </p>
+
                 </div>
+
             </div>
+
         </main>
     );
 }
