@@ -31,13 +31,7 @@ import { premiumToast } from "@/lib/premium-toast";
 
 const API_URL = "https://nyaymitra-backend-production.up.railway.app";
 
-type MemberType =
-  | "employee"
-  | "lawyer"
-  | "CA"
-  | "CS"
-  | "consultant"
-  | "other";
+type ProfessionalRole = "lawyer" | "CA" | "CS";
 
 type WorkspaceRole =
   | "owner"
@@ -63,7 +57,6 @@ interface TeamMember {
   _id: string;
   business: string;
   user: User;
-  memberType: MemberType;
   workspaceRole: WorkspaceRole;
   permissions: string[];
   status: MemberStatus;
@@ -78,7 +71,7 @@ interface Invitation {
   _id: string;
   business: string;
   email: string;
-  memberType: MemberType;
+  role: ProfessionalRole;
   workspaceRole: Exclude<WorkspaceRole, "owner">;
   permissions: string[];
   invitedBy?: User;
@@ -105,16 +98,13 @@ interface TeamResponse {
   message?: string;
 }
 
-const MEMBER_TYPES: {
-  value: MemberType;
+const PROFESSIONAL_ROLES: {
+  value: ProfessionalRole;
   label: string;
 }[] = [
-    { value: "employee", label: "Employee" },
     { value: "lawyer", label: "Lawyer" },
     { value: "CA", label: "Chartered Accountant" },
     { value: "CS", label: "Company Secretary" },
-    { value: "consultant", label: "Consultant" },
-    { value: "other", label: "Other" },
   ];
 
 const WORKSPACE_ROLES: {
@@ -208,9 +198,11 @@ const getInitials = (name?: string) => {
     .join("");
 };
 
-const getMemberTypeLabel = (type: MemberType) => {
+const getProfessionalRoleLabel = (role?: string) => {
   return (
-    MEMBER_TYPES.find((item) => item.value === type)?.label || "Other"
+    PROFESSIONAL_ROLES.find((item) => item.value === role)?.label ||
+    role ||
+    "Unknown professional"
   );
 };
 
@@ -287,7 +279,6 @@ export default function TeamPage() {
 
       setError(message);
 
-      // ===== ERROR TOAST =====
       premiumToast.error("Could not load team", {
         description: message,
       });
@@ -336,7 +327,7 @@ export default function TeamPage() {
     return members.filter((member) => {
       const name = member.user?.fullName?.toLowerCase() || "";
       const email = member.user?.email?.toLowerCase() || "";
-      const memberType = member.memberType?.toLowerCase() || "";
+      const professionalRole = member.user?.role?.toLowerCase() || "";
       const workspaceRole =
         member.workspaceRole?.toLowerCase() || "";
 
@@ -344,7 +335,7 @@ export default function TeamPage() {
         !query ||
         name.includes(query) ||
         email.includes(query) ||
-        memberType.includes(query) ||
+        professionalRole.includes(query) ||
         workspaceRole.includes(query);
 
       const matchesRole =
@@ -353,7 +344,7 @@ export default function TeamPage() {
 
       const matchesType =
         typeFilter === "all" ||
-        member.memberType === typeFilter;
+        member.user.role === typeFilter;
 
       const matchesStatus =
         statusFilter === "all" ||
@@ -370,7 +361,7 @@ export default function TeamPage() {
 
   const handleInvite = async (payload: {
     email: string;
-    memberType: MemberType;
+    role: ProfessionalRole;
     workspaceRole: Exclude<WorkspaceRole, "owner">;
     permissions: string[];
   }) => {
@@ -406,7 +397,6 @@ export default function TeamPage() {
         "Team invitation created successfully."
       );
 
-      // ===== SUCCESS TOAST =====
       premiumToast.success("Invitation sent", {
         description: `An invite has been sent to ${payload.email}.`,
       });
@@ -422,7 +412,6 @@ export default function TeamPage() {
 
       setError(message);
 
-      // ===== ERROR TOAST =====
       premiumToast.error("Invitation failed", {
         description: message,
       });
@@ -435,7 +424,7 @@ export default function TeamPage() {
     memberId: string,
     payload: {
       workspaceRole?: Exclude<WorkspaceRole, "owner">;
-      memberType?: MemberType;
+      role?: ProfessionalRole;
       permissions?: string[];
     }
   ) => {
@@ -472,7 +461,6 @@ export default function TeamPage() {
         "Team member updated successfully."
       );
 
-      // ===== SUCCESS TOAST =====
       premiumToast.success("Member updated", {
         description: "Access and permissions have been saved.",
       });
@@ -488,7 +476,6 @@ export default function TeamPage() {
 
       setError(message);
 
-      // ===== ERROR TOAST =====
       premiumToast.error("Update failed", {
         description: message,
       });
@@ -645,7 +632,7 @@ export default function TeamPage() {
               onChange={setTypeFilter}
               options={[
                 { value: "all", label: "All Types" },
-                ...MEMBER_TYPES,
+                ...PROFESSIONAL_ROLES,
               ]}
             />
 
@@ -770,7 +757,7 @@ export default function TeamPage() {
               icon={<BriefcaseBusiness className="h-5 w-5" />}
               title="Professional Coverage"
               value={`${new Set(
-                activeMembers.map((member) => member.memberType)
+                activeMembers.map((member) => member.user.role)
               ).size} types`}
               description="Different professional types in your team"
             />
@@ -962,7 +949,7 @@ function TeamMemberCard({
         </Badge>
 
         <Badge variant="secondary">
-          {getMemberTypeLabel(member.memberType)}
+          {getProfessionalRoleLabel(member.user.role)}
         </Badge>
 
         <StatusBadge status={member.status} />
@@ -1088,8 +1075,8 @@ function Badge({
   return (
     <span
       className={`rounded-full px-2.5 py-1 text-xs font-medium ${variant === "primary"
-        ? "bg-primary/10 text-primary"
-        : "bg-muted text-muted-foreground"
+          ? "bg-primary/10 text-primary"
+          : "bg-muted text-muted-foreground"
         }`}
     >
       {children}
@@ -1159,7 +1146,7 @@ function InvitationRow({
 
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span>
-              {getMemberTypeLabel(invitation.memberType)}
+              {getProfessionalRoleLabel(invitation.role)}
             </span>
 
             <span>•</span>
@@ -1189,7 +1176,6 @@ function InvitationRow({
     </div>
   );
 }
-
 /* =========================================================
    INVITE MODAL
 ========================================================= */
@@ -1203,14 +1189,14 @@ function InviteMemberModal({
   onClose: () => void;
   onSubmit: (payload: {
     email: string;
-    memberType: MemberType;
+    role: ProfessionalRole;
     workspaceRole: Exclude<WorkspaceRole, "owner">;
     permissions: string[];
   }) => void;
 }) {
   const [email, setEmail] = useState("");
-  const [memberType, setMemberType] =
-    useState<MemberType>("employee");
+  const [professionalRole, setProfessionalRole] =
+    useState<ProfessionalRole>("lawyer");
 
   const [workspaceRole, setWorkspaceRole] =
     useState<Exclude<WorkspaceRole, "owner">>("member");
@@ -1257,7 +1243,7 @@ function InviteMemberModal({
 
     onSubmit({
       email: email.trim().toLowerCase(),
-      memberType,
+      role: professionalRole,
       workspaceRole,
       permissions,
     });
@@ -1344,28 +1330,28 @@ function InviteMemberModal({
                     )}
                   </Field>
 
-                  <Field label="Member type">
+                  <Field label="Professional role">
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {MEMBER_TYPES.map((type) => {
+                      {PROFESSIONAL_ROLES.map((type) => {
                         const active =
-                          memberType === type.value;
+                          professionalRole === type.value;
 
                         return (
                           <button
                             key={type.value}
                             type="button"
                             onClick={() =>
-                              setMemberType(type.value)
+                              setProfessionalRole(type.value)
                             }
                             className={`rounded-xl border px-3 py-3 text-left transition ${active
-                              ? "border-primary bg-primary/5 ring-1 ring-primary"
-                              : "border-border bg-background hover:border-primary/30 hover:bg-muted/40"
+                                ? "border-primary bg-primary/5 ring-1 ring-primary"
+                                : "border-border bg-background hover:border-primary/30 hover:bg-muted/40"
                               }`}
                           >
                             <div
                               className={`mb-2 flex h-7 w-7 items-center justify-center rounded-lg text-xs font-semibold ${active
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted text-muted-foreground"
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-muted text-muted-foreground"
                                 }`}
                             >
                               {type.label.charAt(0)}
@@ -1410,23 +1396,21 @@ function InviteMemberModal({
                             setWorkspaceRole(role.value)
                           }
                           className={`flex w-full items-center gap-4 rounded-xl border p-4 text-left transition ${active
-                            ? "border-primary bg-primary/5 ring-1 ring-primary"
-                            : "border-border hover:border-primary/30 hover:bg-muted/40"
+                              ? "border-primary bg-primary/5 ring-1 ring-primary"
+                              : "border-border hover:border-primary/30 hover:bg-muted/40"
                             }`}
                         >
                           <div
                             className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${active
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground"
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-muted-foreground"
                               }`}
                           >
                             {role.value === "admin" ? (
                               <Shield className="h-4 w-4" />
-                            ) : role.value ===
-                              "legal_manager" ? (
+                            ) : role.value === "legal_manager" ? (
                               <BriefcaseBusiness className="h-4 w-4" />
-                            ) : role.value ===
-                              "viewer" ? (
+                            ) : role.value === "viewer" ? (
                               <Eye className="h-4 w-4" />
                             ) : (
                               <Users className="h-4 w-4" />
@@ -1479,14 +1463,14 @@ function InviteMemberModal({
                           togglePermission(permission.key)
                         }
                         className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${checked
-                          ? "border-primary/30 bg-primary/5"
-                          : "border-border hover:bg-muted/40"
+                            ? "border-primary/30 bg-primary/5"
+                            : "border-border hover:bg-muted/40"
                           }`}
                       >
                         <div
                           className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${checked
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-background"
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border bg-background"
                             }`}
                         >
                           {checked && (
@@ -1613,13 +1597,13 @@ function EditMemberModal({
     memberId: string,
     payload: {
       workspaceRole?: Exclude<WorkspaceRole, "owner">;
-      memberType?: MemberType;
+      role?: ProfessionalRole;
       permissions?: string[];
     }
   ) => void;
 }) {
-  const [memberType, setMemberType] = useState<MemberType>(
-    member.memberType
+  const [professionalRole, setProfessionalRole] = useState<ProfessionalRole>(
+    (member.user.role as ProfessionalRole) || "lawyer"
   );
 
   const [workspaceRole, setWorkspaceRole] = useState<
@@ -1646,7 +1630,7 @@ function EditMemberModal({
     event.preventDefault();
 
     onSubmit(member._id, {
-      memberType,
+      role: professionalRole,
       workspaceRole,
       permissions,
     });
@@ -1736,13 +1720,13 @@ function EditMemberModal({
               />
 
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <Field label="Member type">
+                <Field label="Professional role">
                   <Select
-                    value={memberType}
+                    value={professionalRole}
                     onChange={(value) =>
-                      setMemberType(value as MemberType)
+                      setProfessionalRole(value as ProfessionalRole)
                     }
-                    options={MEMBER_TYPES}
+                    options={PROFESSIONAL_ROLES}
                   />
                 </Field>
 
@@ -1850,8 +1834,6 @@ function EditMemberModal({
     </div>
   );
 }
-
-
 /* =========================================================
    VIEW MEMBER DRAWER
 ========================================================= */
@@ -1939,7 +1921,7 @@ function ViewMemberModal({
                   </Badge>
 
                   <Badge variant="secondary">
-                    {getMemberTypeLabel(member.memberType)}
+                    {getProfessionalRoleLabel(member.user.role)}
                   </Badge>
 
                   <StatusBadge status={member.status} />
@@ -1968,8 +1950,8 @@ function ViewMemberModal({
               />
 
               <InfoItem
-                label="Member type"
-                value={getMemberTypeLabel(member.memberType)}
+                label="Professional role"
+                value={getProfessionalRoleLabel(member.user.role)}
               />
 
               <InfoItem
@@ -2071,6 +2053,7 @@ function ViewMemberModal({
     </div>
   );
 }
+
 /* =========================================================
    PERMISSIONS
 ========================================================= */
@@ -2104,8 +2087,8 @@ function PermissionSelector({
             <label
               key={permission.key}
               className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition ${checked
-                ? "border-primary/30 bg-primary/5"
-                : "border-border hover:bg-muted/50"
+                  ? "border-primary/30 bg-primary/5"
+                  : "border-border hover:bg-muted/50"
                 }`}
             >
               <input
