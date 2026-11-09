@@ -82,8 +82,8 @@ export function LoginForm() {
             router.push('/admin-dashboard')
           } else if (
             userRole === 'lawyer' ||
-            userRole === 'attorney' ||
-            userRole === 'legal'
+            userRole === 'CA' ||
+            userRole === 'CS'
           ) {
             router.push('/lawyer-dashboard')
           } else if (
