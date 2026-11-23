@@ -1,4 +1,3 @@
-
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
@@ -20,6 +19,7 @@ import {
   Menu,
   X,
   HelpCircle,
+  Scale,
 } from 'lucide-react'
 
 // ============================================
@@ -334,7 +334,7 @@ export function Sidebar() {
           <div className="flex items-center gap-3">
 
             <div className="w-11 h-11 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl flex items-center justify-center shadow-lg shadow-amber-500/20">
-              <BrainCircuit
+              <Scale
                 className="w-6 h-6 text-white"
                 strokeWidth={1.8}
               />
