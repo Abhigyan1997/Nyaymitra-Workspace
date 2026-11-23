@@ -85,6 +85,13 @@ export interface Pagination {
     limit: number;
     total: number;
     pages: number;
+    /**
+     * Provided by some endpoints alongside `pages`.
+     * Kept optional so existing code that reads `pages` still works.
+     */
+    totalPages?: number;
+    hasNextPage?: boolean;
+    hasPrevPage?: boolean;
 }
 
 
@@ -775,6 +782,84 @@ export interface FileUrlResponse {
     url: string;
 
     expiresIn?: number;
+
+}
+
+// ============================================================
+// AI CONTRACT INTELLIGENCE
+// ============================================================
+
+export interface EvidenceVerification {
+    verified: boolean;
+    reason?: string;
+    [key: string]: unknown;
+}
+
+export interface AIUsage {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    [key: string]: unknown;
+}
+
+export interface AIMetadata {
+    provider?: string;
+    model?: string;
+    promptVersion?: string;
+    usage?: AIUsage;
+    analyzedAt?: string;
+    [key: string]: unknown;
+}
+
+export interface LawyerReview {
+    status:
+    | "Not Reviewed"
+    | "In Review"
+    | "Approved"
+    | "Changes Requested";
+    reviewer?: string;
+    reviewedAt?: string;
+    comments?: string;
+    [key: string]: unknown;
+}
+
+export interface AIContractAnalysisRecord {
+    _id: string;
+    business: string;
+    contract: string;
+    contractVersion: string;
+    document: string;
+    analyzedBy: string;
+
+    status:
+    | "Processing"
+    | "Pending"
+    | "Queued"
+    | "Completed"
+    | "Failed";
+
+    analysis: Record<string, unknown> | null;
+
+    /**
+     * Optional lawyer review attached to the analysis.
+     * Present once a lawyer has touched the report.
+     */
+    lawyerReview?: LawyerReview;
+
+    source: {
+        fileName?: string;
+        mimeType?: string;
+        fileSize?: number;
+        characterCount?: number;
+        contentHash?: string;
+    };
+
+    aiMetadata?: AIMetadata;
+
+    errorMessage?: string;
+
+    createdAt: string;
+    updatedAt: string;
 }
 
 
@@ -1804,6 +1889,39 @@ class ContractService {
     // CONTRACT VERSIONS - R2
     // ==========================================================
 
+    async getContractVersions(
+        contractId: string
+    ): Promise<ContractVersion[]> {
+        if (!contractId) {
+            throw new Error("Contract ID is required.");
+        }
+
+        const response = await fetch(
+            `${CONTRACTS_URL}/${contractId}/versions`,
+            {
+                method: "GET",
+                headers: getHeaders(),
+            }
+        );
+
+        const result = await handleResponse<
+            ContractVersion[] | { versions?: ContractVersion[] }
+        >(
+            response,
+            "Failed to fetch contract versions"
+        );
+
+        if (Array.isArray(result)) {
+            return result;
+        }
+
+        return Array.isArray(result?.versions)
+            ? result.versions
+            : [];
+    }
+
+
+
     async getVersionUploadUrl(
         contractId: string,
         data: {
@@ -1872,6 +1990,140 @@ class ContractService {
         );
     }
 
+    // ==========================================================
+    // AI CONTRACT ANALYSIS
+    // ==========================================================
+
+    /**
+     * POST to kick off an AI analysis for a specific contract version.
+     *
+     * Existing helper kept for backward compatibility with callers
+     * that use `analyzeContractVersion`.
+     */
+    async analyzeContractVersion(
+        contractId: string,
+        versionId: string
+    ): Promise<AIContractAnalysisRecord> {
+        if (!contractId) {
+            throw new Error("Contract ID is required.");
+        }
+
+        if (!versionId) {
+            throw new Error("Contract version ID is required.");
+        }
+
+        const response = await fetch(
+            `${CONTRACTS_URL}/${contractId}/versions/${versionId}/analyze`,
+            {
+                method: "POST",
+                headers: getHeaders(),
+            }
+        );
+
+        return handleResponse<AIContractAnalysisRecord>(
+            response,
+            "Failed to analyze contract"
+        );
+    }
+
+    /**
+     * POST to kick off an AI analysis.
+     *
+     * Alias expected by the Contract Intelligence page
+     * (`contractService.analyzeContract(contractId, versionId)`).
+     *
+     * The page treats network/timeout failures as non-fatal and keeps
+     * polling `getContractAnalysis`, so we don't need a custom timeout
+     * here — but we forward an `AbortSignal` friendly signature through
+     * the browser fetch API.
+     */
+    async analyzeContract(
+        contractId: string,
+        versionId: string
+    ): Promise<{ data: AIContractAnalysisRecord }> {
+        if (!contractId) {
+            throw new Error("Contract ID is required.");
+        }
+
+        if (!versionId) {
+            throw new Error("Contract version ID is required.");
+        }
+
+        const response = await fetch(
+            `${CONTRACTS_URL}/${contractId}/versions/${versionId}/analyze`,
+            {
+                method: "POST",
+                headers: getHeaders(),
+            }
+        );
+
+        const record =
+            await handleResponse<AIContractAnalysisRecord>(
+                response,
+                "Failed to analyze contract"
+            );
+
+        return { data: record };
+    }
+
+    /**
+     * GET the latest AI analysis for a specific contract version.
+     *
+     * Existing helper kept for backward compatibility.
+     */
+    async getContractVersionAnalysis(
+        contractId: string,
+        versionId: string
+    ): Promise<AIContractAnalysisRecord> {
+        return handleResponse<AIContractAnalysisRecord>(
+            await fetch(
+                `${CONTRACTS_URL}/${contractId}/versions/${versionId}/analysis`,
+                {
+                    method: "GET",
+                    headers: getHeaders(),
+                }
+            ),
+            "Failed to get contract version analysis"
+        );
+    }
+
+    /**
+     * GET the latest AI analysis, wrapped as `{ data }`.
+     *
+     * Alias expected by the Contract Intelligence page
+     * (`contractService.getContractAnalysis(contractId, versionId)`).
+     *
+     * The page treats a thrown error as "not analyzed yet" (returns null),
+     * so a 404 here is fine.
+     */
+    async getContractAnalysis(
+        contractId: string,
+        versionId: string
+    ): Promise<{ data: AIContractAnalysisRecord }> {
+        if (!contractId) {
+            throw new Error("Contract ID is required.");
+        }
+
+        if (!versionId) {
+            throw new Error("Contract version ID is required.");
+        }
+
+        const response = await fetch(
+            `${CONTRACTS_URL}/${contractId}/versions/${versionId}/analysis`,
+            {
+                method: "GET",
+                headers: getHeaders(),
+            }
+        );
+
+        const record =
+            await handleResponse<AIContractAnalysisRecord>(
+                response,
+                "Failed to get contract version analysis"
+            );
+
+        return { data: record };
+    }
 
     // ==========================================================
     // FINAL FILES - R2

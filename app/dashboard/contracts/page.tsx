@@ -6,7 +6,7 @@ import Link from "next/link"
 import {
     AlertTriangle, ArrowUpRight, Building2, CalendarClock, ChevronDown, ChevronUp,
     ClipboardList, FileText, FileUp, LayoutGrid, List, Mail, MapPin, Phone, Plus,
-    RefreshCw, Search, ShieldCheck, Upload, User, X,
+    RefreshCw, Search, ShieldCheck, Trash2, Upload, User, X,
 } from "lucide-react"
 
 import { NewRequestModal, PriorityBadge, StatusBadge } from "@/components/contracts/contracts"
@@ -88,6 +88,81 @@ function DateCell({ value, label }: { value?: string | null; label?: string }) {
         <div className="leading-tight">
             <div className={`text-sm ${tone}`}>{formatContractDate(value)}</div>
             {hint && <div className={`text-xs ${d <= 30 ? tone : "text-zinc-500"} opacity-90`}>{hint}</div>}
+        </div>
+    )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Delete-confirm modal                                                        */
+/* -------------------------------------------------------------------------- */
+
+function DeleteContractModal({ contract, busy, onCancel, onConfirm }: {
+    contract: Contract | null
+    busy: boolean
+    onCancel: () => void
+    onConfirm: () => void
+}) {
+    const [typed, setTyped] = useState("")
+
+    useEffect(() => { setTyped("") }, [contract])
+
+    useEffect(() => {
+        if (!contract) return
+        const h = (e: KeyboardEvent) => e.key === "Escape" && !busy && onCancel()
+        window.addEventListener("keydown", h)
+        return () => window.removeEventListener("keydown", h)
+    }, [contract, busy, onCancel])
+
+    if (!contract) return null
+
+    const confirmPhrase = contract.title || contract.contractNumber || ""
+    const canDelete = typed.trim() === confirmPhrase.trim()
+
+    return (
+        <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+            onMouseDown={(e) => e.target === e.currentTarget && !busy && onCancel()}
+        >
+            <div role="dialog" aria-modal="true" aria-labelledby="delete-title"
+                className="w-full max-w-md rounded-2xl border border-red-900/40 bg-zinc-950 shadow-2xl">
+                <div className="flex items-start gap-3 border-b border-zinc-800 p-5">
+                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-2 text-red-400">
+                        <Trash2 className="size-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <h2 id="delete-title" className="text-base font-semibold text-white">Delete this contract?</h2>
+                        <p className="mt-1 text-sm text-zinc-400">
+                            This will permanently remove <span className="font-medium text-white">{confirmPhrase}</span> and its versions, comments and analysis. This cannot be undone.
+                        </p>
+                    </div>
+                    <button type="button" onClick={onCancel} disabled={busy} aria-label="Close"
+                        className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-900 hover:text-white disabled:opacity-50"><X className="size-4" /></button>
+                </div>
+                <div className="space-y-3 p-5">
+                    <label className="block text-sm text-zinc-300">
+                        Type <span className="font-mono text-xs text-white">{confirmPhrase}</span> to confirm
+                        <input
+                            value={typed}
+                            onChange={(e) => setTyped(e.target.value)}
+                            disabled={busy}
+                            autoFocus
+                            className="mt-1.5 h-10 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none focus:border-red-500/60 disabled:opacity-60"
+                            placeholder={confirmPhrase}
+                        />
+                    </label>
+                </div>
+                <div className="flex items-center justify-end gap-2 border-t border-zinc-800 p-4">
+                    <button type="button" onClick={onCancel} disabled={busy}
+                        className="rounded-xl px-4 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white disabled:opacity-50">
+                        Cancel
+                    </button>
+                    <button type="button" onClick={onConfirm} disabled={busy || !canDelete}
+                        className="inline-flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50">
+                        {busy ? <RefreshCw className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                        {busy ? "Deleting…" : "Delete contract"}
+                    </button>
+                </div>
+            </div>
         </div>
     )
 }
@@ -233,7 +308,11 @@ function ContactLine({ icon: Icon, children }: { icon: typeof Mail; children: Re
     return <div className="flex items-start gap-2.5 text-sm text-zinc-300"><Icon className="mt-0.5 size-4 shrink-0 text-zinc-500" /><span className="min-w-0 break-words">{children}</span></div>
 }
 
-function DetailDrawer({ selected, onClose }: { selected: Selected; onClose: () => void }) {
+function DetailDrawer({ selected, onClose, onRequestDelete }: {
+    selected: Selected
+    onClose: () => void
+    onRequestDelete: (c: Contract) => void
+}) {
     useEffect(() => {
         if (!selected) return
         const h = (e: KeyboardEvent) => e.key === "Escape" && onClose()
@@ -299,11 +378,18 @@ function DetailDrawer({ selected, onClose }: { selected: Selected; onClose: () =
                             )}
                         </div>
 
-                        <div className="mt-auto border-t border-zinc-800 p-6">
+                        <div className="mt-auto flex flex-col gap-2 border-t border-zinc-800 p-6">
                             <Link href={`/dashboard/contracts/${c._id}`}
                                 className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-yellow-400 px-4 py-3 text-sm font-semibold text-black hover:bg-yellow-300">
                                 Open full contract <ArrowUpRight className="size-4" />
                             </Link>
+                            <button
+                                type="button"
+                                onClick={() => onRequestDelete(c)}
+                                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/30 px-4 py-3 text-sm font-semibold text-red-300 hover:bg-red-500/10"
+                            >
+                                <Trash2 className="size-4" /> Delete contract
+                            </button>
                         </div>
                     </>)
                 })() : (() => {
@@ -414,6 +500,10 @@ export default function ContractsPage() {
     const [error, setError] = useState<string | null>(null)
     const [creatingRequest, setCreatingRequest] = useState(false)
 
+    // delete state
+    const [deleteTarget, setDeleteTarget] = useState<Contract | null>(null)
+    const [deleting, setDeleting] = useState(false)
+
     const loadData = useCallback(async () => {
         try {
             setLoading(true); setError(null)
@@ -507,6 +597,29 @@ export default function ContractsPage() {
 
     const handleUploaded = (created: Contract) => {
         setContracts((cur) => [created, ...cur]); setView("contracts"); clearFilters()
+    }
+
+    const requestDelete = (c: Contract) => {
+        setDeleteTarget(c)
+        setSelected(null) // close drawer if it was open
+    }
+
+    const confirmDelete = async () => {
+        if (!deleteTarget) return
+        const target = deleteTarget
+        try {
+            setDeleting(true)
+            await contractService.deleteContract(target._id)
+            setContracts((cur) => cur.filter((c) => c._id !== target._id))
+            setDeleteTarget(null)
+            premiumToast.success("Contract deleted", {
+                description: `${target.title || target.contractNumber} has been removed.`,
+            })
+        } catch (err) {
+            console.error("Failed to delete contract:", err)
+            const message = err instanceof Error ? err.message : "Failed to delete contract."
+            premiumToast.error("Delete failed", { description: message })
+        } finally { setDeleting(false) }
     }
 
     const shown = view === "contracts" ? filteredContracts.length : filteredRequests.length
@@ -614,31 +727,45 @@ export default function ContractsPage() {
                             {filteredContracts.map((c) => {
                                 const cp = cpOf(c)
                                 return (
-                                    <button key={c._id} onClick={() => setSelected({ kind: "contract", item: c })}
-                                        className="flex flex-col rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-left transition hover:border-yellow-400/40">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <h3 className="truncate font-medium text-white">{c.title}</h3>
-                                                <p className="mt-0.5 text-xs text-zinc-500">{c.contractNumber} · {c.contractType}</p>
+                                    <div key={c._id} className="group relative flex flex-col rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-left transition hover:border-yellow-400/40">
+                                        <button
+                                            type="button"
+                                            onClick={() => requestDelete(c)}
+                                            aria-label={`Delete ${c.title}`}
+                                            title="Delete contract"
+                                            className="absolute right-2 top-2 z-10 rounded-lg border border-transparent p-1.5 text-zinc-500 opacity-0 transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 focus:opacity-100 group-hover:opacity-100"
+                                        >
+                                            <Trash2 className="size-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelected({ kind: "contract", item: c })}
+                                            className="flex flex-1 flex-col text-left"
+                                        >
+                                            <div className="flex items-start justify-between gap-3 pr-8">
+                                                <div className="min-w-0">
+                                                    <h3 className="truncate font-medium text-white">{c.title}</h3>
+                                                    <p className="mt-0.5 text-xs text-zinc-500">{c.contractNumber} · {c.contractType}</p>
+                                                </div>
+                                                <StatusBadge status={c.status} />
                                             </div>
-                                            <StatusBadge status={c.status} />
-                                        </div>
-                                        <div className="mt-4 space-y-1.5">
-                                            <ContactLine icon={Building2}>{cp.company || cp.name || "No counterparty"}</ContactLine>
-                                            {cp.email && <ContactLine icon={Mail}>{cp.email}</ContactLine>}
-                                            {cp.phone && <ContactLine icon={Phone}>{cp.phone}</ContactLine>}
-                                        </div>
-                                        <div className="mt-4 flex items-center justify-between border-t border-zinc-900 pt-3 text-sm">
-                                            <span className="font-medium text-zinc-100">{money(c.contractValue, c.currency)}</span>
-                                            <span className="flex items-center gap-1.5 text-xs text-zinc-500"><CalendarClock className="size-3.5" />{formatContractDate(c.expiryDate)}</span>
-                                        </div>
-                                    </button>
+                                            <div className="mt-4 space-y-1.5">
+                                                <ContactLine icon={Building2}>{cp.company || cp.name || "No counterparty"}</ContactLine>
+                                                {cp.email && <ContactLine icon={Mail}>{cp.email}</ContactLine>}
+                                                {cp.phone && <ContactLine icon={Phone}>{cp.phone}</ContactLine>}
+                                            </div>
+                                            <div className="mt-4 flex items-center justify-between border-t border-zinc-900 pt-3 text-sm">
+                                                <span className="font-medium text-zinc-100">{money(c.contractValue, c.currency)}</span>
+                                                <span className="flex items-center gap-1.5 text-xs text-zinc-500"><CalendarClock className="size-3.5" />{formatContractDate(c.expiryDate)}</span>
+                                            </div>
+                                        </button>
+                                    </div>
                                 )
                             })}
                         </div>
                     ) : view === "contracts" ? (
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[1100px] text-sm">
+                            <table className="w-full min-w-[1160px] text-sm">
                                 <thead className={thead}>
                                     <tr>
                                         <SortHead label="Contract" k="title" sort={sort} setSort={setSort} />
@@ -648,6 +775,9 @@ export default function ContractsPage() {
                                         <th className="px-4 py-3 text-left font-medium">Priority</th>
                                         <SortHead label="Value" k="value" sort={sort} setSort={setSort} />
                                         <SortHead label="Expires" k="expiryDate" sort={sort} setSort={setSort} />
+                                        <th scope="col" className="px-2 py-3 text-right font-medium">
+                                            <span className="sr-only">Actions</span>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-zinc-900">
@@ -676,6 +806,17 @@ export default function ContractsPage() {
                                                 <td className="px-4 py-3.5"><PriorityBadge priority={c.priority} /></td>
                                                 <td className="px-4 py-3.5 tabular-nums text-zinc-200">{money(c.contractValue, c.currency)}</td>
                                                 <td className="px-4 py-3.5"><DateCell value={c.expiryDate} label={c.renewalDate ? `Renews ${formatContractDate(c.renewalDate)}` : undefined} /></td>
+                                                <td className="px-2 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => requestDelete(c)}
+                                                        aria-label={`Delete ${c.title}`}
+                                                        title="Delete contract"
+                                                        className="inline-flex rounded-lg border border-transparent p-1.5 text-zinc-500 transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300"
+                                                    >
+                                                        <Trash2 className="size-4" />
+                                                    </button>
+                                                </td>
                                             </tr>
                                         )
                                     })}
@@ -731,7 +872,8 @@ export default function ContractsPage() {
 
             <NewRequestModal open={showRequestModal} onClose={() => { if (!creatingRequest) setShowRequestModal(false) }} onCreated={handleCreateRequest} />
             <UploadContractModal open={showUploadModal} onClose={() => setShowUploadModal(false)} onUploaded={handleUploaded} />
-            <DetailDrawer selected={selected} onClose={() => setSelected(null)} />
+            <DetailDrawer selected={selected} onClose={() => setSelected(null)} onRequestDelete={requestDelete} />
+            <DeleteContractModal contract={deleteTarget} busy={deleting} onCancel={() => !deleting && setDeleteTarget(null)} onConfirm={confirmDelete} />
         </main>
     )
 }

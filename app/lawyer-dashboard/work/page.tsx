@@ -511,31 +511,6 @@ function normalizePriority(
     }
 }
 
-function toApiStatus(
-    value: WorkStatus
-): string {
-    switch (value) {
-        case 'In Progress':
-            return 'in-progress'
-
-        case 'Completed':
-            return 'completed'
-
-        case 'Overdue':
-            return 'overdue'
-
-        case 'Cancelled':
-            return 'cancelled'
-
-        case 'Blocked':
-            return 'blocked'
-
-        case 'Pending':
-        default:
-            return 'pending'
-    }
-}
-
 function extractWorkList(
     payload: unknown
 ): unknown[] {
@@ -1244,9 +1219,6 @@ export default function LawyerMyWorkPage() {
     const [refreshing, setRefreshing] =
         useState(false)
 
-    const [statusUpdating, setStatusUpdating] =
-        useState(false)
-
     const [error, setError] =
         useState<string | null>(null)
 
@@ -1527,101 +1499,6 @@ export default function LawyerMyWorkPage() {
             items,
         ]
     )
-
-    // =====================================================
-    // PATCH /lawyer/work/:workId/status
-    // =====================================================
-
-    const updateStatus = async (
-        status: WorkStatus
-    ) => {
-        if (!selectedId) {
-            return
-        }
-
-        try {
-            setStatusUpdating(
-                true
-            )
-
-            await apiRequest<
-                ApiResponse<unknown>
-            >(
-                `/lawyer/work/${selectedId}/status`,
-                {
-                    method: 'PATCH',
-                    body: JSON.stringify(
-                        {
-                            status:
-                                toApiStatus(
-                                    status
-                                ),
-                        }
-                    ),
-                }
-            )
-
-            setItems(
-                (current) =>
-                    current.map(
-                        (item) =>
-                            item.id ===
-                                selectedId
-                                ? {
-                                    ...item,
-                                    status,
-                                }
-                                : item
-                    )
-            )
-
-            setSelectedItem(
-                (current) =>
-                    current
-                        ? {
-                            ...current,
-                            status,
-                        }
-                        : current
-            )
-
-            await fetchWorkActivity(
-                selectedId
-            )
-
-            // ===== SUCCESS TOAST =====
-            if (status === 'Completed') {
-                premiumToast.success('Work completed', {
-                    description: selectedItem?.title || 'Work item',
-                })
-            } else {
-                premiumToast.success('Status updated', {
-                    description: `Marked as ${status}.`,
-                })
-            }
-        } catch (err) {
-            console.error(
-                'Update lawyer work status error:',
-                err
-            )
-
-            const message =
-                err instanceof Error
-                    ? err.message
-                    : 'Failed to update work status.'
-
-            window.alert(message)
-
-            // ===== ERROR TOAST =====
-            premiumToast.error('Status update failed', {
-                description: message,
-            })
-        } finally {
-            setStatusUpdating(
-                false
-            )
-        }
-    }
 
     // =====================================================
     // INITIAL LOAD
@@ -2295,12 +2172,6 @@ export default function LawyerMyWorkPage() {
                             activityError={
                                 activityError
                             }
-                            statusUpdating={
-                                statusUpdating
-                            }
-                            onStatusChange={
-                                updateStatus
-                            }
                             onViewClient={
                                 handleViewClient
                             }
@@ -2371,12 +2242,6 @@ export default function LawyerMyWorkPage() {
                                     }
                                     activityError={
                                         activityError
-                                    }
-                                    statusUpdating={
-                                        statusUpdating
-                                    }
-                                    onStatusChange={
-                                        updateStatus
                                     }
                                     onViewClient={
                                         handleViewClient
@@ -2506,16 +2371,12 @@ function WorkDetails({
     activities,
     activityLoading,
     activityError,
-    statusUpdating,
-    onStatusChange,
     onViewClient,
 }: {
     item: WorkItem | null
     activities: WorkActivity[]
     activityLoading: boolean
     activityError: string | null
-    statusUpdating: boolean
-    onStatusChange: (status: WorkStatus) => void
     onViewClient: () => void
 }) {
     const [activeTab, setActiveTab] = useState<DetailTab>('overview')
@@ -2533,14 +2394,6 @@ function WorkDetails({
             </div>
         )
     }
-
-    const statusOptions: WorkStatus[] = [
-        'Pending',
-        'In Progress',
-        'Completed',
-        'Overdue',
-        'Cancelled',
-    ]
 
     return (
         <motion.div
@@ -2625,49 +2478,7 @@ function WorkDetails({
                     </p>
 
                     <div className="mt-2">
-                        <select
-                            value={
-                                item.status
-                            }
-                            onChange={(
-                                e
-                            ) =>
-                                onStatusChange(
-                                    e.target
-                                        .value as WorkStatus
-                                )
-                            }
-                            disabled={
-                                statusUpdating
-                            }
-                            className="w-full rounded-lg border border-white/[0.07] bg-[#0b0e12] px-2 py-2 text-xs text-white outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            {statusOptions.map(
-                                (
-                                    status
-                                ) => (
-                                    <option
-                                        key={
-                                            status
-                                        }
-                                        value={
-                                            status
-                                        }
-                                    >
-                                        {
-                                            status
-                                        }
-                                    </option>
-                                )
-                            )}
-                        </select>
-
-                        {statusUpdating && (
-                            <div className="mt-2 flex items-center gap-1.5 text-[10px] text-zinc-600">
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                                Updating...
-                            </div>
-                        )}
+                        <StatusBadge status={item.status} />
                     </div>
                 </div>
 
@@ -2711,28 +2522,7 @@ function WorkDetails({
             </div>
 
             {/* Quick actions */}
-            <div className="grid grid-cols-2 gap-2">
-                <button
-                    type="button"
-                    onClick={() =>
-                        onStatusChange(
-                            item.status ===
-                                'Completed'
-                                ? 'Pending'
-                                : 'Completed'
-                        )
-                    }
-                    disabled={
-                        statusUpdating
-                    }
-                    className="rounded-xl bg-blue-500/10 py-3 text-xs font-medium text-blue-400 ring-1 ring-blue-400/20 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                    {item.status ===
-                        'Completed'
-                        ? 'Reopen Work'
-                        : 'Mark Completed'}
-                </button>
-
+            <div className="grid grid-cols-1 gap-2">
                 <button
                     type="button"
                     onClick={
