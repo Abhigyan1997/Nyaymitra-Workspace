@@ -685,7 +685,7 @@ function FocusPanel({
                             </div>
                         )}
 
-                        <div className="grid grid-cols-2 gap-2">
+                        {/* <div className="grid grid-cols-2 gap-2">
                             <div className="rounded-md border border-zinc-800 bg-zinc-950/50 p-3">
                                 <p className="text-[10px] uppercase tracking-wider text-zinc-500">Evidence</p>
                                 <p className="mt-1 text-base font-semibold text-zinc-100">
@@ -698,7 +698,7 @@ function FocusPanel({
                                     {(item.analysis?.aiMetadata?.usage?.total_tokens ?? 0).toLocaleString("en-IN")}
                                 </p>
                             </div>
-                        </div>
+                        </div> */}
 
                         {risks.length > 0 && (
                             <div>
