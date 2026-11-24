@@ -33,6 +33,7 @@ type AnalysisData = {
 };
 
 type RiskLevel = "High" | "Medium" | "Low" | "None" | "Unknown";
+type Tab = "overview" | "risks" | "clauses" | "obligations" | "details" | "parties";
 
 interface Item {
     contract: Contract;
@@ -56,6 +57,16 @@ const STAGES = [
     { at: 170, label: "Checking evidence", hint: "Matching to source text" },
     { at: 250, label: "Saving report", hint: "Writing to your workspace" },
 ];
+
+/* ------------------------------ design tokens ------------------------------ */
+/*  ink #000000 · panel #0E0E10 · raised #161618 · rule #26262A · seal #F59E0B  */
+
+const btnPrimary =
+    "inline-flex items-center justify-center gap-2 rounded-md bg-gradient-to-b from-[#F59E0B] to-[#D97706] px-3.5 py-2 text-sm font-semibold text-[#000000] shadow-[0_6px_20px_-6px_rgba(245,158,11,0.45)] transition hover:from-[#FBBF24] hover:to-[#F59E0B] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F59E0B] disabled:cursor-not-allowed disabled:opacity-50";
+const btnGhost =
+    "inline-flex items-center justify-center gap-2 rounded-md border border-[#26262A] px-3.5 py-2 text-sm text-neutral-200 transition hover:border-[#3F3F46] hover:bg-[#161618] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F59E0B] disabled:cursor-not-allowed disabled:opacity-50";
+const panel = "rounded-xl border border-[#26262A] bg-[#0E0E10] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]";
+const label = "text-xs font-medium text-neutral-300";
 
 /* ------------------------------- helpers ---------------------------------- */
 
@@ -104,6 +115,20 @@ function riskLevel(a: AIContractAnalysisRecord | null): RiskLevel {
     return "None";
 }
 
+function exposureScore(c: ReturnType<typeof riskCounts>) {
+    return c.total
+        ? Math.round(((c.high * 3 + c.medium * 2 + c.low) / (c.total * 3)) * 100)
+        : 0;
+}
+
+function stanceOf(c: ReturnType<typeof riskCounts>) {
+    if (c.high >= 1)
+        return { title: "Needs lawyer review", note: "High-risk terms found. Resolve these before signing.", tone: "text-rose-300", ring: "#fb7185" };
+    if (c.medium >= 1)
+        return { title: "Negotiate first", note: "No red flags, but some terms favour the other side.", tone: "text-orange-300", ring: "#fb923c" };
+    return { title: "Looks clean", note: "Only minor or no risks flagged. Still read the summary.", tone: "text-emerald-300", ring: "#34d399" };
+}
+
 function verification(a: AIContractAnalysisRecord | null) {
     const d = dataOf(a);
     if (!d) return { verified: 0, total: 0 };
@@ -122,33 +147,39 @@ function verification(a: AIContractAnalysisRecord | null) {
 }
 
 const riskTone: Record<RiskLevel, string> = {
-    High: "text-rose-400",
-    Medium: "text-amber-300",
-    Low: "text-emerald-400",
-    None: "text-emerald-400",
-    Unknown: "text-zinc-500",
+    High: "text-rose-300",
+    Medium: "text-orange-300",
+    Low: "text-emerald-300",
+    None: "text-emerald-300",
+    Unknown: "text-neutral-400",
 };
 
-const riskDot: Record<RiskLevel, string> = {
+const riskBar: Record<RiskLevel, string> = {
     High: "bg-rose-400",
-    Medium: "bg-amber-300",
+    Medium: "bg-orange-400",
     Low: "bg-emerald-400",
     None: "bg-emerald-400",
-    Unknown: "bg-zinc-600",
+    Unknown: "bg-[#2E2E33]",
 };
 
 const riskLabel: Record<RiskLevel, string> = {
-    High: "High",
-    Medium: "Medium",
-    Low: "Low",
-    None: "None",
+    High: "High risk",
+    Medium: "Medium risk",
+    Low: "Low risk",
+    None: "No risks found",
     Unknown: "Not analyzed",
 };
 
 const sevBorder: Record<string, string> = {
-    high: "border-l-rose-500",
-    medium: "border-l-amber-500",
-    low: "border-l-emerald-500",
+    high: "border-l-rose-400",
+    medium: "border-l-orange-400",
+    low: "border-l-emerald-400",
+};
+
+const sevText: Record<string, string> = {
+    high: "text-rose-300",
+    medium: "text-orange-300",
+    low: "text-emerald-300",
 };
 
 const fmtDate = (v: unknown) => {
@@ -178,7 +209,7 @@ function useElapsed(startedAt: number) {
     return s;
 }
 
-function useCountUp(target: number, duration = 900) {
+function useCountUp(target: number, duration = 700) {
     const [value, setValue] = useState(0);
     const fromRef = useRef(0);
 
@@ -190,8 +221,7 @@ function useCountUp(target: number, duration = 900) {
         const tick = (now: number) => {
             const t = Math.min(1, (now - start) / duration);
             const eased = 1 - Math.pow(1 - t, 3);
-            const next = Math.round(from + (target - from) * eased);
-            setValue(next);
+            setValue(Math.round(from + (target - from) * eased));
             if (t < 1) raf = requestAnimationFrame(tick);
             else fromRef.current = target;
         };
@@ -207,77 +237,51 @@ function useCountUp(target: number, duration = 900) {
 function Styles() {
     return (
         <style>{`
-      @keyframes ci-fade { from { opacity: 0 } to { opacity: 1 } }
-      @keyframes ci-scan { 0% { top: 0; opacity: 0 } 10% { opacity: 1 } 90% { opacity: 1 } 100% { top: calc(100% - 2px); opacity: 0 } }
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Sora:wght@400;500;600&display=swap");
+      .ci-root { font-family: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif; }
+      .ci-serif { font-family: "Sora", "Manrope", system-ui, sans-serif; letter-spacing: -0.015em; }
       .ci-fade { animation: ci-fade .2s ease both }
+      @keyframes ci-fade { from { opacity: 0 } to { opacity: 1 } }
+
+      /* scanning line used while an analysis is running */
       .ci-scan { animation: ci-scan 2.2s ease-in-out infinite }
+      @keyframes ci-scan { 0% { top: 0; opacity: 0 } 10% { opacity: 1 } 90% { opacity: 1 } 100% { top: calc(100% - 2px); opacity: 0 } }
 
-      @keyframes ci-stat-in {
-        from { opacity: 0; transform: translateY(10px) scale(.97) }
-        to   { opacity: 1; transform: translateY(0) scale(1) }
-      }
-      @keyframes ci-stat-sheen {
-        0%   { transform: translateX(-130%) }
-        55%  { transform: translateX(130%) }
-        100% { transform: translateX(130%) }
-      }
-      @keyframes ci-stat-pulse {
-        0%, 100% { opacity: .35; transform: scale(.85) }
-        50%      { opacity: .9; transform: scale(1.15) }
-      }
-      @keyframes ci-stat-glow {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(252,211,77,0) }
-        50%      { box-shadow: 0 0 18px -4px rgba(252,211,77,.25) }
-      }
+      /* the one orchestrated moment: contract map reveals left to right */
+      .ci-map { animation: ci-map 1.1s cubic-bezier(.65,0,.35,1) both }
+      @keyframes ci-map { from { clip-path: inset(0 100% 0 0) } to { clip-path: inset(0 0 0 0) } }
 
-      .ci-stat {
-        position: relative;
-        overflow: hidden;
-        animation: ci-stat-in .55s cubic-bezier(.22,.61,.36,1) both;
-        transition: border-color .25s ease, background-color .25s ease, transform .25s ease;
+      /* stage: soft gold light from the top edge plus a faint engineering grid */
+      .ci-stage {
+        background-image:
+          radial-gradient(ellipse 70% 40% at 50% -5%, rgba(245,158,11,.16), transparent 70%),
+          linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+        background-size: auto, 48px 48px, 48px 48px;
+        background-position: top center, top center, top center;
+        background-repeat: no-repeat, repeat-y, repeat-x;
       }
-      .ci-stat:hover {
-        border-color: rgba(252,211,77,.35);
-        transform: translateY(-2px);
-      }
-      .ci-stat::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(
-          100deg,
-          transparent 25%,
-          rgba(252,211,77,.06) 45%,
-          rgba(252,211,77,.16) 50%,
-          rgba(252,211,77,.06) 55%,
-          transparent 75%
-        );
-        transform: translateX(-130%);
-        animation: ci-stat-sheen 7s ease-in-out infinite;
-        pointer-events: none;
-      }
-      .ci-stat:hover::after { animation-duration: 2.2s; }
-      .ci-stat-value { font-variant-numeric: tabular-nums; }
-      .ci-stat-dot { animation: ci-stat-pulse 2.4s ease-in-out infinite; }
-      .ci-stat-glow { animation: ci-stat-glow 3.6s ease-in-out infinite; }
+      .ci-stage-fade { mask-image: linear-gradient(#000, transparent 520px); -webkit-mask-image: linear-gradient(#000, transparent 520px); }
+      .ci-hairline { position: relative; }
+      .ci-hairline::before { content: ""; position: absolute; left: 12%; right: 12%; top: -1px; height: 1px; background: linear-gradient(90deg, transparent, rgba(245,158,11,.8), transparent); }
+
+      @keyframes ci-ping { 0% { transform: scale(1); opacity: .6 } 80%,100% { transform: scale(2.4); opacity: 0 } }
+      .ci-ping { animation: ci-ping 2s ease-out infinite }
+      @keyframes ci-step { 0%,100% { opacity: 1 } 50% { opacity: .45 } }
+      .ci-step-live { animation: ci-step 1.6s ease-in-out infinite }
 
       @media (prefers-reduced-motion: reduce) {
-        .ci-fade, .ci-scan, .ci-stat, .ci-stat::after,
-        .ci-stat-dot, .ci-stat-glow { animation: none !important; }
+        .ci-fade, .ci-scan, .ci-map, .ci-ping, .ci-step-live { animation: none !important; }
       }
     `}</style>
     );
 }
 
-function RiskDot({ level, withLabel = true }: { level: RiskLevel; withLabel?: boolean }) {
+function RiskMark({ level, withLabel = true }: { level: RiskLevel; withLabel?: boolean }) {
     return (
         <span className="inline-flex items-center gap-1.5">
-            <span className={`h-1.5 w-1.5 rounded-full ${riskDot[level]}`} />
-            {withLabel && (
-                <span className={`text-[11px] uppercase tracking-wider ${riskTone[level]}`}>
-                    {riskLabel[level]}
-                </span>
-            )}
+            <span className={`h-2 w-2 rounded-full ${riskBar[level]}`} />
+            {withLabel && <span className={`text-xs font-medium ${riskTone[level]}`}>{riskLabel[level]}</span>}
         </span>
     );
 }
@@ -289,31 +293,130 @@ function ScanPanel({ startedAt }: { startedAt: number }) {
     const stage = STAGES[stageIdx];
 
     return (
-        <div className="flex items-start gap-3">
-            <div className="relative h-16 w-12 shrink-0 overflow-hidden rounded border border-zinc-800 bg-zinc-900 p-1.5">
-                {[70, 100, 85, 100, 60, 90].map((w, i) => (
-                    <div
+        <div className="ci-hairline overflow-hidden rounded-xl border border-[#26262A] bg-[#000000]/70">
+            <div className="flex items-start gap-4 p-4 sm:p-5">
+                <div className="relative h-24 w-[68px] shrink-0 overflow-hidden rounded border border-[#2E2E33] bg-[#161618] p-2">
+                    {[70, 100, 85, 100, 60, 90, 75, 95].map((w, i) => (
+                        <div key={i} className="mb-1.5 h-0.5 rounded-full bg-[#3F3F46]" style={{ width: `${w}%` }} />
+                    ))}
+                    <div className="ci-scan absolute inset-x-0 h-[2px] bg-[#F59E0B] shadow-[0_0_12px_rgba(245,158,11,0.8)]" />
+                </div>
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-3">
+                        <p className="ci-serif truncate text-base text-white">{stage.label}</p>
+                        <p className="shrink-0 text-xs tabular-nums text-neutral-300">{pct}%</p>
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-neutral-400">{stage.hint}</p>
+                    <div className="mt-3 h-1 overflow-hidden rounded-full bg-[#26262A]">
+                        <div className="h-full rounded-full bg-gradient-to-r from-[#F59E0B] to-[#FBBF24] transition-all duration-1000" style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-neutral-400">
+                        <span className="tabular-nums">{fmtClock(s)} elapsed</span>
+                        <span>About 5 min. You can leave this page.</span>
+                    </div>
+                </div>
+            </div>
+            <ol className="grid grid-cols-1 divide-y divide-[#26262A] border-t border-[#26262A] sm:grid-cols-5 sm:divide-x sm:divide-y-0">
+                {STAGES.map((st, i) => {
+                    const state = i < stageIdx ? "done" : i === stageIdx ? "live" : "next";
+                    return (
+                        <li key={st.label} className="flex items-center gap-2 px-3 py-2.5 sm:flex-col sm:items-start sm:gap-1">
+                            <span className="flex items-center gap-1.5">
+                                {state === "done" ? (
+                                    <CheckCircle2 size={13} className="text-emerald-400" />
+                                ) : state === "live" ? (
+                                    <span className="relative flex h-2.5 w-2.5">
+                                        <span className="ci-ping absolute inset-0 rounded-full bg-[#F59E0B]" />
+                                        <span className="relative h-2.5 w-2.5 rounded-full bg-[#F59E0B]" />
+                                    </span>
+                                ) : (
+                                    <CircleDashed size={13} className="text-neutral-500" />
+                                )}
+                            </span>
+                            <span className={`text-[11px] leading-tight ${state === "live" ? "ci-step-live font-medium text-white" : state === "done" ? "text-neutral-300" : "text-neutral-500"}`}>
+                                {st.label}
+                            </span>
+                        </li>
+                    );
+                })}
+            </ol>
+        </div>
+    );
+}
+
+/* ------------------------- contract map (signature) ------------------------ */
+/*  The contract drawn as one strip, a segment per clause, coloured by the      */
+/*  worst risk attached to it. Click a segment to jump to the detail.           */
+
+type Segment = { name: string; ref: string; rank: number };
+const RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
+const rankBar = ["bg-[#2E2E33]", "bg-emerald-400/80", "bg-orange-400", "bg-rose-400"];
+const rankName = ["No risk", "Low risk", "Medium risk", "High risk"];
+
+function buildSegments(a: AIContractAnalysisRecord | null): Segment[] {
+    const d = dataOf(a);
+    if (!d) return [];
+    const risks = d.risks ?? [];
+    const clauses = d.clauses ?? [];
+
+    const worst = (ref: string) =>
+        ref ? Math.max(0, ...risks.filter((r) => str(r.clauseReference) === ref).map((r) => RANK[sev(r)] ?? 0)) : 0;
+
+    const segs: Segment[] = clauses.map((c) => {
+        const ref = str(c.clauseReference);
+        return { name: str(c.title) || ref || "Clause", ref, rank: worst(ref) };
+    });
+
+    const known = new Set(segs.map((s) => s.ref).filter(Boolean));
+    risks.forEach((r) => {
+        const ref = str(r.clauseReference);
+        if (clauses.length && ref && known.has(ref)) return;
+        segs.push({ name: str(r.title) || ref || "Risk", ref, rank: RANK[sev(r)] ?? 0 });
+    });
+    return segs;
+}
+
+function ContractMap({
+    analysis, onPick, size = "md",
+}: {
+    analysis: AIContractAnalysisRecord | null;
+    onPick?: (t: Tab) => void;
+    size?: "sm" | "md";
+}) {
+    const segs = useMemo(() => buildSegments(analysis), [analysis]);
+    if (!segs.length) return null;
+    const flagged = segs.filter((s) => s.rank > 0).length;
+
+    return (
+        <div>
+            <div className="mb-2 flex items-baseline justify-between gap-3">
+                <p className={label}>Contract map</p>
+                <p className="text-[11px] text-neutral-400">
+                    {segs.length} {segs.length === 1 ? "clause" : "clauses"}, {flagged} flagged
+                </p>
+            </div>
+            <div className={`ci-map flex gap-[3px] ${size === "md" ? "h-9" : "h-6"}`}>
+                {segs.map((s, i) => (
+                    <button
                         key={i}
-                        className="mb-1 h-0.5 rounded-full bg-zinc-700"
-                        style={{ width: `${w}%` }}
+                        type="button"
+                        onClick={() => onPick?.(s.rank > 0 ? "risks" : "clauses")}
+                        title={`${s.ref ? `${s.ref}. ` : ""}${s.name}: ${rankName[s.rank]}`}
+                        aria-label={`${s.name}: ${rankName[s.rank]}`}
+                        className={`min-w-[3px] flex-1 rounded-[2px] transition hover:brightness-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F59E0B] ${rankBar[s.rank]} ${onPick ? "cursor-pointer" : "cursor-default"}`}
                     />
                 ))}
-                <div className="ci-scan absolute inset-x-0 h-[2px] bg-amber-300/80 shadow-[0_0_8px_rgba(252,211,77,0.6)]" />
             </div>
-            <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-zinc-100">{stage.label}</p>
-                <p className="mt-0.5 truncate text-xs text-zinc-500">{stage.hint}</p>
-                <div className="mt-2 h-1 overflow-hidden rounded-full bg-zinc-800">
-                    <div
-                        className="h-full rounded-full bg-amber-300 transition-all duration-1000"
-                        style={{ width: `${pct}%` }}
-                    />
+            {size === "md" && (
+                <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-neutral-400">
+                    {[3, 2, 1, 0].map((r) => (
+                        <span key={r} className="inline-flex items-center gap-1.5">
+                            <span className={`h-2 w-2 rounded-[2px] ${rankBar[r]}`} />
+                            {rankName[r]}
+                        </span>
+                    ))}
                 </div>
-                <div className="mt-1.5 flex items-center justify-between text-[10px] text-zinc-500">
-                    <span className="tabular-nums">{fmtClock(s)} elapsed</span>
-                    <span>~5 min</span>
-                </div>
-            </div>
+            )}
         </div>
     );
 }
@@ -321,49 +424,28 @@ function ScanPanel({ startedAt }: { startedAt: number }) {
 /* ---------------------------- stat card ----------------------------------- */
 
 function StatCard({
-    label,
-    value,
-    icon: Icon,
-    index = 0,
-    tone = "default",
+    label: text, value, icon: Icon, tone = "default",
 }: {
     label: string;
     value: number;
     icon: React.ElementType;
-    index?: number;
     tone?: "default" | "danger" | "success" | "warn";
 }) {
     const animated = useCountUp(value);
-
     const valueTone =
         tone === "danger" ? "text-rose-300"
             : tone === "success" ? "text-emerald-300"
-                : tone === "warn" ? "text-amber-200"
-                    : "text-zinc-100";
-
-    const dotTone =
-        tone === "danger" ? "bg-rose-400"
-            : tone === "success" ? "bg-emerald-400"
-                : tone === "warn" ? "bg-amber-300"
-                    : "bg-zinc-600";
-
+                : tone === "warn" ? "text-[#F59E0B]"
+                    : "text-white";
     return (
-        <div
-            className="ci-stat rounded-lg border border-zinc-800 bg-zinc-900/30 p-4"
-            style={{ animationDelay: `${index * 80}ms` }}
-        >
+        <div className={`${panel} p-4`}>
             <div className="flex items-center justify-between">
-                <p className="text-xs text-zinc-500">{label}</p>
-                <Icon size={14} className="text-zinc-600" />
+                <p className="text-xs text-neutral-300">{text}</p>
+                <Icon size={14} className="text-neutral-500" />
             </div>
-            <div className="mt-2 flex items-end gap-2">
-                <p className={`ci-stat-value text-2xl font-semibold ${valueTone}`}>
-                    {animated.toLocaleString("en-IN")}
-                </p>
-                {value > 0 && (
-                    <span className={`ci-stat-dot mb-1.5 h-1.5 w-1.5 rounded-full ${dotTone}`} />
-                )}
-            </div>
+            <p className={`ci-serif mt-2 text-3xl tabular-nums ${valueTone}`}>
+                {animated.toLocaleString("en-IN")}
+            </p>
         </div>
     );
 }
@@ -431,17 +513,17 @@ function UploadDialog({
     return (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
             <div className="ci-fade absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !busy && onClose()} />
-            <div className="ci-fade relative w-full max-w-md overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl">
-                <div className="flex items-start justify-between gap-3 border-b border-zinc-800 p-5">
+            <div className="ci-fade relative w-full max-w-md overflow-hidden rounded-xl border border-[#26262A] bg-[#0A0A0B] shadow-2xl">
+                <div className="flex items-start justify-between gap-3 border-b border-[#26262A] p-5">
                     <div>
-                        <h3 className="text-base font-semibold text-zinc-100">Upload a contract</h3>
-                        <p className="mt-0.5 text-xs text-zinc-500">PDF or DOCX. Max 25 MB.</p>
+                        <h3 className="ci-serif text-lg text-white">Upload a contract</h3>
+                        <p className="mt-0.5 text-xs text-neutral-400">PDF or DOCX, up to 25 MB.</p>
                     </div>
                     <button
                         onClick={onClose}
                         disabled={busy}
                         aria-label="Close"
-                        className="rounded-md p-1.5 text-zinc-500 transition hover:bg-zinc-900 hover:text-zinc-200 disabled:opacity-50"
+                        className="rounded-md p-1.5 text-neutral-400 transition hover:bg-[#161618] hover:text-white disabled:opacity-50"
                     >
                         <X size={16} />
                     </button>
@@ -449,8 +531,10 @@ function UploadDialog({
 
                 <div className="space-y-4 p-5">
                     <div
-                        className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-8 text-center transition ${drag ? "border-amber-300 bg-amber-300/5" : "border-zinc-700 hover:border-zinc-600"
-                            }`}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && inputRef.current?.click()}
+                        className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-8 text-center transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#F59E0B] ${drag ? "border-[#F59E0B] bg-[#F59E0B]/5" : "border-[#3F3F46] hover:border-[#55555C]"}`}
                         onClick={() => inputRef.current?.click()}
                         onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
                         onDragLeave={() => setDrag(false)}
@@ -460,14 +544,12 @@ function UploadDialog({
                             pickFile(e.dataTransfer.files?.[0] ?? null);
                         }}
                     >
-                        <FilePlus2 size={22} className="text-zinc-500" />
-                        <p className="mt-2 text-sm text-zinc-200">
+                        <FilePlus2 size={22} className="text-neutral-400" />
+                        <p className="mt-2 text-sm text-white">
                             {file ? file.name : "Drop a file here, or click to browse"}
                         </p>
-                        <p className="mt-0.5 text-xs text-zinc-500">
-                            {file
-                                ? `${(file.size / 1024 / 1024).toFixed(2)} MB`
-                                : "PDF, DOCX · up to 25 MB"}
+                        <p className="mt-0.5 text-xs text-neutral-400">
+                            {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "PDF or DOCX"}
                         </p>
                         <input
                             ref={inputRef}
@@ -479,35 +561,23 @@ function UploadDialog({
                     </div>
 
                     <label className="block">
-                        <span className="text-xs font-medium text-zinc-400">Title</span>
+                        <span className={label}>Title</span>
                         <input
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
-                            placeholder="e.g. Vendor MSA — Acme"
-                            className="mt-1.5 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-300/60"
+                            placeholder="e.g. Vendor MSA, Acme"
+                            className="mt-1.5 w-full rounded-md border border-[#26262A] bg-[#000000] px-3 py-2 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-[#F59E0B]/70"
                         />
                     </label>
 
                     {err && (
-                        <p className="rounded-md border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
-                            {err}
-                        </p>
+                        <p className="rounded-md border border-rose-400/30 bg-rose-400/10 p-2.5 text-xs text-rose-300">{err}</p>
                     )}
                 </div>
 
-                <div className="flex items-center justify-end gap-2 border-t border-zinc-800 p-4">
-                    <button
-                        onClick={onClose}
-                        disabled={busy}
-                        className="rounded-md px-3 py-2 text-sm text-zinc-400 transition hover:bg-zinc-900 hover:text-zinc-200 disabled:opacity-50"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={submit}
-                        disabled={busy || !file || !title.trim()}
-                        className="inline-flex items-center gap-2 rounded-md bg-amber-300 px-3 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
+                <div className="flex items-center justify-end gap-2 border-t border-[#26262A] p-4">
+                    <button onClick={onClose} disabled={busy} className={btnGhost}>Cancel</button>
+                    <button onClick={submit} disabled={busy || !file || !title.trim()} className={btnPrimary}>
                         {busy ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
                         {busy ? "Uploading" : "Upload"}
                     </button>
@@ -529,33 +599,30 @@ function DocumentRow({
 }) {
     const level = riskLevel(item.analysis);
     const done = item.analysis?.status === "Completed" && !!dataOf(item.analysis);
+    const shown: RiskLevel = done ? level : "Unknown";
     const counterparty = pick(item.contract, ["counterparty", "counterpartyName", "party", "vendor"]);
     const updated = fmtDate(item.analysis?.updatedAt || item.contract.updatedAt);
 
     return (
         <button
             onClick={onSelect}
-            className={`group flex w-full items-start gap-3 px-3 py-3 text-left transition ${selected
-                ? "bg-zinc-800/60"
-                : "hover:bg-zinc-900/60"
-                }`}
+            aria-current={selected}
+            className={`relative flex w-full items-start gap-3 py-3 pl-4 pr-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#F59E0B] ${selected ? "bg-[#1C1C1F]" : "hover:bg-[#161618]"}`}
         >
-            <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-md border border-zinc-800 bg-zinc-900 text-zinc-400">
-                <FileText size={13} />
-            </div>
+            <span className={`absolute inset-y-0 left-0 w-[3px] ${riskBar[shown]}`} />
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                    <p className="truncate text-sm font-medium text-zinc-100">{contractTitle(item.contract)}</p>
-                    {run && !run.error && <Loader2 size={11} className="animate-spin text-amber-300" />}
+                    <p className="truncate text-sm font-medium text-white">{contractTitle(item.contract)}</p>
+                    {run && !run.error && <Loader2 size={11} className="shrink-0 animate-spin text-[#F59E0B]" />}
                 </div>
-                <p className="truncate text-[11px] text-zinc-500">
+                <p className="mt-0.5 truncate text-[11px] text-neutral-400">
                     {counterparty || "No counterparty"}
-                    {updated ? ` · ${updated}` : ""}
+                    {updated ? `, ${updated}` : ""}
                 </p>
             </div>
-            <div className="mt-1 shrink-0">
-                <RiskDot level={done ? level : "Unknown"} withLabel={false} />
-            </div>
+            <span className={`mt-0.5 shrink-0 text-[11px] ${riskTone[shown]}`}>
+                {done ? riskLabel[level].replace(" risk", "") : ""}
+            </span>
         </button>
     );
 }
@@ -567,17 +634,17 @@ function FocusPanel({
 }: {
     item: Item | null;
     run?: RunState;
-    onOpenReport: () => void;
+    onOpenReport: (tab?: Tab) => void;
     onAnalyze: () => void;
     onDelete: () => void;
 }) {
     if (!item) {
         return (
-            <div className="flex h-full flex-col items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/30 px-6 py-16 text-center">
-                <ScanSearch size={22} className="text-zinc-600" />
-                <p className="mt-3 text-sm font-medium text-zinc-300">Select a contract</p>
-                <p className="mt-1 max-w-xs text-xs text-zinc-500">
-                    Pick one from the list, or upload a new file to get started.
+            <div className={`${panel} flex h-full flex-col items-center justify-center px-6 py-16 text-center`}>
+                <ScanSearch size={22} className="text-neutral-500" />
+                <p className="mt-3 text-sm font-medium text-neutral-200">Select a contract</p>
+                <p className="mt-1 max-w-xs text-xs text-neutral-400">
+                    Pick one from the vault, or upload a new file to get started.
                 </p>
             </div>
         );
@@ -588,49 +655,45 @@ function FocusPanel({
     const failed = item.analysis?.status === "Failed";
     const d = dataOf(item.analysis);
     const c = riskCounts(item.analysis);
-    const ver = verification(item.analysis);
     const counterparty = pick(item.contract, ["counterparty", "counterpartyName", "party", "vendor"]);
     const updated = fmtDate(item.analysis?.updatedAt || item.contract.updatedAt);
     const running = !!run && !run.error;
+    const stance = stanceOf(c);
 
     const summary = d?.summary ?? "";
-    const risks = d?.risks ?? [];
+    const risks = [...(d?.risks ?? [])].sort(
+        (x, y) => (RANK[sev(y)] ?? 0) - (RANK[sev(x)] ?? 0)
+    );
 
     return (
-        <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/30">
-            <div className="border-b border-zinc-800 p-5">
+        <div className={`${panel} overflow-hidden`}>
+            <div className="border-b border-[#26262A] p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                        <RiskDot level={done ? level : "Unknown"} />
-                        <h2 className="mt-2 truncate text-lg font-semibold text-zinc-100">
+                        <RiskMark level={done ? level : "Unknown"} />
+                        <h2 className="ci-serif mt-2 truncate text-2xl text-white">
                             {contractTitle(item.contract)}
                         </h2>
-                        <p className="mt-1 truncate text-xs text-zinc-500">
+                        <p className="mt-1 truncate text-xs text-neutral-400">
                             {counterparty || "No counterparty"}
-                            {updated ? ` · updated ${updated}` : ""}
+                            {updated ? `, updated ${updated}` : ""}
                         </p>
                     </div>
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                         {done && !running && (
-                            <button
-                                onClick={onOpenReport}
-                                className="inline-flex items-center justify-center gap-1.5 rounded-md bg-amber-300 px-3.5 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-amber-200"
-                            >
-                                View report <ArrowUpRight size={14} />
+                            <button onClick={() => onOpenReport()} className={btnPrimary}>
+                                Open report <ArrowUpRight size={14} />
                             </button>
                         )}
                         <button
                             onClick={onAnalyze}
                             disabled={running || !item.version}
-                            className={`inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${done && !running
-                                ? "border border-zinc-800 text-zinc-200 hover:border-zinc-700 hover:bg-zinc-900"
-                                : "bg-amber-300 font-semibold text-zinc-950 hover:bg-amber-200"
-                                }`}
+                            className={done && !running ? btnGhost : btnPrimary}
                         >
                             {running ? (
                                 <><Loader2 size={14} className="animate-spin" /> Analyzing</>
                             ) : done ? (
-                                <><RefreshCw size={13} /> Re-run</>
+                                <><RefreshCw size={13} /> Run again</>
                             ) : (
                                 <><Sparkles size={14} /> Run analysis</>
                             )}
@@ -638,7 +701,7 @@ function FocusPanel({
                         <button
                             onClick={onDelete}
                             aria-label="Delete contract"
-                            className="inline-flex items-center justify-center rounded-md border border-zinc-800 px-2.5 py-2 text-zinc-500 transition hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-300"
+                            className="inline-flex items-center justify-center rounded-md border border-[#26262A] px-2.5 py-2 text-neutral-400 transition hover:border-rose-400/40 hover:bg-rose-400/10 hover:text-rose-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F59E0B]"
                         >
                             <Trash2 size={14} />
                         </button>
@@ -646,9 +709,9 @@ function FocusPanel({
                 </div>
             </div>
 
-            <div className="space-y-4 p-5">
+            <div className="space-y-5 p-5">
                 {!item.version && (
-                    <p className="rounded-md border border-zinc-800 bg-zinc-900/60 p-2.5 text-xs text-zinc-400">
+                    <p className="rounded-md border border-[#26262A] bg-[#000000]/60 p-2.5 text-xs text-neutral-300">
                         No uploaded version yet. Upload a file to run analysis.
                     </p>
                 )}
@@ -656,58 +719,49 @@ function FocusPanel({
                 {run && !run.error && <ScanPanel startedAt={run.startedAt} />}
 
                 {run?.error && (
-                    <p className="rounded-md border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
+                    <p className="rounded-md border border-rose-400/30 bg-rose-400/10 p-2.5 text-xs text-rose-300">
                         {run.error}
                     </p>
                 )}
 
                 {!run && done && (
                     <>
-                        <div className="grid grid-cols-3 gap-2">
-                            {[
-                                { k: "High", v: c.high, c: "text-rose-400" },
-                                { k: "Medium", v: c.medium, c: "text-amber-300" },
-                                { k: "Low", v: c.low, c: "text-emerald-400" },
-                            ].map((x) => (
-                                <div key={x.k} className="rounded-md border border-zinc-800 bg-zinc-950/50 p-3 text-center">
-                                    <p className={`text-2xl font-semibold tabular-nums ${x.c}`}>{x.v}</p>
-                                    <p className="text-[10px] uppercase tracking-wider text-zinc-500">{x.k}</p>
-                                </div>
-                            ))}
+                        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-lg border border-[#26262A] bg-[#000000]/60 p-4">
+                            <div className="min-w-0 flex-1">
+                                <p className={label}>Where this stands</p>
+                                <p className={`ci-serif mt-1 text-xl ${stance.tone}`}>{stance.title}</p>
+                                <p className="mt-0.5 text-xs text-neutral-400">{stance.note}</p>
+                            </div>
+                            <div className="flex gap-5 text-center">
+                                {[
+                                    { k: "High", v: c.high, c: "text-rose-300" },
+                                    { k: "Medium", v: c.medium, c: "text-orange-300" },
+                                    { k: "Low", v: c.low, c: "text-emerald-300" },
+                                ].map((x) => (
+                                    <div key={x.k}>
+                                        <p className={`ci-serif text-3xl tabular-nums ${x.c}`}>{x.v}</p>
+                                        <p className="text-[11px] text-neutral-400">{x.k}</p>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
+
+                        <ContractMap analysis={item.analysis} size="sm" onPick={(t) => onOpenReport(t)} />
 
                         {summary && (
                             <div>
-                                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Summary</h3>
-                                <p className="mt-1.5 line-clamp-5 text-sm leading-relaxed text-zinc-300">
-                                    {summary}
-                                </p>
+                                <h3 className={label}>Summary</h3>
+                                <p className="mt-1.5 line-clamp-4 text-sm leading-relaxed text-neutral-200">{summary}</p>
                             </div>
                         )}
 
-                        {/* <div className="grid grid-cols-2 gap-2">
-                            <div className="rounded-md border border-zinc-800 bg-zinc-950/50 p-3">
-                                <p className="text-[10px] uppercase tracking-wider text-zinc-500">Evidence</p>
-                                <p className="mt-1 text-base font-semibold text-zinc-100">
-                                    {ver.verified}<span className="text-xs font-normal text-zinc-500"> / {ver.total}</span>
-                                </p>
-                            </div>
-                            <div className="rounded-md border border-zinc-800 bg-zinc-950/50 p-3">
-                                <p className="text-[10px] uppercase tracking-wider text-zinc-500">Tokens</p>
-                                <p className="mt-1 text-base font-semibold text-zinc-100">
-                                    {(item.analysis?.aiMetadata?.usage?.total_tokens ?? 0).toLocaleString("en-IN")}
-                                </p>
-                            </div>
-                        </div> */}
-
                         {risks.length > 0 && (
                             <div>
-                                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Top risks</h3>
-                                <ul className="mt-2 space-y-1.5">
+                                <h3 className={label}>Biggest risks</h3>
+                                <ul className="mt-2 space-y-2">
                                     {risks.slice(0, 3).map((r, i) => (
-                                        <li key={i} className="flex gap-2 text-sm text-zinc-300">
-                                            <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${sev(r) === "high" ? "bg-rose-400" : sev(r) === "medium" ? "bg-amber-300" : "bg-emerald-400"
-                                                }`} />
+                                        <li key={i} className="flex gap-2.5 text-sm text-neutral-200">
+                                            <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${sev(r) === "high" ? "bg-rose-400" : sev(r) === "medium" ? "bg-orange-400" : "bg-emerald-400"}`} />
                                             <span className="line-clamp-2">{str(r.title) || str(r.explanation)}</span>
                                         </li>
                                     ))}
@@ -718,15 +772,13 @@ function FocusPanel({
                 )}
 
                 {!run && !done && !failed && item.version && (
-                    <p className="text-sm text-zinc-400">
+                    <p className="text-sm text-neutral-300">
                         No report yet. Run an analysis to extract clauses, obligations and risks.
                     </p>
                 )}
 
                 {!run && failed && (
-                    <p className="text-sm text-rose-300">
-                        Last run failed. Try again to retry.
-                    </p>
+                    <p className="text-sm text-rose-300">The last run failed. Run it again to retry.</p>
                 )}
             </div>
         </div>
@@ -735,19 +787,14 @@ function FocusPanel({
 
 /* ------------------------------- report ----------------------------------- */
 
-function RiskRing({ counts }: { counts: ReturnType<typeof riskCounts> }) {
+function ExposureRing({ score, color }: { score: number; color: string }) {
     const R = 44;
     const C = 2 * Math.PI * R;
-    const score = counts.total
-        ? Math.round(((counts.high * 3 + counts.medium * 2 + counts.low) / (counts.total * 3)) * 100)
-        : 0;
     const off = C * (1 - score / 100);
-    const color = score >= 60 ? "#fb7185" : score >= 40 ? "#fcd34d" : "#34d399";
-
     return (
-        <div className="relative mx-auto h-28 w-28 sm:h-32 sm:w-32">
-            <svg viewBox="0 0 100 100" className="-rotate-90">
-                <circle cx="50" cy="50" r={R} fill="none" stroke="#27272a" strokeWidth="5" />
+        <div className="relative mx-auto h-28 w-28 shrink-0 sm:h-32 sm:w-32">
+            <svg viewBox="0 0 100 100" className="-rotate-90" role="img" aria-label={`Exposure ${score} out of 100`}>
+                <circle cx="50" cy="50" r={R} fill="none" stroke="#26262A" strokeWidth="5" />
                 <circle
                     cx="50" cy="50" r={R}
                     fill="none" stroke={color} strokeWidth="5" strokeLinecap="round"
@@ -756,8 +803,8 @@ function RiskRing({ counts }: { counts: ReturnType<typeof riskCounts> }) {
                 />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-2xl font-semibold tabular-nums text-zinc-100 sm:text-3xl">{score}</span>
-                <span className="text-[10px] text-zinc-500">exposure</span>
+                <span className="ci-serif text-3xl tabular-nums text-white">{score}</span>
+                <span className="text-[11px] text-neutral-400">exposure</span>
             </div>
         </div>
     );
@@ -768,37 +815,43 @@ function Evidence({ f }: { f: Finding }) {
     if (!quote) return null;
     const ok = (f.evidenceVerification as Finding | undefined)?.verified === true;
     return (
-        <details className="group mt-2">
-            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11px] text-zinc-500 hover:text-zinc-300">
+        <details className="group mt-3">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11px] text-neutral-400 hover:text-neutral-200">
                 <Quote size={11} />
-                Source
+                Source text
                 {ok ? (
-                    <span className="inline-flex items-center gap-1 text-emerald-400"><BadgeCheck size={11} /> matched</span>
+                    <span className="inline-flex items-center gap-1 text-emerald-300"><BadgeCheck size={11} /> exact match</span>
                 ) : (
-                    <span className="inline-flex items-center gap-1 text-amber-300"><CircleDashed size={11} /> not exact</span>
+                    <span className="inline-flex items-center gap-1 text-orange-300"><CircleDashed size={11} /> close match</span>
                 )}
             </summary>
-            <p className="mt-1.5 rounded-md bg-zinc-900/70 p-2.5 text-xs italic leading-relaxed text-zinc-400">
+            <p className="ci-serif mt-2 border-l-2 border-[#3F3F46] pl-3 text-sm italic leading-relaxed text-neutral-300">
                 {quote}
             </p>
         </details>
     );
 }
 
-type Tab = "overview" | "risks" | "clauses" | "obligations" | "details" | "parties";
-
-function Report({ item, onClose }: { item: Item; onClose: () => void }) {
-    const [tab, setTab] = useState<Tab>("overview");
+function Report({ item, initialTab, onClose }: { item: Item; initialTab: Tab; onClose: () => void }) {
+    const [tab, setTab] = useState<Tab>(initialTab);
     const [showAll, setShowAll] = useState(false);
+    const [riskFilter, setRiskFilter] = useState<"all" | "high" | "medium" | "low">("all");
     const a = item.analysis;
     const d = dataOf(a) ?? {};
     const counts = riskCounts(a);
     const ver = verification(a);
+    const score = exposureScore(counts);
+    const stance = stanceOf(counts);
 
     const risks = useMemo(() => {
         const order: Record<string, number> = { high: 0, medium: 1, low: 2 };
         return [...(d.risks ?? [])].sort((x, y) => (order[sev(x)] ?? 3) - (order[sev(y)] ?? 3));
     }, [d.risks]);
+
+    const shownRisks = useMemo(
+        () => (riskFilter === "all" ? risks : risks.filter((r) => sev(r) === riskFilter)),
+        [risks, riskFilter]
+    );
 
     const parties = useMemo(() => {
         const map = new Map<string, { name: string; roles: Set<string> }>();
@@ -812,6 +865,15 @@ function Report({ item, onClose }: { item: Item; onClose: () => void }) {
         return [...map.values()];
     }, [d.parties]);
 
+    const obligationsByParty = useMemo(() => {
+        const map = new Map<string, Finding[]>();
+        (d.obligations ?? []).forEach((o) => {
+            const who = str(o.responsibleParty) || "Unassigned";
+            map.set(who, [...(map.get(who) ?? []), o]);
+        });
+        return [...map.entries()];
+    }, [d.obligations]);
+
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
         window.addEventListener("keydown", onKey);
@@ -823,51 +885,52 @@ function Report({ item, onClose }: { item: Item; onClose: () => void }) {
         { id: "risks", label: "Risks", icon: ShieldAlert, count: risks.length },
         { id: "clauses", label: "Clauses", icon: Scale, count: d.clauses?.length },
         { id: "obligations", label: "Obligations", icon: ListChecks, count: d.obligations?.length },
-        { id: "details", label: "Details", icon: KeyRound, count: d.keyDetails?.length },
+        { id: "details", label: "Key terms", icon: KeyRound, count: d.keyDetails?.length },
         { id: "parties", label: "Parties", icon: Users, count: parties.length },
     ];
 
     const summary = d.summary ?? "";
+    const evPct = ver.total ? Math.round((ver.verified / ver.total) * 100) : 0;
 
     return (
         <div className="fixed inset-0 z-50 flex justify-end">
             <div className="ci-fade absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-            <aside className="ci-fade relative flex h-full w-full flex-col border-l border-zinc-800 bg-zinc-950 sm:max-w-3xl">
-                <header className="border-b border-zinc-800 px-4 pb-0 pt-4 sm:px-6 sm:pt-5">
+            <aside className="ci-fade relative flex h-full w-full flex-col border-l border-[#26262A] bg-[#000000] sm:max-w-3xl">
+                <header className="border-b border-[#26262A] px-4 pb-0 pt-4 sm:px-6 sm:pt-5">
                     <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                            <h2 className="truncate font-serif text-lg text-zinc-100 sm:text-2xl">
+                            <p className="text-xs text-neutral-400">Contract report</p>
+                            <h2 className="ci-serif mt-1 truncate text-xl text-white sm:text-3xl">
                                 {contractTitle(item.contract)}
                             </h2>
-                            <p className="mt-1 truncate text-xs text-zinc-500">
+                            <p className="mt-1 truncate text-xs text-neutral-400">
                                 Analyzed {fmtDate(a?.aiMetadata?.analyzedAt)}
-                                {a?.lawyerReview?.status ? ` · lawyer review: ${a.lawyerReview.status.toLowerCase()}` : ""}
+                                {a?.lawyerReview?.status ? `, lawyer review ${a.lawyerReview.status.toLowerCase()}` : ""}
                             </p>
                         </div>
                         <button
                             onClick={onClose}
                             aria-label="Close report"
-                            className="shrink-0 rounded-md p-1.5 text-zinc-500 transition hover:bg-zinc-900 hover:text-zinc-200"
+                            className="shrink-0 rounded-md p-1.5 text-neutral-400 transition hover:bg-[#161618] hover:text-white"
                         >
                             <X size={16} />
                         </button>
                     </div>
-                    <nav className="-mb-px mt-3 flex gap-1 overflow-x-auto">
+                    <nav className="-mb-px mt-4 flex gap-1 overflow-x-auto" aria-label="Report sections">
                         {tabs.map((t) => (
                             <button
                                 key={t.id}
                                 onClick={() => setTab(t.id)}
+                                aria-current={tab === t.id}
                                 className={`inline-flex shrink-0 items-center gap-1.5 border-b-2 px-2.5 py-2.5 text-xs font-medium transition sm:px-3 sm:text-sm ${tab === t.id
-                                    ? "border-amber-300 text-amber-200"
-                                    : "border-transparent text-zinc-500 hover:text-zinc-200"
+                                    ? "border-[#F59E0B] text-[#FBBF24]"
+                                    : "border-transparent text-neutral-400 hover:text-white"
                                     }`}
                             >
                                 <t.icon size={13} />
                                 {t.label}
                                 {t.count !== undefined && (
-                                    <span className="rounded-full bg-zinc-800 px-1.5 text-[10px] text-zinc-400">
-                                        {t.count}
-                                    </span>
+                                    <span className="rounded-full bg-[#1C1C1F] px-1.5 text-[10px] text-neutral-300">{t.count}</span>
                                 )}
                             </button>
                         ))}
@@ -877,31 +940,69 @@ function Report({ item, onClose }: { item: Item; onClose: () => void }) {
                 <div key={tab} className="ci-fade flex-1 space-y-3 overflow-y-auto p-4 sm:p-6">
                     {tab === "overview" && (
                         <>
-                            <div className="flex flex-col gap-4 rounded-lg border border-zinc-800 bg-zinc-900/30 p-4 sm:flex-row sm:items-center sm:gap-6 sm:p-5">
-                                <RiskRing counts={counts} />
-                                <div className="grid flex-1 grid-cols-3 gap-2 text-center">
-                                    {[
-                                        { k: "High", v: counts.high, c: "text-rose-400" },
-                                        { k: "Medium", v: counts.medium, c: "text-amber-300" },
-                                        { k: "Low", v: counts.low, c: "text-emerald-400" },
-                                    ].map((x) => (
-                                        <div key={x.k} className="rounded-md border border-zinc-800 bg-zinc-950/40 p-2.5">
-                                            <p className={`text-xl font-semibold tabular-nums sm:text-3xl ${x.c}`}>{x.v}</p>
-                                            <p className="text-[10px] text-zinc-500">{x.k}</p>
-                                        </div>
-                                    ))}
+                            <div className={`${panel} flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:gap-8`}>
+                                <ExposureRing score={score} color={stance.ring} />
+                                <div className="min-w-0 flex-1">
+                                    <p className={label}>Where this stands</p>
+                                    <p className={`ci-serif mt-1 text-2xl ${stance.tone}`}>{stance.title}</p>
+                                    <p className="mt-1 text-sm text-neutral-300">{stance.note}</p>
+                                    <div className="mt-4 grid grid-cols-3 gap-2">
+                                        {[
+                                            { k: "High", v: counts.high, c: "text-rose-300" },
+                                            { k: "Medium", v: counts.medium, c: "text-orange-300" },
+                                            { k: "Low", v: counts.low, c: "text-emerald-300" },
+                                        ].map((x) => (
+                                            <div key={x.k} className="rounded-md border border-[#26262A] bg-[#000000]/60 p-2.5 text-center">
+                                                <p className={`ci-serif text-2xl tabular-nums ${x.c}`}>{x.v}</p>
+                                                <p className="text-[11px] text-neutral-400">{x.k}</p>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4 sm:p-5">
-                                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Summary</h3>
-                                <p className="mt-2 text-sm leading-relaxed text-zinc-300">
+                            <div className={`${panel} p-5`}>
+                                <ContractMap analysis={a} onPick={setTab} />
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2">
+                                {[
+                                    { k: "Clauses", v: d.clauses?.length ?? 0, t: "clauses" as Tab },
+                                    { k: "Obligations", v: d.obligations?.length ?? 0, t: "obligations" as Tab },
+                                    { k: "Key terms", v: d.keyDetails?.length ?? 0, t: "details" as Tab },
+                                ].map((x) => (
+                                    <button
+                                        key={x.k}
+                                        onClick={() => setTab(x.t)}
+                                        className={`${panel} p-3.5 text-left transition hover:border-[#3F3F46]`}
+                                    >
+                                        <p className="ci-serif text-2xl tabular-nums text-white">{x.v}</p>
+                                        <p className="text-[11px] text-neutral-400">{x.k}</p>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {ver.total > 0 && (
+                                <div className={`${panel} p-4`}>
+                                    <div className="flex items-baseline justify-between">
+                                        <p className={label}>Checked against the source text</p>
+                                        <p className="text-xs tabular-nums text-neutral-300">{ver.verified} of {ver.total} exact</p>
+                                    </div>
+                                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#26262A]">
+                                        <div className="h-full rounded-full bg-emerald-400" style={{ width: `${evPct}%` }} />
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className={`${panel} p-5`}>
+                                <h3 className={label}>Summary</h3>
+                                <p className="mt-2 text-sm leading-relaxed text-neutral-200">
                                     {showAll || summary.length < 420 ? summary : `${summary.slice(0, 420)}...`}
                                 </p>
                                 {summary.length >= 420 && (
                                     <button
                                         onClick={() => setShowAll((s) => !s)}
-                                        className="mt-2 text-xs font-medium text-amber-300 hover:text-amber-200"
+                                        className="mt-2 text-xs font-medium text-[#F59E0B] hover:text-[#FBBF24]"
                                     >
                                         {showAll ? "Show less" : "Read full summary"}
                                     </button>
@@ -909,16 +1010,30 @@ function Report({ item, onClose }: { item: Item; onClose: () => void }) {
                             </div>
 
                             {!!d.reviewRecommendations?.length && (
-                                <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4 sm:p-5">
-                                    <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Before signing</h3>
-                                    <ul className="mt-3 space-y-2.5">
+                                <div className={`${panel} p-5`}>
+                                    <h3 className={label}>Before you sign</h3>
+                                    <ul className="mt-3 space-y-3">
                                         {d.reviewRecommendations.slice(0, 6).map((r, i) => (
-                                            <li key={i} className="flex gap-2 text-sm leading-relaxed text-zinc-300">
-                                                <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-amber-300" />
+                                            <li key={i} className="flex gap-2.5 text-sm leading-relaxed text-neutral-200">
+                                                <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-[#F59E0B]" />
                                                 <span>
-                                                    <span className="font-medium text-zinc-100">{str(r.topic)}.</span>{" "}
+                                                    <span className="font-medium text-white">{str(r.topic)}.</span>{" "}
                                                     {str(r.recommendation)}
                                                 </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {!!d.missingInformation?.length && (
+                                <div className={`${panel} p-5`}>
+                                    <h3 className={label}>Missing from this contract</h3>
+                                    <ul className="mt-3 space-y-2">
+                                        {d.missingInformation.slice(0, 6).map((m, i) => (
+                                            <li key={i} className="flex gap-2.5 text-sm leading-relaxed text-neutral-200">
+                                                <CircleDashed size={15} className="mt-0.5 shrink-0 text-orange-300" />
+                                                <span>{pick(m, ["topic", "title", "field", "item"]) || str(m.description) || str(m.explanation)}</span>
                                             </li>
                                         ))}
                                     </ul>
@@ -927,26 +1042,46 @@ function Report({ item, onClose }: { item: Item; onClose: () => void }) {
                         </>
                     )}
 
+                    {tab === "risks" && (
+                        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter risks by severity">
+                            {([
+                                ["all", "All", risks.length],
+                                ["high", "High", counts.high],
+                                ["medium", "Medium", counts.medium],
+                                ["low", "Low", counts.low],
+                            ] as const).map(([k, l, n]) => (
+                                <button
+                                    key={k}
+                                    onClick={() => setRiskFilter(k)}
+                                    aria-pressed={riskFilter === k}
+                                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${riskFilter === k ? "border-[#F59E0B] bg-[#F59E0B]/10 text-[#FBBF24]" : "border-[#26262A] text-neutral-300 hover:border-[#3F3F46]"}`}
+                                >
+                                    {l} <span className="tabular-nums text-neutral-400">{n}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
                     {tab === "risks" &&
-                        risks.map((r, i) => (
+                        shownRisks.map((r, i) => (
                             <div
                                 key={i}
-                                className={`rounded-lg border border-zinc-800 border-l-2 p-4 ${sevBorder[sev(r)] ?? "border-l-zinc-600"}`}
+                                className={`${panel} border-l-[3px] p-4 ${sevBorder[sev(r)] ?? "border-l-neutral-500"}`}
                             >
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <h4 className="text-sm font-medium text-zinc-100">{str(r.title) || `Risk ${i + 1}`}</h4>
-                                    <span className={`rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] capitalize ${sev(r) === "high" ? "text-rose-300" : sev(r) === "medium" ? "text-amber-300" : "text-emerald-300"
-                                        }`}>
+                                    <h4 className="text-sm font-medium text-white">{str(r.title) || `Risk ${i + 1}`}</h4>
+                                    <span className={`rounded-full bg-[#1C1C1F] px-2 py-0.5 text-[11px] capitalize ${sevText[sev(r)] ?? "text-neutral-300"}`}>
                                         {sev(r) || "unrated"}
                                     </span>
                                     {str(r.clauseReference) && (
-                                        <span className="text-[11px] text-zinc-500">Clause {str(r.clauseReference)}</span>
+                                        <span className="text-[11px] text-neutral-400">Clause {str(r.clauseReference)}</span>
                                     )}
                                 </div>
-                                <p className="mt-2 text-sm leading-relaxed text-zinc-400">{str(r.explanation)}</p>
+                                <p className="mt-2 text-sm leading-relaxed text-neutral-300">{str(r.explanation)}</p>
                                 {str(r.recommendation) && (
-                                    <p className="mt-2 text-sm leading-relaxed text-zinc-200">
-                                        <span className="font-medium text-amber-200">Fix:</span> {str(r.recommendation)}
+                                    <p className="mt-3 rounded-md bg-[#000000]/70 p-3 text-sm leading-relaxed text-white">
+                                        <span className="font-medium text-[#F59E0B]">Suggested fix. </span>
+                                        {str(r.recommendation)}
                                     </p>
                                 )}
                                 <Evidence f={r} />
@@ -955,41 +1090,50 @@ function Report({ item, onClose }: { item: Item; onClose: () => void }) {
 
                     {tab === "clauses" &&
                         (d.clauses ?? []).map((c, i) => (
-                            <div key={i} className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+                            <div key={i} className={`${panel} p-4`}>
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <span className="rounded border border-zinc-800 bg-zinc-950 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">
-                                        {str(c.clauseReference)}
-                                    </span>
-                                    <h4 className="text-sm font-medium text-zinc-100">{str(c.title)}</h4>
+                                    {str(c.clauseReference) && (
+                                        <span className="rounded border border-[#2E2E33] bg-[#000000] px-1.5 py-0.5 text-[11px] font-medium text-neutral-300">
+                                            {str(c.clauseReference)}
+                                        </span>
+                                    )}
+                                    <h4 className="text-sm font-medium text-white">{str(c.title)}</h4>
                                 </div>
-                                <p className="mt-2 text-sm leading-relaxed text-zinc-400">{str(c.explanation)}</p>
+                                <p className="mt-2 text-sm leading-relaxed text-neutral-300">{str(c.explanation)}</p>
                                 <Evidence f={c} />
                             </div>
                         ))}
 
                     {tab === "obligations" &&
-                        (d.obligations ?? []).map((o, i) => (
-                            <div key={i} className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <span className="rounded bg-zinc-800 px-2 py-0.5 text-[10px] font-medium text-zinc-200">
-                                        {str(o.responsibleParty)}
+                        obligationsByParty.map(([who, list]) => (
+                            <section key={who} className={`${panel} overflow-hidden`}>
+                                <div className="flex items-center justify-between border-b border-[#26262A] bg-[#161618] px-4 py-2.5">
+                                    <h4 className="text-sm font-medium text-white">{who}</h4>
+                                    <span className="text-[11px] text-neutral-400">
+                                        {list.length} {list.length === 1 ? "obligation" : "obligations"}
                                     </span>
-                                    {str(o.clauseReference) && (
-                                        <span className="text-[11px] text-zinc-500">Clause {str(o.clauseReference)}</span>
-                                    )}
                                 </div>
-                                <p className="mt-2 text-sm leading-relaxed text-zinc-200">{str(o.obligation)}</p>
-                                <Evidence f={o} />
-                            </div>
+                                <ul className="divide-y divide-[#26262A]">
+                                    {list.map((o, i) => (
+                                        <li key={i} className="p-4">
+                                            <p className="text-sm leading-relaxed text-white">{str(o.obligation)}</p>
+                                            {str(o.clauseReference) && (
+                                                <p className="mt-1 text-[11px] text-neutral-400">Clause {str(o.clauseReference)}</p>
+                                            )}
+                                            <Evidence f={o} />
+                                        </li>
+                                    ))}
+                                </ul>
+                            </section>
                         ))}
 
                     {tab === "details" && (
-                        <div className="divide-y divide-zinc-800 rounded-lg border border-zinc-800 bg-zinc-900/30">
+                        <div className={`${panel} divide-y divide-[#26262A]`}>
                             {(d.keyDetails ?? []).map((k, i) => (
                                 <div key={i} className="grid gap-1 p-4 sm:grid-cols-[180px_1fr]">
-                                    <p className="text-xs text-zinc-500">{str(k.field)}</p>
+                                    <p className="text-xs text-neutral-400">{str(k.field)}</p>
                                     <div>
-                                        <p className="text-sm text-zinc-100">{str(k.value)}</p>
+                                        <p className="text-sm text-white">{str(k.value)}</p>
                                         <Evidence f={k} />
                                     </div>
                                 </div>
@@ -999,11 +1143,11 @@ function Report({ item, onClose }: { item: Item; onClose: () => void }) {
 
                     {tab === "parties" &&
                         parties.map((p) => (
-                            <div key={p.name} className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
-                                <h4 className="text-sm font-medium text-zinc-100">{p.name}</h4>
+                            <div key={p.name} className={`${panel} p-4`}>
+                                <h4 className="text-sm font-medium text-white">{p.name}</h4>
                                 <div className="mt-2 flex flex-wrap gap-1.5">
                                     {[...p.roles].map((r) => (
-                                        <span key={r} className="rounded-full border border-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">
+                                        <span key={r} className="rounded-full border border-[#2E2E33] px-2 py-0.5 text-[11px] text-neutral-300">
                                             {r}
                                         </span>
                                     ))}
@@ -1029,6 +1173,7 @@ export default function ContractIntelligencePage() {
     const [totalPages, setTotalPages] = useState(1);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [reportId, setReportId] = useState<string | null>(null);
+    const [reportTab, setReportTab] = useState<Tab>("overview");
     const [runs, setRuns] = useState<Record<string, RunState>>({});
     const [toast, setToast] = useState<{ id: string; text: string } | null>(null);
     const [uploadOpen, setUploadOpen] = useState(false);
@@ -1226,10 +1371,20 @@ export default function ContractIntelligencePage() {
 
     const stats = useMemo(() => {
         const analyzed = items.filter((i) => dataOf(i.analysis));
+        const lvl = (l: RiskLevel) => analyzed.filter((i) => riskLevel(i.analysis) === l).length;
+        const high = lvl("High");
+        const medium = lvl("Medium");
+        const clear = lvl("Low") + lvl("None");
+        const scores = analyzed.map((i) => exposureScore(riskCounts(i.analysis)));
+        const avgExposure = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
         return {
+            avgExposure,
             total: items.length,
             analyzed: analyzed.length,
-            high: analyzed.filter((i) => riskLevel(i.analysis) === "High").length,
+            high,
+            medium,
+            clear,
+            pending: items.length - analyzed.length,
             unreviewed: analyzed.filter(
                 (i) => (i.analysis?.lawyerReview?.status ?? "Not Reviewed") === "Not Reviewed"
             ).length,
@@ -1253,6 +1408,11 @@ export default function ContractIntelligencePage() {
     const reportItem = items.find((i) => i.contract._id === reportId) || null;
     const runningCount = Object.values(runs).filter((r) => !r.error).length;
 
+    const openReport = (id: string, tab: Tab = "overview") => {
+        setReportTab(tab);
+        setReportId(id);
+    };
+
     const handleUploaded = useCallback(async (c: Contract) => {
         let version: ContractVersion | null = null;
         try {
@@ -1264,55 +1424,141 @@ export default function ContractIntelligencePage() {
         const newItem: Item = { contract: c, version, analysis: null };
         setItems((prev) => [newItem, ...prev.filter((p) => p.contract._id !== c._id)]);
         setSelectedId(c._id);
-        setToast({ id: c._id, text: `Uploaded ${contractTitle(c)}` });
+        setToast({ id: "", text: `Uploaded ${contractTitle(c)}. Run an analysis to build its report.` });
     }, []);
 
-    return (
-        <div className="min-h-full bg-zinc-950 text-zinc-100">
-            <Styles />
+    const dist = [
+        { k: "High", v: stats.high, bar: "bg-rose-400" },
+        { k: "Medium", v: stats.medium, bar: "bg-orange-400" },
+        { k: "Low or none", v: stats.clear, bar: "bg-emerald-400" },
+        { k: "Not analyzed", v: stats.pending, bar: "bg-[#2E2E33]" },
+    ];
 
-            <div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
-                {/* Header */}
-                <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                        <h1 className="text-2xl font-semibold tracking-tight text-zinc-100 sm:text-3xl">
-                            Contract intelligence
+    return (
+        <div className="ci-root relative min-h-full bg-[#000000] text-white">
+            <Styles />
+            <div className="ci-stage ci-stage-fade pointer-events-none absolute inset-x-0 top-0 h-[560px]" aria-hidden />
+
+            <div className="relative mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
+                {/* Top bar */}
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-neutral-400">
+                    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5">
+                        <span>Workspace</span>
+                        <ChevronRight size={12} className="text-neutral-600" />
+                        <span className="text-neutral-200">Contract intelligence</span>
+                    </nav>
+                    <span className="inline-flex items-center gap-2 rounded-full border border-[#26262A] bg-[#0E0E10] px-3 py-1">
+                        <span className="relative flex h-2 w-2">
+                            <span className="ci-ping absolute inset-0 rounded-full bg-emerald-400" />
+                            <span className="relative h-2 w-2 rounded-full bg-emerald-400" />
+                        </span>
+                        Analysis engine online
+                    </span>
+                </div>
+
+                {/* Hero */}
+                <section className="mt-8 grid items-stretch gap-6 lg:grid-cols-[1.15fr_1fr]">
+                    <div className="flex flex-col justify-center">
+                        <h1 className="ci-serif text-4xl leading-[1.08] text-white sm:text-5xl">
+                            Know what a contract says before you sign it.
                         </h1>
-                        <p className="mt-1 max-w-2xl text-sm text-zinc-400">
-                            Run an AI analysis on any uploaded contract and get clauses, obligations and risks in one report.
+                        <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-neutral-300">
+                            Upload any agreement. In about five minutes you get every clause, who owes what, the key terms and a ranked list of risks, each one tied back to the original wording.
                         </p>
+                        <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+                            <button onClick={() => setUploadOpen(true)} className={`${btnPrimary} px-5 py-2.5`}>
+                                <Upload size={15} /> Upload contract
+                            </button>
+                            <button onClick={() => load(false)} disabled={refreshing} className={`${btnGhost} px-5 py-2.5`}>
+                                <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
+                                Refresh
+                            </button>
+                        </div>
+                        <ul className="mt-7 grid max-w-xl grid-cols-2 gap-x-6 gap-y-3 text-sm text-neutral-200">
+                            {[
+                                [Scale, "Clause extraction"],
+                                [ListChecks, "Obligations by party"],
+                                [ShieldAlert, "Ranked risk scoring"],
+                                [BadgeCheck, "Checked against source text"],
+                            ].map(([Icon, text]) => {
+                                const I = Icon as React.ElementType;
+                                return (
+                                    <li key={text as string} className="flex items-center gap-2.5">
+                                        <span className="grid h-7 w-7 place-items-center rounded-md border border-[#F59E0B]/30 bg-[#F59E0B]/10 text-[#F59E0B]">
+                                            <I size={14} />
+                                        </span>
+                                        {text as string}
+                                    </li>
+                                );
+                            })}
+                        </ul>
                     </div>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                        <button
-                            onClick={() => setUploadOpen(true)}
-                            className="inline-flex items-center justify-center gap-2 rounded-md bg-amber-300 px-3.5 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-amber-200"
-                        >
-                            <Upload size={14} /> Upload contract
-                        </button>
-                        <button
-                            onClick={() => load(false)}
-                            disabled={refreshing}
-                            className="inline-flex items-center justify-center gap-2 rounded-md border border-zinc-800 px-3.5 py-2 text-sm text-zinc-300 transition hover:border-zinc-700 hover:bg-zinc-900 disabled:opacity-50"
-                        >
-                            <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
-                            Refresh
-                        </button>
+
+                    {/* Portfolio exposure */}
+                    <div className={`${panel} ci-hairline flex flex-col p-5 sm:p-6`}>
+                        <div className="flex items-center justify-between">
+                            <p className={label}>Portfolio exposure</p>
+                            <p className="text-[11px] text-neutral-400">
+                                {stats.analyzed} of {stats.total} analyzed
+                            </p>
+                        </div>
+                        {stats.analyzed > 0 ? (
+                            <div className="mt-4 flex flex-1 flex-col justify-center gap-5 sm:flex-row sm:items-center">
+                                <ExposureRing
+                                    score={stats.avgExposure}
+                                    color={stats.avgExposure >= 60 ? "#fb7185" : stats.avgExposure >= 35 ? "#fb923c" : "#34d399"}
+                                />
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-sm text-neutral-300">
+                                        Average across analyzed contracts. Lower is better.
+                                    </p>
+                                    <div className="mt-4 flex h-2.5 gap-[3px] overflow-hidden rounded-sm">
+                                        {dist.filter((x) => x.v > 0).map((x) => (
+                                            <div
+                                                key={x.k}
+                                                className={`${x.bar} rounded-[2px] transition-all duration-700`}
+                                                style={{ flexGrow: x.v, flexBasis: 0 }}
+                                                title={`${x.k}: ${x.v}`}
+                                            />
+                                        ))}
+                                    </div>
+                                    <ul className="mt-3 space-y-1.5 text-xs text-neutral-300">
+                                        {dist.map((x) => (
+                                            <li key={x.k} className="flex items-center justify-between gap-3">
+                                                <span className="inline-flex items-center gap-1.5">
+                                                    <span className={`h-2 w-2 rounded-[2px] ${x.bar}`} />
+                                                    {x.k}
+                                                </span>
+                                                <span className="tabular-nums text-white">{x.v}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
+                                <ScanSearch size={22} className="text-neutral-500" />
+                                <p className="mt-3 max-w-xs text-sm text-neutral-300">
+                                    Run your first analysis and your portfolio exposure shows up here.
+                                </p>
+                            </div>
+                        )}
                     </div>
-                </header>
+                </section>
 
                 {/* Running banner */}
                 {runningCount > 0 && (
-                    <div className="ci-fade mt-5 flex items-start gap-2.5 rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2.5 text-xs text-amber-200 sm:items-center sm:px-4 sm:text-sm">
+                    <div className="ci-fade mt-5 flex items-start gap-2.5 rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/5 px-3 py-2.5 text-xs text-[#FBBF24] sm:items-center sm:px-4 sm:text-sm">
                         <Clock3 size={14} className="mt-0.5 shrink-0 sm:mt-0" />
                         <p>
-                            {runningCount} {runningCount === 1 ? "analysis is" : "analyses are"} running (~5 min).
+                            {runningCount} {runningCount === 1 ? "analysis is" : "analyses are"} running, about 5 minutes each.
                             You can leave this tab and the report saves automatically.
                         </p>
                     </div>
                 )}
 
                 {error && (
-                    <div className="mt-4 flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2.5 text-xs text-rose-300 sm:items-center sm:px-4 sm:text-sm">
+                    <div className="mt-4 flex items-start gap-2 rounded-lg border border-rose-400/30 bg-rose-400/5 px-3 py-2.5 text-xs text-rose-300 sm:items-center sm:px-4 sm:text-sm">
                         <AlertTriangle size={14} className="mt-0.5 shrink-0 sm:mt-0" />
                         <span className="flex-1">{error}</span>
                         <button onClick={() => setError("")} className="shrink-0 text-rose-300/60 hover:text-rose-300" aria-label="Dismiss">
@@ -1321,33 +1567,35 @@ export default function ContractIntelligencePage() {
                     </div>
                 )}
 
-                {/* Stats — animated */}
-                <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-                    <StatCard index={0} label="Contracts" value={stats.total} icon={FileText} />
-                    <StatCard index={1} label="Analyzed" value={stats.analyzed} icon={CheckCircle2} tone="success" />
-                    <StatCard index={2} label="High risk" value={stats.high} icon={AlertTriangle} tone="danger" />
-                    <StatCard index={3} label="Awaiting review" value={stats.unreviewed} icon={Scale} tone="warn" />
-                </div>
+                {/* KPIs */}
+                <section className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    <StatCard label="Contracts" value={stats.total} icon={FileText} />
+                    <StatCard label="Analyzed" value={stats.analyzed} icon={CheckCircle2} tone="success" />
+                    <StatCard label="High risk" value={stats.high} icon={AlertTriangle} tone="danger" />
+                    <StatCard label="Awaiting lawyer review" value={stats.unreviewed} icon={Scale} tone="warn" />
+                </section>
 
                 {/* Toolbar */}
-                <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">
                     <div className="relative min-w-0 flex-1">
-                        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+                        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
                         <input
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder="Search contracts"
-                            className="w-full rounded-md border border-zinc-800 bg-zinc-900 py-2 pl-9 pr-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-300/60"
+                            aria-label="Search contracts"
+                            className="w-full rounded-md border border-[#26262A] bg-[#0E0E10] py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-[#F59E0B]/70"
                         />
                     </div>
-                    <div className="flex shrink-0 rounded-md border border-zinc-800 bg-zinc-900 p-0.5">
+                    <div className="flex shrink-0 overflow-x-auto rounded-md border border-[#26262A] bg-[#0E0E10] p-0.5">
                         {(["All", "High", "Medium", "Low", "Pending"] as const).map((f) => (
                             <button
                                 key={f}
                                 onClick={() => setFilter(f)}
+                                aria-pressed={filter === f}
                                 className={`whitespace-nowrap rounded px-2.5 py-1 text-xs font-medium transition ${filter === f
-                                    ? "bg-zinc-800 text-zinc-100"
-                                    : "text-zinc-500 hover:text-zinc-300"
+                                    ? "bg-[#1C1C1F] text-white"
+                                    : "text-neutral-400 hover:text-neutral-200"
                                     }`}
                             >
                                 {f === "Pending" ? "Not analyzed" : f}
@@ -1356,48 +1604,45 @@ export default function ContractIntelligencePage() {
                     </div>
                 </div>
 
-                {/* Dossier */}
+                {/* Vault + dossier */}
                 {loading ? (
                     <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr]">
-                        <div className="h-96 animate-pulse rounded-xl border border-zinc-800 bg-zinc-900/30" />
-                        <div className="h-96 animate-pulse rounded-xl border border-zinc-800 bg-zinc-900/30" />
+                        <div className="h-96 animate-pulse rounded-xl border border-[#26262A] bg-[#0E0E10]" />
+                        <div className="h-96 animate-pulse rounded-xl border border-[#26262A] bg-[#0E0E10]" />
                     </div>
                 ) : visible.length === 0 ? (
-                    <div className="mt-5 rounded-xl border border-dashed border-zinc-800 bg-zinc-900/20 px-4 py-16 text-center">
-                        <ScanSearch size={22} className="mx-auto text-zinc-600" />
-                        <p className="mt-3 text-sm font-medium text-zinc-300">
+                    <div className="mt-5 rounded-xl border border-dashed border-[#3F3F46] bg-[#0E0E10]/50 px-4 py-16 text-center">
+                        <ScanSearch size={22} className="mx-auto text-neutral-500" />
+                        <p className="mt-3 text-sm font-medium text-neutral-200">
                             {items.length ? "No contracts match these filters" : "No contracts yet"}
                         </p>
-                        <p className="mt-1 text-xs text-zinc-500">
+                        <p className="mt-1 text-xs text-neutral-400">
                             {items.length
                                 ? "Clear the search or pick a different filter."
-                                : "Upload a contract to get started."}
+                                : "Upload a contract and its report will appear here."}
                         </p>
                         {!items.length && (
-                            <button
-                                onClick={() => setUploadOpen(true)}
-                                className="mt-4 inline-flex items-center gap-2 rounded-md bg-amber-300 px-3.5 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-amber-200"
-                            >
+                            <button onClick={() => setUploadOpen(true)} className={`${btnPrimary} mt-4`}>
                                 <Upload size={14} /> Upload contract
                             </button>
                         )}
                     </div>
                 ) : (
                     <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr]">
-                        {/* Rail */}
-                        <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/30">
-                            <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2.5">
-                                <h2 className="text-[11px] uppercase tracking-wider text-zinc-500">
-                                    Documents <span className="text-zinc-600">({visible.length})</span>
+                        {/* Vault */}
+                        <div className={`${panel} overflow-hidden`}>
+                            <div className="flex items-center justify-between border-b border-[#26262A] px-4 py-2.5">
+                                <h2 className="text-xs font-medium text-neutral-300">
+                                    Contract vault <span className="text-neutral-500">({visible.length})</span>
                                 </h2>
                                 <button
                                     onClick={() => setUploadOpen(true)}
-                                    className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-400 hover:text-amber-300"
+                                    className="inline-flex items-center gap-1 text-xs font-medium text-neutral-300 hover:text-[#F59E0B]"
                                 >
                                     <Plus size={12} /> New
                                 </button>
                             </div>
-                            <div className="max-h-[560px] divide-y divide-zinc-800/70 overflow-y-auto">
+                            <div className="max-h-[560px] divide-y divide-[#26262A]/70 overflow-y-auto">
                                 {railItems.map((it) => (
                                     <DocumentRow
                                         key={it.contract._id}
@@ -1411,7 +1656,7 @@ export default function ContractIntelligencePage() {
                             {visible.length > 6 && (
                                 <button
                                     onClick={() => setRailExpanded((v) => !v)}
-                                    className="flex w-full items-center justify-center gap-1 border-t border-zinc-800 py-2 text-[11px] text-zinc-500 transition hover:text-zinc-300"
+                                    className="flex w-full items-center justify-center gap-1 border-t border-[#26262A] py-2 text-xs text-neutral-400 transition hover:text-neutral-200"
                                 >
                                     <ChevronDown size={12} className={railExpanded ? "rotate-180" : ""} />
                                     {railExpanded ? "Show less" : `Show all ${visible.length}`}
@@ -1419,13 +1664,14 @@ export default function ContractIntelligencePage() {
                             )}
                         </div>
 
-                        {/* Focus */}
+                        {/* Dossier */}
                         <FocusPanel
+                            key={selected?.contract._id ?? "none"}
                             item={selected}
                             run={selected ? runs[selected.contract._id] : undefined}
-                            onOpenReport={() => selected && setReportId(selected.contract._id)}
+                            onOpenReport={(t) => selected && openReport(selected.contract._id, t)}
                             onAnalyze={() => selected && startAnalysis(selected)}
-                            onDelete={() => selected && handleDelete(selected)}
+                            onDelete={() => selected && deleting !== selected.contract._id && handleDelete(selected)}
                         />
                     </div>
                 )}
@@ -1437,18 +1683,16 @@ export default function ContractIntelligencePage() {
                             onClick={() => setPage((p) => Math.max(1, p - 1))}
                             disabled={page === 1}
                             aria-label="Previous page"
-                            className="grid h-9 w-9 place-items-center rounded-md border border-zinc-800 text-zinc-300 transition hover:border-zinc-700 disabled:opacity-30"
+                            className="grid h-9 w-9 place-items-center rounded-md border border-[#26262A] text-neutral-200 transition hover:border-[#3F3F46] disabled:opacity-30"
                         >
                             <ChevronLeft size={14} />
                         </button>
-                        <span className="text-xs text-zinc-500">
-                            Page {page} of {totalPages}
-                        </span>
+                        <span className="text-xs text-neutral-400">Page {page} of {totalPages}</span>
                         <button
                             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                             disabled={page === totalPages}
                             aria-label="Next page"
-                            className="grid h-9 w-9 place-items-center rounded-md border border-zinc-800 text-zinc-300 transition hover:border-zinc-700 disabled:opacity-30"
+                            className="grid h-9 w-9 place-items-center rounded-md border border-[#26262A] text-neutral-200 transition hover:border-[#3F3F46] disabled:opacity-30"
                         >
                             <ChevronRight size={14} />
                         </button>
@@ -1463,22 +1707,27 @@ export default function ContractIntelligencePage() {
             />
 
             {reportItem && dataOf(reportItem.analysis) && (
-                <Report item={reportItem} onClose={() => setReportId(null)} />
+                <Report
+                    key={`${reportItem.contract._id}-${reportTab}`}
+                    item={reportItem}
+                    initialTab={reportTab}
+                    onClose={() => setReportId(null)}
+                />
             )}
 
             {toast && (
-                <div className="ci-fade fixed inset-x-3 bottom-3 z-[60] flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-xs text-zinc-200 shadow-2xl sm:inset-x-auto sm:bottom-6 sm:right-6 sm:px-4 sm:text-sm">
+                <div className="ci-fade fixed inset-x-3 bottom-3 z-[60] flex items-center gap-3 rounded-lg border border-[#26262A] bg-[#161618] px-3 py-2.5 text-xs text-white shadow-2xl sm:inset-x-auto sm:bottom-6 sm:right-6 sm:px-4 sm:text-sm">
                     <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
                     <span className="flex-1 truncate">{toast.text}</span>
                     {toast.id && (
                         <button
                             onClick={() => {
-                                setReportId(toast.id);
+                                openReport(toast.id);
                                 setToast(null);
                             }}
-                            className="shrink-0 rounded-md bg-zinc-800 px-2.5 py-1 text-[11px] font-medium text-zinc-100 hover:bg-zinc-700"
+                            className="shrink-0 rounded-md bg-[#26262A] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-[#2E2E33]"
                         >
-                            View
+                            Open report
                         </button>
                     )}
                 </div>
