@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
     BarChart3,
     FileText,
@@ -125,7 +125,6 @@ interface LawyerSidebarProps {
 
 export function LawyerSidebar({
     onMenuClick,
-    isMobileOpen,
     onClose,
 }: LawyerSidebarProps) {
     const pathname = usePathname()
@@ -134,6 +133,13 @@ export function LawyerSidebar({
 
     const [badges, setBadges] = useState<Record<string, number>>({})
     const [badgesLoading, setBadgesLoading] = useState(true)
+
+    // Keep the latest onClose in a ref so an inline function from the parent
+    // does not re-trigger the route-change effect on every render.
+    const onCloseRef = useRef(onClose)
+    useEffect(() => {
+        onCloseRef.current = onClose
+    }, [onClose])
 
     // ---- Fetch badges ----
     const fetchBadges = useCallback(async () => {
@@ -169,12 +175,8 @@ export function LawyerSidebar({
         }
     }, [])
 
-    // Initial fetch
-    useEffect(() => {
-        void fetchBadges()
-    }, [fetchBadges])
-
-    // Refresh on route change
+    // Fetch on mount and refresh on every route change
+    // (this effect also runs on mount, so no separate initial fetch is needed)
     useEffect(() => {
         void fetchBadges()
     }, [pathname, fetchBadges])
@@ -197,8 +199,8 @@ export function LawyerSidebar({
     // Close mobile menu on route change
     useEffect(() => {
         setIsMobileMenuOpen(false)
-        if (onClose) onClose()
-    }, [pathname, onClose])
+        onCloseRef.current?.()
+    }, [pathname])
 
     const isActive = (href: string) => {
         if (href === '/lawyer-dashboard') {
@@ -231,15 +233,12 @@ export function LawyerSidebar({
         return 'Attorney at Law'
     }
 
-    const SidebarContent = () => (
+    // Plain JSX element (not an inner component) so React does not remount
+    // the whole sidebar and replay animations on every render.
+    const sidebarContent = (
         <>
             {/* Logo */}
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.1 }}
-                className="p-4 sm:p-6 border-b border-sidebar-border flex-shrink-0"
-            >
+            <div className="p-4 sm:p-6 border-b border-sidebar-border flex-shrink-0">
                 <Link
                     href="/lawyer-dashboard"
                     className="block"
@@ -280,72 +279,55 @@ export function LawyerSidebar({
                         </div>
                     </div>
                 </Link>
-            </motion.div>
+            </div>
 
             {/* Navigation */}
-            <motion.nav
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.15 }}
-                className="flex-1 p-2 sm:p-4 space-y-0.5 sm:space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-sidebar-accent scrollbar-track-transparent"
-            >
-                {navItems.map((item, index) => {
+            <nav className="flex-1 p-2 sm:p-4 space-y-0.5 sm:space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-sidebar-accent scrollbar-track-transparent">
+                {navItems.map((item) => {
                     const active = isActive(item.href)
                     const count = item.badgeKey
                         ? badges[item.badgeKey]
                         : undefined
 
                     return (
-                        <motion.div
+                        <Link
                             key={item.href}
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{
-                                delay: 0.15 + index * 0.05,
-                            }}
+                            href={item.href}
+                            aria-current={active ? 'page' : undefined}
+                            className={`flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg transition-all duration-200 group ${active
+                                ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20'
+                                : 'text-sidebar-foreground hover:bg-sidebar-accent/20'
+                                }`}
                         >
-                            <Link
-                                href={item.href}
-                                className={`flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg transition-all duration-200 group ${active
-                                    ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20'
-                                    : 'text-sidebar-foreground hover:bg-sidebar-accent/20'
-                                    }`}
-                            >
-                                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                                    <item.icon
-                                        className={`w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 ${active
-                                            ? 'text-sidebar-primary-foreground'
-                                            : 'text-muted-foreground group-hover:text-sidebar-foreground'
-                                            }`}
-                                    />
-                                    <div className="min-w-0 flex-1">
-                                        <span className="font-semibold text-xs sm:text-sm block truncate">
-                                            {item.label}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <Badge
-                                    count={count}
-                                    loading={
-                                        badgesLoading &&
-                                        !!item.badgeKey
-                                    }
-                                    active={active}
+                            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                                <item.icon
+                                    className={`w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 ${active
+                                        ? 'text-sidebar-primary-foreground'
+                                        : 'text-muted-foreground group-hover:text-sidebar-foreground'
+                                        }`}
                                 />
-                            </Link>
-                        </motion.div>
+                                <div className="min-w-0 flex-1">
+                                    <span className="font-semibold text-xs sm:text-sm block truncate">
+                                        {item.label}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <Badge
+                                count={count}
+                                loading={
+                                    badgesLoading &&
+                                    !!item.badgeKey
+                                }
+                                active={active}
+                            />
+                        </Link>
                     )
                 })}
-            </motion.nav>
+            </nav>
 
             {/* Bottom Items */}
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.35 }}
-                className="p-2 sm:p-4 border-t border-sidebar-border flex-shrink-0 space-y-0.5 sm:space-y-1"
-            >
+            <div className="p-2 sm:p-4 border-t border-sidebar-border flex-shrink-0 space-y-0.5 sm:space-y-1">
                 {bottomItems.map((item) => (
                     <Link
                         key={item.href}
@@ -358,17 +340,12 @@ export function LawyerSidebar({
                         </span>
                     </Link>
                 ))}
-            </motion.div>
+            </div>
 
             {/* User Profile */}
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.4 }}
-                className="p-3 sm:p-4 border-t border-sidebar-border flex-shrink-0"
-            >
+            <div className="p-3 sm:p-4 border-t border-sidebar-border flex-shrink-0">
                 <div className="flex items-center gap-2 sm:gap-3 px-1 sm:px-2">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-sidebar-primary/20 rounded-full flex items-center justify-center flex-shrink-0 border-2 border-sidebar-primary/30">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-sidebar-primary/20 rounded-full flex items-center justify-center flex-shrink-0 border-2 border-sidebar-primary/30 overflow-hidden">
                         {user?.profilePhoto ? (
                             <img
                                 src={user.profilePhoto}
@@ -413,26 +390,22 @@ export function LawyerSidebar({
                                                 {spec}
                                             </span>
                                         ))}
-                                    {user.specialization
-                                        .length > 2 && (
-                                            <span className="text-[7px] sm:text-[8px] px-1 sm:px-1.5 py-0.5 rounded bg-sidebar-accent/30 text-muted-foreground">
-                                                +
-                                                {user
-                                                    .specialization
-                                                    .length - 2}
-                                            </span>
-                                        )}
+                                    {user.specialization.length > 2 && (
+                                        <span className="text-[7px] sm:text-[8px] px-1 sm:px-1.5 py-0.5 rounded bg-sidebar-accent/30 text-muted-foreground">
+                                            +{user.specialization.length - 2}
+                                        </span>
+                                    )}
                                 </div>
                             )}
                     </div>
                 </div>
-            </motion.div>
+            </div>
         </>
     )
 
     const toggleMobileMenu = () => {
-        setIsMobileMenuOpen(!isMobileMenuOpen)
-        if (onMenuClick) onMenuClick()
+        setIsMobileMenuOpen((open) => !open)
+        onMenuClick?.()
     }
 
     return (
@@ -442,6 +415,7 @@ export function LawyerSidebar({
                 onClick={toggleMobileMenu}
                 className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-sidebar text-sidebar-foreground hover:bg-sidebar-accent/20 transition-colors duration-200"
                 aria-label="Toggle menu"
+                aria-expanded={isMobileMenuOpen}
             >
                 {isMobileMenuOpen ? (
                     <X className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -464,16 +438,13 @@ export function LawyerSidebar({
             </AnimatePresence>
 
             {/* Desktop Sidebar */}
-            <motion.aside
-                initial={{ x: -250 }}
-                animate={{ x: 0 }}
-                transition={{ duration: 0.3 }}
-                className="hidden lg:flex w-64 bg-sidebar border-r border-sidebar-border flex-col h-screen overflow-hidden flex-shrink-0"
-            >
-                <SidebarContent />
-            </motion.aside>
+            <aside className="hidden lg:flex w-64 bg-sidebar border-r border-sidebar-border flex-col h-screen overflow-hidden flex-shrink-0">
+                {sidebarContent}
+            </aside>
 
-            {/* Mobile Sidebar */}
+            {/* Mobile Sidebar
+                z-[60] keeps it above the toggle button (z-50), and the old
+                pt-14/pt-16 wrapper is removed so the logo sits at the very top. */}
             <AnimatePresence>
                 {isMobileMenuOpen && (
                     <motion.aside
@@ -484,21 +455,12 @@ export function LawyerSidebar({
                             type: 'tween',
                             duration: 0.3,
                         }}
-                        className="lg:hidden fixed top-0 left-0 w-[280px] sm:w-72 h-full bg-sidebar border-r border-sidebar-border flex flex-col overflow-hidden z-50 shadow-2xl"
+                        className="lg:hidden fixed top-0 left-0 w-[280px] sm:w-72 h-dvh bg-sidebar border-r border-sidebar-border flex flex-col overflow-hidden z-[60] shadow-2xl"
                     >
-                        <div className="pt-14 sm:pt-16 flex flex-col h-full">
-                            <SidebarContent />
-                        </div>
+                        {sidebarContent}
                     </motion.aside>
                 )}
             </AnimatePresence>
-
-            {isMobileMenuOpen && (
-                <div
-                    className="fixed inset-0 z-40 lg:hidden"
-                    onClick={toggleMobileMenu}
-                />
-            )}
         </>
     )
 }

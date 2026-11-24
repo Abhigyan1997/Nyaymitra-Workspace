@@ -253,12 +253,8 @@ export function Sidebar() {
     }
   }, [])
 
-  // Initial badge fetch
-  useEffect(() => {
-    void fetchBadges()
-  }, [fetchBadges])
-
-  // Refresh badges on route change
+  // Fetch badges on mount and refresh on every route change
+  // (the effect runs on mount too, so a separate initial fetch is not needed)
   useEffect(() => {
     void fetchBadges()
   }, [pathname, fetchBadges])
@@ -318,18 +314,15 @@ export function Sidebar() {
 
   // ============================================
   // SIDEBAR CONTENT
+  // Plain JSX element (not an inner component) so React does not
+  // remount the whole sidebar and replay animations on every render.
   // ============================================
 
-  const SidebarContent = () => (
+  const sidebarContent = (
     <>
       {/* Logo */}
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.1 }}
-        className="p-6 border-b border-sidebar-border flex-shrink-0"
-      >
+      <div className="p-6 border-b border-sidebar-border flex-shrink-0">
         <Link href="/dashboard" className="block">
           <div className="flex items-center gap-3">
 
@@ -373,17 +366,12 @@ export function Sidebar() {
 
           </div>
         </Link>
-      </motion.div>
+      </div>
 
       {/* Navigation */}
 
-      <motion.nav
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.15 }}
-        className="flex-1 p-4 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-sidebar-accent scrollbar-track-transparent"
-      >
-        {navItems.map((item, index) => {
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-sidebar-accent scrollbar-track-transparent">
+        {navItems.map((item) => {
           const active = isActive(item.href)
 
           const count = item.badgeKey
@@ -391,58 +379,44 @@ export function Sidebar() {
             : undefined
 
           return (
-            <motion.div
+            <Link
               key={item.href}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{
-                delay: 0.15 + index * 0.05,
-              }}
+              href={item.href}
+              aria-current={active ? 'page' : undefined}
+              className={`flex items-center justify-between px-4 py-2.5 rounded-lg transition-all duration-200 group ${active
+                ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20'
+                : 'text-sidebar-foreground hover:bg-sidebar-accent/20'
+                }`}
             >
-              <Link
-                href={item.href}
-                aria-current={active ? 'page' : undefined}
-                className={`flex items-center justify-between px-4 py-2.5 rounded-lg transition-all duration-200 group ${active
-                  ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20'
-                  : 'text-sidebar-foreground hover:bg-sidebar-accent/20'
-                  }`}
-              >
-                <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3">
 
-                  <item.icon
-                    className={`w-5 h-5 shrink-0 transition-colors duration-200 ${active
-                      ? 'text-sidebar-primary-foreground'
-                      : 'text-muted-foreground group-hover:text-sidebar-foreground'
-                      }`}
-                    strokeWidth={1.8}
-                  />
-
-                  <span className="font-semibold text-sm">
-                    {item.label}
-                  </span>
-
-                </div>
-
-                <Badge
-                  count={count}
-                  loading={badgesLoading && !!item.badgeKey}
-                  active={active}
+                <item.icon
+                  className={`w-5 h-5 shrink-0 transition-colors duration-200 ${active
+                    ? 'text-sidebar-primary-foreground'
+                    : 'text-muted-foreground group-hover:text-sidebar-foreground'
+                    }`}
+                  strokeWidth={1.8}
                 />
 
-              </Link>
-            </motion.div>
+                <span className="font-semibold text-sm">
+                  {item.label}
+                </span>
+
+              </div>
+
+              <Badge
+                count={count}
+                loading={badgesLoading && !!item.badgeKey}
+                active={active}
+              />
+            </Link>
           )
         })}
-      </motion.nav>
+      </nav>
 
       {/* Bottom Items */}
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.35 }}
-        className="p-4 border-t border-sidebar-border flex-shrink-0 space-y-1"
-      >
+      <div className="p-4 border-t border-sidebar-border flex-shrink-0 space-y-1">
         {bottomItems.map((item) => (
           <Link
             key={item.href}
@@ -459,16 +433,11 @@ export function Sidebar() {
             </span>
           </Link>
         ))}
-      </motion.div>
+      </div>
 
       {/* User Profile */}
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
-        className="p-4 border-t border-sidebar-border flex-shrink-0"
-      >
+      <div className="p-4 border-t border-sidebar-border flex-shrink-0">
         <div className="flex items-center gap-3 px-2">
 
           <div className="w-10 h-10 bg-sidebar-primary/20 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
@@ -498,7 +467,7 @@ export function Sidebar() {
           </div>
 
         </div>
-      </motion.div>
+      </div>
     </>
   )
 
@@ -539,16 +508,13 @@ export function Sidebar() {
 
       {/* Desktop Sidebar */}
 
-      <motion.aside
-        initial={{ x: -250 }}
-        animate={{ x: 0 }}
-        transition={{ duration: 0.3 }}
-        className="hidden lg:flex w-64 bg-sidebar border-r border-sidebar-border flex-col h-screen overflow-hidden flex-shrink-0"
-      >
-        <SidebarContent />
-      </motion.aside>
+      <aside className="hidden lg:flex w-64 bg-sidebar border-r border-sidebar-border flex-col h-screen overflow-hidden flex-shrink-0">
+        {sidebarContent}
+      </aside>
 
       {/* Mobile Sidebar */}
+      {/* z-[60] keeps the sidebar above the toggle button (z-50), and the
+          extra pt-16 wrapper is removed so the logo sits at the very top. */}
 
       <AnimatePresence>
         {isMobileOpen && (
@@ -560,11 +526,9 @@ export function Sidebar() {
               type: 'tween',
               duration: 0.3,
             }}
-            className="lg:hidden fixed top-0 left-0 w-72 h-full bg-sidebar border-r border-sidebar-border flex flex-col overflow-hidden z-50 shadow-2xl"
+            className="lg:hidden fixed top-0 left-0 w-72 h-dvh bg-sidebar border-r border-sidebar-border flex flex-col overflow-hidden z-[60] shadow-2xl"
           >
-            <div className="pt-16 flex flex-col h-full">
-              <SidebarContent />
-            </div>
+            {sidebarContent}
           </motion.aside>
         )}
       </AnimatePresence>
