@@ -1,46 +1,49 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { Bricolage_Grotesque } from "next/font/google";
 import {
   Search,
   Plus,
-  MoreHorizontal,
   Mail,
   Shield,
   Users,
-  UserCheck,
-  Clock3,
   BriefcaseBusiness,
   Eye,
   Pencil,
-  UserRoundCheck,
-  UserRoundX,
   Loader2,
   CheckCircle2,
   AlertCircle,
   ChevronDown,
-  Settings2,
-  Check,
   Save,
-  ShieldCheck,
-  ShieldOff,
-  UserRound,
+  RotateCcw,
+  LayoutGrid,
+  Table2,
+  Lock,
+  Settings2,
+  Clock3,
+  UserPlus,
   X,
 } from "lucide-react";
 import { premiumToast } from "@/lib/premium-toast";
 
 const API_URL = "https://nyaymitra-backend-production.up.railway.app";
 
+const display = Bricolage_Grotesque({
+  subsets: ["latin"],
+  variable: "--font-team-display",
+  display: "swap",
+});
+
+/* =========================================================
+   TYPES
+========================================================= */
+
 type ProfessionalRole = "lawyer" | "CA" | "CS";
-
-type WorkspaceRole =
-  | "owner"
-  | "admin"
-  | "legal_manager"
-  | "member"
-  | "viewer";
-
+type WorkspaceRole = "owner" | "admin" | "legal_manager" | "member" | "viewer";
+type InvitableRole = Exclude<WorkspaceRole, "owner">;
 type MemberStatus = "invited" | "active" | "suspended" | "removed";
+type Level = 0 | 1 | 2;
 
 interface User {
   _id?: string;
@@ -72,7 +75,7 @@ interface Invitation {
   business: string;
   email: string;
   role: ProfessionalRole;
-  workspaceRole: Exclude<WorkspaceRole, "owner">;
+  workspaceRole: InvitableRole;
   permissions: string[];
   invitedBy?: User;
   status: "pending" | "accepted" | "expired" | "cancelled";
@@ -98,89 +101,58 @@ interface TeamResponse {
   message?: string;
 }
 
-const PROFESSIONAL_ROLES: {
-  value: ProfessionalRole;
-  label: string;
-}[] = [
-    { value: "lawyer", label: "Lawyer" },
-    { value: "CA", label: "Chartered Accountant" },
-    { value: "CS", label: "Company Secretary" },
-  ];
+/* =========================================================
+   CONSTANTS
+========================================================= */
+
+const PROFESSIONAL_ROLES: { value: ProfessionalRole; label: string }[] = [
+  { value: "lawyer", label: "Lawyer" },
+  { value: "CA", label: "Chartered Accountant" },
+  { value: "CS", label: "Company Secretary" },
+];
 
 const WORKSPACE_ROLES: {
-  value: Exclude<WorkspaceRole, "owner">;
+  value: InvitableRole;
   label: string;
   description: string;
 }[] = [
-    {
-      value: "admin",
-      label: "Admin",
-      description: "Manage team and workspace settings",
-    },
-    {
-      value: "legal_manager",
-      label: "Legal Manager",
-      description: "Manage legal operations and matters",
-    },
-    {
-      value: "member",
-      label: "Member",
-      description: "Standard workspace access",
-    },
-    {
-      value: "viewer",
-      label: "Viewer",
-      description: "Read-only workspace access",
-    },
+    { value: "admin", label: "Admin", description: "Runs the team and workspace settings" },
+    { value: "legal_manager", label: "Legal Manager", description: "Runs matters and contracts day to day" },
+    { value: "member", label: "Member", description: "Works on assigned documents and tasks" },
+    { value: "viewer", label: "Viewer", description: "Can look, cannot change anything" },
   ];
 
-const PERMISSIONS = [
-  {
-    key: "contracts.read",
-    label: "View Contracts",
-    group: "Contracts",
-  },
-  {
-    key: "contracts.write",
-    label: "Manage Contracts",
-    group: "Contracts",
-  },
-  {
-    key: "documents.read",
-    label: "View Documents",
-    group: "Documents",
-  },
-  {
-    key: "documents.write",
-    label: "Manage Documents",
-    group: "Documents",
-  },
-  {
-    key: "matters.read",
-    label: "View Matters",
-    group: "Matters",
-  },
-  {
-    key: "matters.write",
-    label: "Manage Matters",
-    group: "Matters",
-  },
-  {
-    key: "tasks.read",
-    label: "View Tasks",
-    group: "Tasks",
-  },
-  {
-    key: "tasks.write",
-    label: "Manage Tasks",
-    group: "Tasks",
-  },
-  {
-    key: "reports.read",
-    label: "View Reports",
-    group: "Reports",
-  },
+/** Each module has a colour. The same colour is used in the seal, the matrix and the pickers. */
+const MODULES = [
+  { key: "contracts", label: "Contracts", color: "#4f46e5", canManage: true },
+  { key: "documents", label: "Documents", color: "#0d9488", canManage: true },
+  { key: "matters", label: "Matters", color: "#d97706", canManage: true },
+  { key: "tasks", label: "Tasks", color: "#e11d48", canManage: true },
+  { key: "reports", label: "Reports", color: "#7c3aed", canManage: false },
+] as const;
+
+type Module = (typeof MODULES)[number];
+
+const LEVEL_LABEL = ["No access", "View", "Manage"];
+
+const ROLE_PRESETS: Record<InvitableRole, Record<Module["key"], Level>> = {
+  admin: { contracts: 2, documents: 2, matters: 2, tasks: 2, reports: 1 },
+  legal_manager: { contracts: 2, documents: 2, matters: 2, tasks: 2, reports: 1 },
+  member: { contracts: 1, documents: 2, matters: 1, tasks: 2, reports: 0 },
+  viewer: { contracts: 1, documents: 1, matters: 1, tasks: 1, reports: 1 },
+};
+
+const ROLE_BAR: { key: WorkspaceRole; label: string; tone: string }[] = [
+  { key: "owner", label: "Owner", tone: "bg-foreground" },
+  { key: "admin", label: "Admins", tone: "bg-primary" },
+  { key: "legal_manager", label: "Legal managers", tone: "bg-sky-500" },
+  { key: "member", label: "Members", tone: "bg-emerald-500" },
+  { key: "viewer", label: "Viewers", tone: "bg-muted-foreground/40" },
 ];
+
+/* =========================================================
+   HELPERS
+========================================================= */
 
 const getToken = () => {
   if (typeof window === "undefined") return null;
@@ -189,7 +161,6 @@ const getToken = () => {
 
 const getInitials = (name?: string) => {
   if (!name) return "U";
-
   return name
     .trim()
     .split(/\s+/)
@@ -198,25 +169,247 @@ const getInitials = (name?: string) => {
     .join("");
 };
 
-const getProfessionalRoleLabel = (role?: string) => {
-  return (
-    PROFESSIONAL_ROLES.find((item) => item.value === role)?.label ||
-    role ||
-    "Unknown professional"
-  );
-};
+const getProfessionalRoleLabel = (role?: string) =>
+  PROFESSIONAL_ROLES.find((item) => item.value === role)?.label ||
+  role ||
+  "Unknown professional";
 
 const getRoleLabel = (role: WorkspaceRole) => {
-  if (role === "legal_manager") return "Legal Manager";
+  if (role === "owner") return "Owner";
+  return WORKSPACE_ROLES.find((item) => item.value === role)?.label || "Member";
+};
+
+const getAvatar = (user?: User) => user?.profilePhoto || user?.avatar || "";
+
+const levelOf = (perms: string[], key: Module["key"]): Level => {
+  if (perms.includes(`${key}.write`)) return 2;
+  if (perms.includes(`${key}.read`)) return 1;
+  return 0;
+};
+
+const withLevel = (perms: string[], key: Module["key"], level: Level) => {
+  const rest = perms.filter((p) => p !== `${key}.read` && p !== `${key}.write`);
+  if (level >= 1) rest.push(`${key}.read`);
+  if (level === 2) rest.push(`${key}.write`);
+  return rest;
+};
+
+const presetPerms = (role: InvitableRole) => {
+  let perms: string[] = [];
+  MODULES.forEach((m) => {
+    perms = withLevel(perms, m.key, ROLE_PRESETS[role][m.key]);
+  });
+  return perms;
+};
+
+const FULL_ACCESS = (() => {
+  let perms: string[] = [];
+  MODULES.forEach((m) => {
+    perms = withLevel(perms, m.key, m.canManage ? 2 : 1);
+  });
+  return perms;
+})();
+
+const samePerms = (a: string[], b: string[]) =>
+  [...a].sort().join("|") === [...b].sort().join("|");
+
+const effectivePerms = (member: TeamMember) =>
+  member.workspaceRole === "owner" ? FULL_ACCESS : member.permissions || [];
+
+function formatDate(date?: string) {
+  if (!date) return "—";
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function expiryLabel(date: string) {
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "—";
+  const days = Math.ceil((d.getTime() - Date.now()) / 86400000);
+  if (days < 0) return "Expired";
+  if (days === 0) return "Expires today";
+  return `Expires in ${days} day${days === 1 ? "" : "s"}`;
+}
+
+/* =========================================================
+   ACCESS SEAL
+   A notary-style stamp: five wedges (one per module).
+   Inner ring = can view, outer ring = can manage.
+========================================================= */
+
+function polar(cx: number, cy: number, r: number, deg: number) {
+  const a = (deg * Math.PI) / 180;
+  return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+}
+
+function wedge(cx: number, cy: number, r1: number, r2: number, a0: number, a1: number) {
+  const [x1, y1] = polar(cx, cy, r2, a0);
+  const [x2, y2] = polar(cx, cy, r2, a1);
+  const [x3, y3] = polar(cx, cy, r1, a1);
+  const [x4, y4] = polar(cx, cy, r1, a0);
+  return `M${x1} ${y1}A${r2} ${r2} 0 0 1 ${x2} ${y2}L${x3} ${y3}A${r1} ${r1} 0 0 0 ${x4} ${y4}Z`;
+}
+
+function AccessSeal({
+  perms,
+  size = 56,
+  isOwner = false,
+  className = "",
+}: {
+  perms: string[];
+  size?: number;
+  isOwner?: boolean;
+  className?: string;
+}) {
+  const summary = MODULES.map(
+    (m) => `${m.label}: ${LEVEL_LABEL[levelOf(perms, m.key)]}`
+  ).join(", ");
 
   return (
-    WORKSPACE_ROLES.find((item) => item.value === role)?.label || "Member"
+    <svg
+      viewBox="0 0 48 48"
+      width={size}
+      height={size}
+      role="img"
+      aria-label={`Access seal. ${summary}`}
+      className={`text-foreground ${className}`}
+    >
+      <title>{summary}</title>
+      {MODULES.map((m, i) => {
+        const level = levelOf(perms, m.key);
+        const start = -90 + i * 72 + 3;
+        const end = start + 66;
+        return (
+          <g key={m.key}>
+            <path
+              d={wedge(24, 24, 9, 14.5, start, end)}
+              fill={level >= 1 ? m.color : "currentColor"}
+              opacity={level >= 1 ? 1 : 0.1}
+              style={{ transition: "fill 200ms, opacity 200ms" }}
+            />
+            {m.canManage && (
+              <path
+                d={wedge(24, 24, 16, 22, start, end)}
+                fill={level >= 2 ? m.color : "currentColor"}
+                opacity={level >= 2 ? 1 : 0.1}
+                style={{ transition: "fill 200ms, opacity 200ms" }}
+              />
+            )}
+          </g>
+        );
+      })}
+      <circle
+        cx="24"
+        cy="24"
+        r="3.5"
+        fill="currentColor"
+        opacity={isOwner ? 0.9 : 0.15}
+      />
+    </svg>
   );
-};
+}
 
-const getAvatar = (user?: User) => {
-  return user?.profilePhoto || user?.avatar || "";
-};
+/* =========================================================
+   SMALL PIECES
+========================================================= */
+
+function Avatar({ user, size = 48 }: { user: User; size?: number }) {
+  const src = getAvatar(user);
+  const style = { width: size, height: size };
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={user.fullName}
+        style={style}
+        className="shrink-0 rounded-full object-cover"
+      />
+    );
+  }
+
+  return (
+    <div
+      style={{ ...style, fontSize: size * 0.32 }}
+      className="flex shrink-0 items-center justify-center rounded-full bg-primary/10 font-semibold text-primary"
+    >
+      {getInitials(user.fullName)}
+    </div>
+  );
+}
+
+function Pill({
+  children,
+  tone = "primary",
+}: {
+  children: React.ReactNode;
+  tone?: "primary" | "muted";
+}) {
+  return (
+    <span
+      className={`rounded-full px-2.5 py-1 text-xs font-medium ${tone === "primary"
+          ? "bg-primary/10 text-primary"
+          : "bg-muted text-muted-foreground"
+        }`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function StatusPill({ status }: { status: MemberStatus }) {
+  const config = {
+    active: { label: "Active", cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
+    suspended: { label: "Suspended", cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
+    invited: { label: "Invited", cls: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
+    removed: { label: "Removed", cls: "bg-muted text-muted-foreground" },
+  }[status];
+
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${config.cls}`}>
+      {config.label}
+    </span>
+  );
+}
+
+function FilterSelect({
+  value,
+  onChange,
+  options,
+  label,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  label: string;
+}) {
+  return (
+    <div className="relative">
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-11 min-w-[150px] appearance-none rounded-xl border border-border bg-background pl-4 pr-10 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+    </div>
+  );
+}
+
+/* =========================================================
+   PAGE
+========================================================= */
 
 export default function TeamPage() {
   const [members, setMembers] = useState<TeamMember[]>([]);
@@ -224,33 +417,32 @@ export default function TeamPage() {
   const [business, setBusiness] = useState<Business | null>(null);
 
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [savingMatrix, setSavingMatrix] = useState(false);
 
   const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
-
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [view, setView] = useState<"people" | "matrix">("people");
 
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showViewModal, setShowViewModal] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [showView, setShowView] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
 
-  const [selectedMember, setSelectedMember] =
-    useState<TeamMember | null>(null);
+  /** Unsaved matrix edits, keyed by member id */
+  const [drafts, setDrafts] = useState<Record<string, string[]>>({});
 
-  const fetchTeam = async () => {
+  const fetchTeam = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError("");
 
       const token = getToken();
-
-      if (!token) {
-        throw new Error("Authentication token not found.");
-      }
+      if (!token) throw new Error("Authentication token not found.");
 
       const response = await fetch(`${API_URL}/api/v1/team/all`, {
         method: "GET",
@@ -261,7 +453,6 @@ export default function TeamPage() {
       });
 
       const result: TeamResponse = await response.json();
-
       if (!response.ok || !result.success) {
         throw new Error(result.message || "Failed to fetch team.");
       }
@@ -271,17 +462,9 @@ export default function TeamPage() {
       setBusiness(result.data.business || null);
     } catch (err) {
       console.error(err);
-
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Failed to load your team.";
-
+      const message = err instanceof Error ? err.message : "Failed to load your team.";
       setError(message);
-
-      premiumToast.error("Could not load team", {
-        description: message,
-      });
+      premiumToast.error("Could not load team", { description: message });
     } finally {
       setLoading(false);
     }
@@ -291,208 +474,78 @@ export default function TeamPage() {
     fetchTeam();
   }, []);
 
+  // One entrance moment: the role spectrum draws in once data is ready.
   useEffect(() => {
-    if (!successMessage) return;
+    if (loading) return;
+    const id = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(id);
+  }, [loading]);
 
-    const timeout = setTimeout(() => {
-      setSuccessMessage("");
-    }, 4000);
-
-    return () => clearTimeout(timeout);
-  }, [successMessage]);
-
-  const activeMembers = useMemo(
-    () => members.filter((member) => member.status === "active"),
-    [members]
-  );
-
-  const suspendedMembers = useMemo(
-    () => members.filter((member) => member.status === "suspended"),
-    [members]
-  );
-
-  const admins = useMemo(
-    () =>
-      members.filter(
-        (member) =>
-          member.status === "active" &&
-          ["owner", "admin"].includes(member.workspaceRole)
-      ),
-    [members]
-  );
-
-  const filteredMembers = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    return members.filter((member) => {
-      const name = member.user?.fullName?.toLowerCase() || "";
-      const email = member.user?.email?.toLowerCase() || "";
-      const professionalRole = member.user?.role?.toLowerCase() || "";
-      const workspaceRole =
-        member.workspaceRole?.toLowerCase() || "";
-
-      const matchesSearch =
-        !query ||
-        name.includes(query) ||
-        email.includes(query) ||
-        professionalRole.includes(query) ||
-        workspaceRole.includes(query);
-
-      const matchesRole =
-        roleFilter === "all" ||
-        member.workspaceRole === roleFilter;
-
-      const matchesType =
-        typeFilter === "all" ||
-        member.user.role === typeFilter;
-
-      const matchesStatus =
-        statusFilter === "all" ||
-        member.status === statusFilter;
-
-      return (
-        matchesSearch &&
-        matchesRole &&
-        matchesType &&
-        matchesStatus
-      );
-    });
-  }, [members, search, roleFilter, typeFilter, statusFilter]);
-
-  const handleInvite = async (payload: {
-    email: string;
-    role: ProfessionalRole;
-    workspaceRole: Exclude<WorkspaceRole, "owner">;
-    permissions: string[];
-  }) => {
-    try {
-      setActionLoading(true);
-      setError("");
-
-      const token = getToken();
-
-      const response = await fetch(
-        `${API_URL}/api/v1/team/invite`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.message || "Failed to send invitation."
-        );
-      }
-
-      setShowInviteModal(false);
-
-      setSuccessMessage(
-        "Team invitation created successfully."
-      );
-
-      premiumToast.success("Invitation sent", {
-        description: `An invite has been sent to ${payload.email}.`,
-      });
-
-      await fetchTeam();
-    } catch (err) {
-      console.error(err);
-
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Failed to invite team member.";
-
-      setError(message);
-
-      premiumToast.error("Invitation failed", {
-        description: message,
-      });
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUpdateMember = async (
+  const patchMember = async (
     memberId: string,
     payload: {
-      workspaceRole?: Exclude<WorkspaceRole, "owner">;
+      workspaceRole?: InvitableRole;
       role?: ProfessionalRole;
       permissions?: string[];
     }
   ) => {
-    try {
-      setActionLoading(true);
-      setError("");
-
-      const token = getToken();
-
-      const response = await fetch(
-        `${API_URL}/api/v1/team/${memberId}/role`,
-        {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.message || "Failed to update team member."
-        );
-      }
-
-      setShowEditModal(false);
-      setSelectedMember(null);
-
-      setSuccessMessage(
-        "Team member updated successfully."
-      );
-
-      premiumToast.success("Member updated", {
-        description: "Access and permissions have been saved.",
-      });
-
-      await fetchTeam();
-    } catch (err) {
-      console.error(err);
-
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Failed to update team member.";
-
-      setError(message);
-
-      premiumToast.error("Update failed", {
-        description: message,
-      });
-    } finally {
-      setActionLoading(false);
+    const response = await fetch(`${API_URL}/api/v1/team/${memberId}/role`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || "Failed to update team member.");
     }
   };
 
-  const openEditMember = (member: TeamMember) => {
-    setSelectedMember(member);
-    setShowEditModal(true);
-  };
+  /* ---------- derived ---------- */
 
-  const openViewMember = (member: TeamMember) => {
-    setSelectedMember(member);
-    setShowViewModal(true);
-  };
+  const liveMembers = useMemo(() => members.filter((m) => m.status !== "removed"), [members]);
+  const activeMembers = useMemo(() => members.filter((m) => m.status === "active"), [members]);
+  const adminCount = useMemo(
+    () =>
+      members.filter(
+        (m) => m.status === "active" && ["owner", "admin"].includes(m.workspaceRole)
+      ).length,
+    [members]
+  );
+
+  const roleCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    liveMembers.forEach((m) => {
+      counts[m.workspaceRole] = (counts[m.workspaceRole] || 0) + 1;
+    });
+    return counts;
+  }, [liveMembers]);
+
+  const filteredMembers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return members.filter((member) => {
+      const haystack = [
+        member.user?.fullName,
+        member.user?.email,
+        member.user?.role,
+        member.workspaceRole,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return (
+        (!query || haystack.includes(query)) &&
+        (roleFilter === "all" || member.workspaceRole === roleFilter) &&
+        (typeFilter === "all" || member.user.role === typeFilter) &&
+        (statusFilter === "all" || member.status === statusFilter)
+      );
+    });
+  }, [members, search, roleFilter, typeFilter, statusFilter]);
+
+  const hasFilters =
+    !!search || roleFilter !== "all" || typeFilter !== "all" || statusFilter !== "all";
 
   const clearFilters = () => {
     setSearch("");
@@ -501,55 +554,272 @@ export default function TeamPage() {
     setStatusFilter("all");
   };
 
+  /* ---------- actions ---------- */
+
+  const handleInvite = async (payload: {
+    email: string;
+    role: ProfessionalRole;
+    workspaceRole: InvitableRole;
+    permissions: string[];
+  }) => {
+    try {
+      setActionLoading(true);
+      setError("");
+
+      const response = await fetch(`${API_URL}/api/v1/team/invite`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Failed to send invitation.");
+      }
+
+      setShowInvite(false);
+      premiumToast.success("Invitation sent", {
+        description: `An invite has been sent to ${payload.email}.`,
+      });
+      await fetchTeam(true);
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : "Failed to invite team member.";
+      setError(message);
+      premiumToast.error("Invitation failed", { description: message });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleUpdateMember = async (
+    memberId: string,
+    payload: {
+      workspaceRole?: InvitableRole;
+      role?: ProfessionalRole;
+      permissions?: string[];
+    }
+  ) => {
+    try {
+      setActionLoading(true);
+      setError("");
+      await patchMember(memberId, payload);
+
+      setShowEdit(false);
+      setSelectedMember(null);
+      setDrafts((d) => {
+        const copy = { ...d };
+        delete copy[memberId];
+        return copy;
+      });
+      premiumToast.success("Member updated", {
+        description: "Access and permissions have been saved.",
+      });
+      await fetchTeam(true);
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : "Failed to update team member.";
+      setError(message);
+      premiumToast.error("Update failed", { description: message });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  /* ---------- matrix ---------- */
+
+  const permsOf = (m: TeamMember) => drafts[m._id] ?? effectivePerms(m);
+  const isLocked = (m: TeamMember) => m.workspaceRole === "owner" || m.status === "removed";
+  const dirtyIds = Object.keys(drafts);
+
+  const cycleCell = (member: TeamMember, mod: Module) => {
+    const current = permsOf(member);
+    const max = mod.canManage ? 2 : 1;
+    const next = ((levelOf(current, mod.key) + 1) % (max + 1)) as Level;
+    const updated = withLevel(current, mod.key, next);
+
+    setDrafts((d) => {
+      const copy = { ...d };
+      if (samePerms(updated, member.permissions || [])) delete copy[member._id];
+      else copy[member._id] = updated;
+      return copy;
+    });
+  };
+
+  const saveDrafts = async () => {
+    setSavingMatrix(true);
+    let saved = 0;
+    const failed: string[] = [];
+
+    for (const id of dirtyIds) {
+      const member = members.find((m) => m._id === id);
+      if (!member || member.workspaceRole === "owner") continue;
+      try {
+        await patchMember(id, {
+          permissions: drafts[id],
+          workspaceRole: member.workspaceRole as InvitableRole,
+          role: member.user.role as ProfessionalRole,
+        });
+        saved += 1;
+        setDrafts((d) => {
+          const copy = { ...d };
+          delete copy[id];
+          return copy;
+        });
+      } catch {
+        failed.push(member.user.fullName);
+      }
+    }
+
+    if (saved) {
+      premiumToast.success("Access saved", {
+        description: `Updated ${saved} team member${saved === 1 ? "" : "s"}.`,
+      });
+    }
+    if (failed.length) {
+      premiumToast.error("Some changes did not save", {
+        description: `Try again for: ${failed.join(", ")}.`,
+      });
+    }
+
+    await fetchTeam(true);
+    setSavingMatrix(false);
+  };
+
+  /* ---------- render ---------- */
+
+  const company = business?.companyName || "your workspace";
+  const peopleLabel = activeMembers.length === 1 ? "person" : "people";
+
+  const barTotal = liveMembers.length + invitations.length;
+
   return (
-    <div className="min-h-full bg-background">
-      <div className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
-              <Users className="h-4 w-4" />
-              <span>Workspace</span>
-              <span>/</span>
-              <span className="text-foreground">My Team</span>
-            </div>
+    <div className={`${display.variable} tm-root min-h-full bg-background`}>
+      <style>{`
+        .tm-display { font-family: var(--font-team-display), ui-sans-serif, system-ui, sans-serif; letter-spacing: -0.025em; }
+        @keyframes tm-slide { from { transform: translateX(32px); opacity: 0 } to { transform: none; opacity: 1 } }
+        .tm-slide { animation: tm-slide 220ms cubic-bezier(.2,.8,.2,1) both; }
+        @keyframes tm-rise { from { transform: translate(-50%, 16px); opacity: 0 } to { transform: translate(-50%, 0); opacity: 1 } }
+        .tm-rise { animation: tm-rise 200ms cubic-bezier(.2,.8,.2,1) both; }
+        .tm-reveal { transition: clip-path 1000ms cubic-bezier(.2,.8,.2,1); }
+        @media (prefers-reduced-motion: reduce) {
+          .tm-slide, .tm-rise { animation: none; }
+          .tm-reveal { transition: none; }
+        }
+      `}</style>
 
-            <h1 className="text-display-lg font-semibold tracking-tight text-foreground">
-              My Team
-            </h1>
+      <div className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6 lg:px-10">
+        {/* ---------- Header ---------- */}
+        <header className="mb-10">
+          <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+            <div className="max-w-3xl">
+              <h1 className="tm-display text-4xl font-semibold leading-[1.05] text-foreground sm:text-5xl">
+                {loading
+                  ? "Loading your team"
+                  : `${activeMembers.length} ${peopleLabel} can open ${company}.`}
+              </h1>
 
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              Manage everyone who has access to{" "}
-              {business?.companyName
-                ? business.companyName
-                : "your workspace"}
-              .
-            </p>
-          </div>
-
-          <button
-            onClick={() => {
-              setError("");
-              setShowInviteModal(true);
-            }}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90"
-          >
-            <Plus className="h-4 w-4" />
-            Add Team Member
-          </button>
-        </div>
-
-        {/* Alerts */}
-        {error && (
-          <div className="mb-6 flex items-start gap-3 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-
-            <div className="flex-1">
-              {error}
+              {!loading && (
+                <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
+                  {adminCount} {adminCount === 1 ? "person manages" : "people manage"} the
+                  team
+                  {invitations.length > 0
+                    ? `, and ${invitations.length} invite${invitations.length === 1 ? " is" : "s are"
+                    } waiting to be accepted.`
+                    : "."}{" "}
+                  Decide who sees contracts, documents, matters, tasks and reports.
+                </p>
+              )}
             </div>
 
             <button
+              onClick={() => {
+                setError("");
+                setShowInvite(true);
+              }}
+              className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-full bg-primary px-6 text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30"
+            >
+              <UserPlus className="h-4 w-4" />
+              Invite someone
+            </button>
+          </div>
+
+          {/* Role spectrum: the one memorable element on the page */}
+          {!loading && barTotal > 0 && (
+            <div className="mt-8">
+              <div
+                className="tm-reveal flex h-4 w-full gap-1"
+                style={{
+                  clipPath: mounted ? "inset(0 0 0 0 round 8px)" : "inset(0 100% 0 0 round 8px)",
+                }}
+              >
+                {ROLE_BAR.filter((r) => roleCounts[r.key]).map((r) => {
+                  const dim = roleFilter !== "all" && roleFilter !== r.key;
+                  return (
+                    <button
+                      key={r.key}
+                      type="button"
+                      aria-label={`Filter by ${r.label}`}
+                      aria-pressed={roleFilter === r.key}
+                      title={`${r.label}: ${roleCounts[r.key]}`}
+                      onClick={() => setRoleFilter(roleFilter === r.key ? "all" : r.key)}
+                      style={{ flexGrow: roleCounts[r.key] }}
+                      className={`${r.tone} h-full min-w-[14px] rounded-[5px] transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${dim ? "opacity-25" : "opacity-100"
+                        }`}
+                    />
+                  );
+                })}
+
+                {invitations.length > 0 && (
+                  <div
+                    title={`Pending invitations: ${invitations.length}`}
+                    style={{ flexGrow: invitations.length }}
+                    className="h-full min-w-[14px] rounded-[5px] border border-dashed border-primary/60 bg-primary/10"
+                  />
+                )}
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
+                {ROLE_BAR.filter((r) => roleCounts[r.key]).map((r) => (
+                  <button
+                    key={r.key}
+                    type="button"
+                    onClick={() => setRoleFilter(roleFilter === r.key ? "all" : r.key)}
+                    className={`inline-flex items-center gap-2 transition hover:text-foreground ${roleFilter === r.key ? "font-semibold text-foreground" : ""
+                      }`}
+                  >
+                    <span className={`h-2.5 w-2.5 rounded-[3px] ${r.tone}`} />
+                    {r.label}
+                    <span className="text-foreground">{roleCounts[r.key]}</span>
+                  </button>
+                ))}
+
+                {invitations.length > 0 && (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-[3px] border border-dashed border-primary/60 bg-primary/10" />
+                    Pending invites
+                    <span className="text-foreground">{invitations.length}</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </header>
+
+        {/* ---------- Error ---------- */}
+        {error && (
+          <div
+            role="alert"
+            className="mb-6 flex items-start gap-3 rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+          >
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="flex-1">{error}</div>
+            <button
               onClick={() => setError("")}
+              aria-label="Dismiss"
               className="rounded-md p-1 hover:bg-destructive/10"
             >
               <X className="h-4 w-4" />
@@ -557,261 +827,202 @@ export default function TeamPage() {
           </div>
         )}
 
-        {successMessage && (
-          <div className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-600 dark:text-emerald-400">
-            <CheckCircle2 className="h-4 w-4" />
-            {successMessage}
+        {/* ---------- Toolbar ---------- */}
+        <div className="mb-6 flex flex-col gap-3 xl:flex-row xl:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, email or role"
+              className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+
+          <FilterSelect
+            label="Professional type"
+            value={typeFilter}
+            onChange={setTypeFilter}
+            options={[{ value: "all", label: "All professions" }, ...PROFESSIONAL_ROLES]}
+          />
+
+          <FilterSelect
+            label="Status"
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={[
+              { value: "all", label: "Any status" },
+              { value: "active", label: "Active" },
+              { value: "suspended", label: "Suspended" },
+              { value: "invited", label: "Invited" },
+            ]}
+          />
+
+          <div
+            role="tablist"
+            aria-label="Team view"
+            className="inline-flex h-11 shrink-0 rounded-xl border border-border bg-muted/40 p-1"
+          >
+            {(
+              [
+                { id: "people", label: "People", icon: LayoutGrid },
+                { id: "matrix", label: "Access grid", icon: Table2 },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                role="tab"
+                aria-selected={view === tab.id}
+                onClick={() => setView(tab.id)}
+                className={`inline-flex items-center gap-2 rounded-lg px-3.5 text-sm font-medium transition ${view === tab.id
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                  }`}
+              >
+                <tab.icon className="h-4 w-4" />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {hasFilters && (
+          <div className="-mt-2 mb-6 flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              Showing {filteredMembers.length} of {members.length} team members
+            </span>
+            <button onClick={clearFilters} className="font-medium text-primary hover:underline">
+              Clear filters
+            </button>
           </div>
         )}
 
-        {/* Stats */}
-        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            icon={<Users className="h-5 w-5" />}
-            label="Total Members"
-            value={activeMembers.length}
-            description="Active workspace members"
-          />
-
-          <StatCard
-            icon={<UserCheck className="h-5 w-5" />}
-            label="Active"
-            value={activeMembers.length}
-            description="Currently active"
-          />
-
-          <StatCard
-            icon={<Clock3 className="h-5 w-5" />}
-            label="Pending Invitations"
-            value={invitations.length}
-            description="Awaiting acceptance"
-          />
-
-          <StatCard
-            icon={<Shield className="h-5 w-5" />}
-            label="Admins"
-            value={admins.length}
-            description="Workspace administrators"
-          />
-        </div>
-
-        {/* Search / Filters */}
-        <div className="mb-6 rounded-2xl border border-border bg-card p-4">
-          <div className="flex flex-col gap-3 xl:flex-row">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
-              <input
-                value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
-                placeholder="Search by name, email, role or type..."
-                className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/10"
-              />
-            </div>
-
-            <FilterSelect
-              value={roleFilter}
-              onChange={setRoleFilter}
-              options={[
-                { value: "all", label: "All Roles" },
-                ...WORKSPACE_ROLES.map((role) => ({
-                  value: role.value,
-                  label: role.label,
-                })),
-                {
-                  value: "owner",
-                  label: "Owner",
-                },
-              ]}
-            />
-
-            <FilterSelect
-              value={typeFilter}
-              onChange={setTypeFilter}
-              options={[
-                { value: "all", label: "All Types" },
-                ...PROFESSIONAL_ROLES,
-              ]}
-            />
-
-            <FilterSelect
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={[
-                { value: "all", label: "All Statuses" },
-                {
-                  value: "active",
-                  label: "Active",
-                },
-                {
-                  value: "suspended",
-                  label: "Suspended",
-                },
-                {
-                  value: "invited",
-                  label: "Invited",
-                },
-              ]}
-            />
-          </div>
-
-          {(search ||
-            roleFilter !== "all" ||
-            typeFilter !== "all" ||
-            statusFilter !== "all") && (
-              <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
-                <p className="text-xs text-muted-foreground">
-                  Showing {filteredMembers.length} of{" "}
-                  {members.length} team members
-                </p>
-
-                <button
-                  onClick={clearFilters}
-                  className="text-xs font-medium text-primary hover:underline"
-                >
-                  Clear filters
-                </button>
-              </div>
-            )}
-        </div>
-
-        {/* Team Members */}
-        <section className="mb-8">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">
-                Team Members
-              </h2>
-
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                People currently associated with your workspace
-              </p>
-            </div>
-
-            {!loading && (
-              <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
-                {filteredMembers.length} members
-              </span>
-            )}
-          </div>
-
+        {/* ---------- Members ---------- */}
+        <section className="mb-12" aria-live="polite">
           {loading ? (
-            <TeamLoadingState />
+            <LoadingState />
           ) : filteredMembers.length === 0 ? (
-            <EmptyTeamState
-              hasFilters={
-                !!search ||
-                roleFilter !== "all" ||
-                typeFilter !== "all" ||
-                statusFilter !== "all"
-              }
-              onClearFilters={clearFilters}
-              onAdd={() => setShowInviteModal(true)}
+            <EmptyState
+              hasFilters={hasFilters}
+              onClear={clearFilters}
+              onAdd={() => setShowInvite(true)}
             />
-          ) : (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          ) : view === "people" ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
               {filteredMembers.map((member) => (
-                <TeamMemberCard
+                <MemberCard
                   key={member._id}
                   member={member}
-                  onView={() => openViewMember(member)}
-                  onEdit={() => openEditMember(member)}
+                  onView={() => {
+                    setSelectedMember(member);
+                    setShowView(true);
+                  }}
+                  onEdit={() => {
+                    setSelectedMember(member);
+                    setShowEdit(true);
+                  }}
                 />
               ))}
             </div>
+          ) : (
+            <AccessGrid
+              members={filteredMembers}
+              permsOf={permsOf}
+              isLocked={isLocked}
+              drafts={drafts}
+              onCycle={cycleCell}
+            />
           )}
         </section>
 
-        {/* Pending Invitations */}
-        {invitations.length > 0 && (
-          <section className="mb-8">
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-foreground">
-                Pending Invitations
+        {/* ---------- Pending invitations ---------- */}
+        {!loading && invitations.length > 0 && (
+          <section className="mb-12">
+            <div className="mb-4 flex items-center gap-2">
+              <Clock3 className="h-4 w-4 text-muted-foreground" />
+              <h2 className="tm-display text-xl font-semibold text-foreground">
+                Waiting to join
               </h2>
-
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                Invitations waiting to be accepted
-              </p>
             </div>
 
-            <div className="overflow-hidden rounded-2xl border border-border bg-card">
-              <div className="divide-y divide-border">
-                {invitations.map((invitation) => (
-                  <InvitationRow
-                    key={invitation._id}
-                    invitation={invitation}
-                  />
-                ))}
-              </div>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {invitations.map((inv) => (
+                <InvitationTicket key={inv._id} invitation={inv} />
+              ))}
             </div>
           </section>
         )}
-
-        {/* Team summary */}
-        {!loading && members.length > 0 && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <SummaryCard
-              icon={<BriefcaseBusiness className="h-5 w-5" />}
-              title="Professional Coverage"
-              value={`${new Set(
-                activeMembers.map((member) => member.user.role)
-              ).size} types`}
-              description="Different professional types in your team"
-            />
-
-            <SummaryCard
-              icon={<UserRoundCheck className="h-5 w-5" />}
-              title="Active Workspace"
-              value={`${activeMembers.length}`}
-              description="Members with active access"
-            />
-
-            <SummaryCard
-              icon={<UserRoundX className="h-5 w-5" />}
-              title="Suspended"
-              value={`${suspendedMembers.length}`}
-              description="Members currently restricted"
-            />
-          </div>
-        )}
       </div>
 
-      {/* Invite Modal */}
-      {showInviteModal && (
-        <InviteMemberModal
+      {/* ---------- Unsaved matrix changes ---------- */}
+      {dirtyIds.length > 0 && (
+        <div
+          role="status"
+          className="tm-rise fixed bottom-6 left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-xl items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-2xl"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-foreground">
+              {dirtyIds.length} {dirtyIds.length === 1 ? "person has" : "people have"} unsaved
+              access changes
+            </p>
+            <p className="text-xs text-muted-foreground">Nothing changes until you save.</p>
+          </div>
+
+          <button
+            onClick={() => setDrafts({})}
+            disabled={savingMatrix}
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Discard
+          </button>
+
+          <button
+            onClick={saveDrafts}
+            disabled={savingMatrix}
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
+          >
+            {savingMatrix ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            {savingMatrix ? "Saving" : "Save changes"}
+          </button>
+        </div>
+      )}
+
+      {/* ---------- Drawers ---------- */}
+      {showInvite && (
+        <InviteDrawer
           loading={actionLoading}
-          onClose={() => setShowInviteModal(false)}
+          onClose={() => setShowInvite(false)}
           onSubmit={handleInvite}
         />
       )}
 
-      {/* Edit Modal */}
-      {showEditModal && selectedMember && (
-        <EditMemberModal
+      {showEdit && selectedMember && (
+        <EditDrawer
           member={selectedMember}
           loading={actionLoading}
           onClose={() => {
-            setShowEditModal(false);
+            setShowEdit(false);
             setSelectedMember(null);
           }}
           onSubmit={handleUpdateMember}
         />
       )}
 
-      {/* View Modal */}
-      {showViewModal && selectedMember && (
-        <ViewMemberModal
+      {showView && selectedMember && (
+        <ViewDrawer
           member={selectedMember}
           onClose={() => {
-            setShowViewModal(false);
+            setShowView(false);
             setSelectedMember(null);
           }}
           onEdit={() => {
-            setShowViewModal(false);
-            setShowEditModal(true);
+            setShowView(false);
+            setShowEdit(true);
           }}
         />
       )}
@@ -820,86 +1031,10 @@ export default function TeamPage() {
 }
 
 /* =========================================================
-   STAT CARD
+   MEMBER CARD
 ========================================================= */
 
-function StatCard({
-  icon,
-  label,
-  value,
-  description,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  description: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-border bg-card p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          {icon}
-        </div>
-      </div>
-
-      <div className="text-2xl font-semibold text-foreground">
-        {value}
-      </div>
-
-      <div className="mt-1 text-sm font-medium text-foreground">
-        {label}
-      </div>
-
-      <div className="mt-1 text-xs text-muted-foreground">
-        {description}
-      </div>
-    </div>
-  );
-}
-
-/* =========================================================
-   FILTER SELECT
-========================================================= */
-
-function FilterSelect({
-  value,
-  onChange,
-  options,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: {
-    value: string;
-    label: string;
-  }[];
-}) {
-  return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-11 min-w-[150px] appearance-none rounded-xl border border-border bg-background pl-4 pr-10 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
-      >
-        {options.map((option) => (
-          <option
-            key={option.value}
-            value={option.value}
-          >
-            {option.label}
-          </option>
-        ))}
-      </select>
-
-      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-    </div>
-  );
-}
-
-/* =========================================================
-   TEAM MEMBER CARD
-========================================================= */
-
-function TeamMemberCard({
+function MemberCard({
   member,
   onView,
   onEdit,
@@ -908,279 +1043,530 @@ function TeamMemberCard({
   onView: () => void;
   onEdit: () => void;
 }) {
-  const avatar = getAvatar(member.user);
+  const perms = effectivePerms(member);
+  const isOwner = member.workspaceRole === "owner";
 
   return (
-    <div className="group rounded-2xl border border-border bg-card p-5 transition hover:border-primary/30 hover:shadow-sm">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-4">
-          {avatar ? (
-            <img
-              src={avatar}
-              alt={member.user.fullName}
-              className="h-12 w-12 shrink-0 rounded-full object-cover"
-            />
-          ) : (
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-              {getInitials(member.user.fullName)}
-            </div>
-          )}
+    <article
+      className={`flex flex-col rounded-3xl border bg-card p-5 ${member.status === "removed" ? "opacity-60" : ""
+        } ${isOwner ? "border-foreground/25" : "border-border"}`}
+    >
+      <div className="flex items-start gap-4">
+        <Avatar user={member.user} />
 
-          <div className="min-w-0">
-            <h3 className="truncate font-semibold text-foreground">
-              {member.user.fullName}
-            </h3>
-
-            <p className="mt-0.5 truncate text-sm text-muted-foreground">
-              {member.user.email}
-            </p>
-          </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="tm-display truncate text-lg font-semibold text-foreground">
+            {member.user.fullName}
+          </h3>
+          <p className="truncate text-sm text-muted-foreground">{member.user.email}</p>
         </div>
 
-        <MemberMenu
-          onView={onView}
-          onEdit={onEdit}
-        />
+        <AccessSeal perms={perms} size={64} isOwner={isOwner} className="shrink-0" />
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-2">
-        <Badge>
-          {getRoleLabel(member.workspaceRole)}
-        </Badge>
-
-        <Badge variant="secondary">
-          {getProfessionalRoleLabel(member.user.role)}
-        </Badge>
-
-        <StatusBadge status={member.status} />
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Pill>{getRoleLabel(member.workspaceRole)}</Pill>
+        <Pill tone="muted">{getProfessionalRoleLabel(member.user.role)}</Pill>
+        <StatusPill status={member.status} />
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-4 border-t border-border pt-4">
-        <div>
-          <p className="text-xs text-muted-foreground">
-            Access
-          </p>
+      <ul className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
+        {MODULES.map((m) => {
+          const level = levelOf(perms, m.key);
+          return (
+            <li
+              key={m.key}
+              className={`inline-flex items-center gap-1.5 ${level ? "text-foreground" : "text-muted-foreground/60"
+                }`}
+            >
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{
+                  background: level ? m.color : "transparent",
+                  border: level ? "none" : "1px solid currentColor",
+                }}
+              />
+              {m.label}
+              {level > 0 && (
+                <span className="text-muted-foreground">
+                  {level === 2 ? "manage" : "view"}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
 
-          <p className="mt-1 text-sm font-medium text-foreground">
-            {member.permissions?.length || 0} permissions
-          </p>
-        </div>
+      <div className="mt-5 flex items-center gap-3 border-t border-border pt-4">
+        <p className="mr-auto text-xs text-muted-foreground">
+          {member.joinedAt ? `Joined ${formatDate(member.joinedAt)}` : "Has not joined yet"}
+        </p>
 
-        <div>
-          <p className="text-xs text-muted-foreground">
-            Joined
-          </p>
-
-          <p className="mt-1 text-sm font-medium text-foreground">
-            {member.joinedAt
-              ? formatDate(member.joinedAt)
-              : "Pending"}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-5 flex gap-2">
         <button
           onClick={onView}
-          className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-border bg-background text-sm font-medium text-foreground transition hover:bg-muted"
+          className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-foreground transition hover:bg-muted"
         >
           <Eye className="h-4 w-4" />
           View
         </button>
 
-        {member.status !== "removed" && (
+        {!isOwner && member.status !== "removed" ? (
           <button
             onClick={onEdit}
-            className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg bg-muted text-sm font-medium text-foreground transition hover:bg-muted/80"
+            className="inline-flex h-9 items-center gap-2 rounded-lg bg-foreground px-3 text-sm font-medium text-background transition hover:opacity-90"
           >
             <Pencil className="h-4 w-4" />
-            Manage
+            Manage access
           </button>
+        ) : (
+          isOwner && (
+            <span className="inline-flex h-9 items-center gap-1.5 px-2 text-xs text-muted-foreground">
+              <Lock className="h-3.5 w-3.5" />
+              Full access
+            </span>
+          )
         )}
       </div>
-    </div>
+    </article>
   );
 }
 
 /* =========================================================
-   MEMBER MENU
+   ACCESS GRID (matrix)
 ========================================================= */
 
-function MemberMenu({
-  onView,
-  onEdit,
+function AccessGrid({
+  members,
+  permsOf,
+  isLocked,
+  drafts,
+  onCycle,
 }: {
-  onView: () => void;
-  onEdit: () => void;
+  members: TeamMember[];
+  permsOf: (m: TeamMember) => string[];
+  isLocked: (m: TeamMember) => boolean;
+  drafts: Record<string, string[]>;
+  onCycle: (m: TeamMember, mod: Module) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <p className="mb-3 text-sm text-muted-foreground">
+        Select a cell to step through no access, view and manage. Changes stay in draft until
+        you save.
+      </p>
+
+      <div className="overflow-x-auto rounded-3xl border border-border bg-card">
+        <table className="w-full min-w-[820px] border-collapse text-left">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="sticky left-0 z-10 bg-card px-5 py-4 text-sm font-medium text-muted-foreground">
+                Person
+              </th>
+              {MODULES.map((m) => {
+                const withAccess = members.filter((x) => levelOf(permsOf(x), m.key) > 0).length;
+                return (
+                  <th key={m.key} className="px-3 py-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: m.color }} />
+                      {m.label}
+                    </div>
+                    <p className="mt-0.5 text-xs font-normal text-muted-foreground">
+                      {withAccess} of {members.length} can open
+                    </p>
+                  </th>
+                );
+              })}
+              <th className="px-5 py-4 text-sm font-medium text-muted-foreground">Seal</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {members.map((member) => {
+              const perms = permsOf(member);
+              const locked = isLocked(member);
+              const dirty = !!drafts[member._id];
+
+              return (
+                <tr
+                  key={member._id}
+                  className={`border-b border-border last:border-0 ${dirty ? "bg-primary/[0.04]" : ""
+                    }`}
+                >
+                  <td className="sticky left-0 z-10 bg-card px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <Avatar user={member.user} size={36} />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {member.user.fullName}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {getRoleLabel(member.workspaceRole)}
+                          {dirty && <span className="ml-2 text-primary">edited</span>}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+
+                  {MODULES.map((mod) => {
+                    const level = levelOf(perms, mod.key);
+                    return (
+                      <td key={mod.key} className="px-3 py-3">
+                        <GridCell
+                          level={level}
+                          mod={mod}
+                          locked={locked}
+                          label={`${member.user.fullName}, ${mod.label}: ${LEVEL_LABEL[level]}`}
+                          onClick={() => onCycle(member, mod)}
+                        />
+                      </td>
+                    );
+                  })}
+
+                  <td className="px-5 py-3">
+                    <AccessSeal
+                      perms={perms}
+                      size={36}
+                      isOwner={member.workspaceRole === "owner"}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function GridCell({
+  level,
+  mod,
+  locked,
+  label,
+  onClick,
+}: {
+  level: Level;
+  mod: Module;
+  locked: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  const style: React.CSSProperties =
+    level === 2
+      ? { background: mod.color, color: "#fff", borderColor: mod.color }
+      : level === 1
+        ? { background: `${mod.color}24`, color: mod.color, borderColor: `${mod.color}55` }
+        : {};
 
   return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen((current) => !current)}
-        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
-      >
-        <MoreHorizontal className="h-4 w-4" />
-      </button>
-
-      {open && (
-        <>
-          <button
-            aria-label="Close menu"
-            className="fixed inset-0 z-10 cursor-default"
-            onClick={() => setOpen(false)}
-          />
-
-          <div className="absolute right-0 top-9 z-20 w-44 overflow-hidden rounded-xl border border-border bg-card p-1 shadow-lg">
-            <button
-              onClick={() => {
-                setOpen(false);
-                onView();
-              }}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
-            >
-              <Eye className="h-4 w-4" />
-              View member
-            </button>
-
-            <button
-              onClick={() => {
-                setOpen(false);
-                onEdit();
-              }}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
-            >
-              <Pencil className="h-4 w-4" />
-              Manage access
-            </button>
-          </div>
-        </>
+    <button
+      type="button"
+      disabled={locked}
+      onClick={onClick}
+      aria-label={label}
+      style={style}
+      className={`h-9 w-full min-w-[84px] rounded-lg border text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${level === 0 ? "border-dashed border-border text-muted-foreground/60" : ""
+        } ${locked ? "cursor-not-allowed opacity-70" : "hover:brightness-110"}`}
+    >
+      {locked && level > 0 ? (
+        <span className="inline-flex items-center gap-1">
+          <Lock className="h-3 w-3" />
+          {LEVEL_LABEL[level]}
+        </span>
+      ) : level === 0 ? (
+        "None"
+      ) : (
+        LEVEL_LABEL[level]
       )}
+    </button>
+  );
+}
+
+/* =========================================================
+   INVITATION TICKET
+========================================================= */
+
+function InvitationTicket({ invitation }: { invitation: Invitation }) {
+  return (
+    <div className="flex items-center gap-4 rounded-2xl border border-dashed border-primary/40 bg-primary/[0.03] p-4">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <Mail className="h-5 w-5" />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-foreground">{invitation.email}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {getProfessionalRoleLabel(invitation.role)} as {getRoleLabel(invitation.workspaceRole)}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Sent {formatDate(invitation.createdAt)}. {expiryLabel(invitation.expiresAt)}.
+        </p>
+      </div>
+
+      <AccessSeal perms={invitation.permissions || []} size={44} />
     </div>
   );
 }
 
 /* =========================================================
-   BADGES
+   DRAWER SHELL
 ========================================================= */
 
-function Badge({
+function Drawer({
+  title,
+  description,
+  icon,
+  onClose,
+  footer,
   children,
-  variant = "primary",
 }: {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  onClose: () => void;
+  footer?: React.ReactNode;
   children: React.ReactNode;
-  variant?: "primary" | "secondary";
 }) {
-  return (
-    <span
-      className={`rounded-full px-2.5 py-1 text-xs font-medium ${variant === "primary"
-          ? "bg-primary/10 text-primary"
-          : "bg-muted text-muted-foreground"
-        }`}
-    >
-      {children}
-    </span>
-  );
-}
-
-function StatusBadge({
-  status,
-}: {
-  status: MemberStatus;
-}) {
-  const config = {
-    active: {
-      label: "Active",
-      className:
-        "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    },
-    suspended: {
-      label: "Suspended",
-      className:
-        "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    },
-    invited: {
-      label: "Invited",
-      className:
-        "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-    },
-    removed: {
-      label: "Removed",
-      className:
-        "bg-muted text-muted-foreground",
-    },
-  };
-
-  const item = config[status];
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   return (
-    <span
-      className={`rounded-full px-2.5 py-1 text-xs font-medium ${item.className}`}
-    >
-      {item.label}
-    </span>
-  );
-}
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={title}>
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-[2px]"
+      />
 
-/* =========================================================
-   INVITATION ROW
-========================================================= */
-
-function InvitationRow({
-  invitation,
-}: {
-  invitation: Invitation;
-}) {
-  return (
-    <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 items-center gap-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400">
-          <Mail className="h-5 w-5" />
-        </div>
-
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-foreground">
-            {invitation.email}
-          </p>
-
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>
-              {getProfessionalRoleLabel(invitation.role)}
-            </span>
-
-            <span>•</span>
-
-            <span>
-              {getRoleLabel(invitation.workspaceRole)}
-            </span>
-
-            <span>•</span>
-
-            <span>
-              Invited {formatDate(invitation.createdAt)}
-            </span>
+      <aside className="tm-slide absolute right-0 top-0 flex h-full w-full max-w-xl flex-col border-l border-border bg-background shadow-2xl">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-6 py-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              {icon}
+            </div>
+            <div>
+              <h2 className="tm-display text-xl font-semibold text-foreground">{title}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+            </div>
           </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
-      </div>
 
-      <div className="flex items-center gap-2">
-        <span className="rounded-full bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-400">
-          Pending
-        </span>
+        {children}
 
-        <span className="text-xs text-muted-foreground">
-          Expires {formatDate(invitation.expiresAt)}
-        </span>
-      </div>
+        {footer && (
+          <div className="shrink-0 border-t border-border bg-background px-6 py-4">{footer}</div>
+        )}
+      </aside>
     </div>
   );
 }
+
 /* =========================================================
-   INVITE MODAL
+   ACCESS FIELDS (shared by invite + edit)
 ========================================================= */
 
-function InviteMemberModal({
+function LevelPicker({
+  mod,
+  level,
+  onChange,
+}: {
+  mod: Module;
+  level: Level;
+  onChange: (level: Level) => void;
+}) {
+  const options: Level[] = mod.canManage ? [0, 1, 2] : [0, 1];
+
+  return (
+    <div
+      role="group"
+      aria-label={`${mod.label} access`}
+      className="inline-flex rounded-lg border border-border bg-muted/40 p-0.5"
+    >
+      {options.map((opt) => {
+        const active = level === opt;
+        return (
+          <button
+            key={opt}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(opt)}
+            style={
+              active && opt > 0
+                ? { background: opt === 2 ? mod.color : `${mod.color}2e`, color: opt === 2 ? "#fff" : mod.color }
+                : undefined
+            }
+            className={`h-8 rounded-md px-3 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active && opt === 0
+                ? "bg-background text-foreground shadow-sm"
+                : !active
+                  ? "text-muted-foreground hover:text-foreground"
+                  : ""
+              }`}
+          >
+            {opt === 0 ? "None" : LEVEL_LABEL[opt]}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function AccessFields({
+  professionalRole,
+  onProfessionalRole,
+  workspaceRole,
+  onWorkspaceRole,
+  permissions,
+  onPermissions,
+}: {
+  professionalRole: ProfessionalRole;
+  onProfessionalRole: (r: ProfessionalRole) => void;
+  workspaceRole: InvitableRole;
+  onWorkspaceRole: (r: InvitableRole) => void;
+  permissions: string[];
+  onPermissions: (p: string[]) => void;
+}) {
+  const matchesPreset = samePerms(permissions, presetPerms(workspaceRole));
+
+  return (
+    <div className="space-y-8">
+      <section>
+        <h3 className="text-sm font-semibold text-foreground">What do they do?</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Their profession, shown next to their name.
+        </p>
+
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {PROFESSIONAL_ROLES.map((type) => {
+            const active = professionalRole === type.value;
+            return (
+              <button
+                key={type.value}
+                type="button"
+                aria-pressed={active}
+                onClick={() => onProfessionalRole(type.value)}
+                className={`rounded-xl border px-3 py-3 text-left text-sm font-medium transition ${active
+                    ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
+                    : "border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                  }`}
+              >
+                {type.label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold text-foreground">Role in the workspace</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Picking a role fills in sensible access. You can adjust it below.
+        </p>
+
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {WORKSPACE_ROLES.map((role) => {
+            const active = workspaceRole === role.value;
+            const Icon =
+              role.value === "admin"
+                ? Shield
+                : role.value === "legal_manager"
+                  ? BriefcaseBusiness
+                  : role.value === "viewer"
+                    ? Eye
+                    : Users;
+
+            return (
+              <button
+                key={role.value}
+                type="button"
+                aria-pressed={active}
+                onClick={() => onWorkspaceRole(role.value)}
+                className={`flex items-start gap-3 rounded-xl border p-3 text-left transition ${active
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "border-border hover:border-primary/30 hover:bg-muted/40"
+                  }`}
+              >
+                <div
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                    }`}
+                >
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">{role.label}</p>
+                  <p className="mt-0.5 text-xs leading-4 text-muted-foreground">
+                    {role.description}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Access by module</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {matchesPreset
+                ? `Matches the ${getRoleLabel(workspaceRole)} defaults.`
+                : "Custom access."}
+              {!matchesPreset && (
+                <button
+                  type="button"
+                  onClick={() => onPermissions(presetPerms(workspaceRole))}
+                  className="ml-2 font-medium text-primary hover:underline"
+                >
+                  Reset to {getRoleLabel(workspaceRole)} defaults
+                </button>
+              )}
+            </p>
+          </div>
+
+          <AccessSeal perms={permissions} size={64} className="shrink-0" />
+        </div>
+
+        <div className="mt-4 divide-y divide-border rounded-2xl border border-border bg-card">
+          {MODULES.map((mod) => (
+            <div key={mod.key} className="flex items-center justify-between gap-4 px-4 py-3">
+              <div className="flex items-center gap-2.5 text-sm font-medium text-foreground">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: mod.color }} />
+                {mod.label}
+              </div>
+              <LevelPicker
+                mod={mod}
+                level={levelOf(permissions, mod.key)}
+                onChange={(level) => onPermissions(withLevel(permissions, mod.key, level))}
+              />
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/* =========================================================
+   INVITE DRAWER
+========================================================= */
+
+function InviteDrawer({
   loading,
   onClose,
   onSubmit,
@@ -1190,54 +1576,32 @@ function InviteMemberModal({
   onSubmit: (payload: {
     email: string;
     role: ProfessionalRole;
-    workspaceRole: Exclude<WorkspaceRole, "owner">;
+    workspaceRole: InvitableRole;
     permissions: string[];
   }) => void;
 }) {
   const [email, setEmail] = useState("");
-  const [professionalRole, setProfessionalRole] =
-    useState<ProfessionalRole>("lawyer");
-
-  const [workspaceRole, setWorkspaceRole] =
-    useState<Exclude<WorkspaceRole, "owner">>("member");
-
-  const [permissions, setPermissions] = useState<string[]>([
-    "contracts.read",
-    "documents.read",
-    "matters.read",
-    "tasks.read",
-  ]);
-
+  const [professionalRole, setProfessionalRole] = useState<ProfessionalRole>("lawyer");
+  const [workspaceRole, setWorkspaceRole] = useState<InvitableRole>("member");
+  const [permissions, setPermissions] = useState<string[]>(presetPerms("member"));
   const [formError, setFormError] = useState("");
 
-  const togglePermission = (permission: string) => {
-    setPermissions((current) =>
-      current.includes(permission)
-        ? current.filter((item) => item !== permission)
-        : [...current, permission]
-    );
-  };
-
-  const handleSubmit = (event: React.FormEvent) => {
+  const submit = (event: React.FormEvent) => {
     event.preventDefault();
 
     if (!email.trim()) {
       setFormError("Enter an email address.");
-
       premiumToast.warning("Email required", {
         description: "Enter an email address to send the invitation.",
       });
-
       return;
     }
 
-    if (!/^\S+@\S+\.\S+$/.test(email)) {
-      setFormError("Enter a valid email address.");
-
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
+      setFormError("Enter a valid email address, like name@company.com.");
       premiumToast.warning("Invalid email", {
         description: "Please check the email format and try again.",
       });
-
       return;
     }
 
@@ -1250,341 +1614,93 @@ function InviteMemberModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100]">
-      {/* Backdrop */}
-      <button
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/30 backdrop-blur-[2px]"
-      />
-
-      {/* Drawer */}
-      <div className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col border-l border-border bg-card shadow-2xl">
-        {/* Header */}
-        <div className="flex shrink-0 items-start justify-between border-b border-border px-6 py-5">
-          <div>
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <UserRoundCheck className="h-5 w-5" />
-            </div>
-
-            <h2 className="text-xl font-semibold tracking-tight text-foreground">
-              Add team member
-            </h2>
-
-            <p className="mt-1 max-w-md text-sm leading-5 text-muted-foreground">
-              Invite someone to collaborate in your workspace.
-              You can configure their access before sending the
-              invitation.
-            </p>
-          </div>
+    <Drawer
+      title="Invite someone"
+      description="They get an email with exactly the access you set here."
+      icon={<UserPlus className="h-5 w-5" />}
+      onClose={onClose}
+      footer={
+        <div className="flex items-center gap-3">
+          <AccessSeal perms={permissions} size={40} className="shrink-0" />
+          <p className="mr-auto min-w-0 truncate text-sm text-muted-foreground">
+            {email.trim() || "name@company.com"}
+          </p>
 
           <button
+            type="button"
             onClick={onClose}
             disabled={loading}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            className="h-11 rounded-xl border border-border px-4 text-sm font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
           >
-            <X className="h-4 w-4" />
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="tm-invite-form"
+            disabled={loading}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Sending
+              </>
+            ) : (
+              <>
+                <Mail className="h-4 w-4" />
+                Send invitation
+              </>
+            )}
           </button>
         </div>
-
-        {/* Body */}
-        <form
-          onSubmit={handleSubmit}
-          className="flex min-h-0 flex-1 flex-col"
-        >
-          <div className="flex-1 overflow-y-auto px-6 py-6">
-            <div className="space-y-8">
-              {/* Step 1 */}
-              <section>
-                <SectionHeader
-                  number="01"
-                  title="Member details"
-                  description="Tell us who you want to invite."
-                />
-
-                <div className="mt-5 space-y-5">
-                  <Field
-                    label="Work email"
-                    required
-                  >
-                    <div className="relative">
-                      <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(event) => {
-                          setEmail(event.target.value);
-                          setFormError("");
-                        }}
-                        placeholder="name@company.com"
-                        autoFocus
-                        className="h-12 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/10"
-                      />
-                    </div>
-
-                    {formError && (
-                      <p className="mt-2 text-xs text-destructive">
-                        {formError}
-                      </p>
-                    )}
-                  </Field>
-
-                  <Field label="Professional role">
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {PROFESSIONAL_ROLES.map((type) => {
-                        const active =
-                          professionalRole === type.value;
-
-                        return (
-                          <button
-                            key={type.value}
-                            type="button"
-                            onClick={() =>
-                              setProfessionalRole(type.value)
-                            }
-                            className={`rounded-xl border px-3 py-3 text-left transition ${active
-                                ? "border-primary bg-primary/5 ring-1 ring-primary"
-                                : "border-border bg-background hover:border-primary/30 hover:bg-muted/40"
-                              }`}
-                          >
-                            <div
-                              className={`mb-2 flex h-7 w-7 items-center justify-center rounded-lg text-xs font-semibold ${active
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-muted text-muted-foreground"
-                                }`}
-                            >
-                              {type.label.charAt(0)}
-                            </div>
-
-                            <p className="text-xs font-medium text-foreground">
-                              {type.label}
-                            </p>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </Field>
-                </div>
-              </section>
-
-              <div className="h-px bg-border" />
-
-              {/* Step 2 */}
-              <section>
-                <SectionHeader
-                  number="02"
-                  title="Workspace access"
-                  description="Choose what this member can do."
-                />
-
-                <div className="mt-5">
-                  <p className="mb-3 text-sm font-medium text-foreground">
-                    Workspace role
-                  </p>
-
-                  <div className="space-y-2">
-                    {WORKSPACE_ROLES.map((role) => {
-                      const active =
-                        workspaceRole === role.value;
-
-                      return (
-                        <button
-                          key={role.value}
-                          type="button"
-                          onClick={() =>
-                            setWorkspaceRole(role.value)
-                          }
-                          className={`flex w-full items-center gap-4 rounded-xl border p-4 text-left transition ${active
-                              ? "border-primary bg-primary/5 ring-1 ring-primary"
-                              : "border-border hover:border-primary/30 hover:bg-muted/40"
-                            }`}
-                        >
-                          <div
-                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${active
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted text-muted-foreground"
-                              }`}
-                          >
-                            {role.value === "admin" ? (
-                              <Shield className="h-4 w-4" />
-                            ) : role.value === "legal_manager" ? (
-                              <BriefcaseBusiness className="h-4 w-4" />
-                            ) : role.value === "viewer" ? (
-                              <Eye className="h-4 w-4" />
-                            ) : (
-                              <Users className="h-4 w-4" />
-                            )}
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="text-sm font-semibold text-foreground">
-                                {role.label}
-                              </p>
-
-                              {active && (
-                                <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
-                              )}
-                            </div>
-
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                              {role.description}
-                            </p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </section>
-
-              <div className="h-px bg-border" />
-
-              {/* Step 3 */}
-              <section>
-                <SectionHeader
-                  number="03"
-                  title="Permissions"
-                  description="Fine-tune access to specific workspace modules."
-                />
-
-                <div className="mt-5 space-y-2">
-                  {PERMISSIONS.map((permission) => {
-                    const checked = permissions.includes(
-                      permission.key
-                    );
-
-                    return (
-                      <button
-                        key={permission.key}
-                        type="button"
-                        onClick={() =>
-                          togglePermission(permission.key)
-                        }
-                        className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${checked
-                            ? "border-primary/30 bg-primary/5"
-                            : "border-border hover:bg-muted/40"
-                          }`}
-                      >
-                        <div
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${checked
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "border-border bg-background"
-                            }`}
-                        >
-                          {checked && (
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                          )}
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-foreground">
-                            {permission.label}
-                          </p>
-
-                          <p className="mt-0.5 text-[11px] text-muted-foreground">
-                            {permission.group}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
+      }
+    >
+      <form id="tm-invite-form" onSubmit={submit} className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+        <div className="space-y-8">
+          <div>
+            <label htmlFor="tm-email" className="mb-2 block text-sm font-semibold text-foreground">
+              Work email
+            </label>
+            <div className="relative">
+              <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                id="tm-email"
+                type="email"
+                value={email}
+                autoFocus
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setFormError("");
+                }}
+                placeholder="name@company.com"
+                className="h-12 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/10"
+              />
             </div>
+            {formError && <p className="mt-2 text-xs text-destructive">{formError}</p>}
           </div>
 
-          {/* Footer */}
-          <div className="shrink-0 border-t border-border bg-card px-6 py-4">
-            <div className="mb-4 flex items-center gap-3 rounded-xl bg-muted/50 px-4 py-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <Mail className="h-4 w-4" />
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-muted-foreground">
-                  Invitation will be sent to
-                </p>
-
-                <p className="truncate text-sm font-medium text-foreground">
-                  {email || "name@company.com"}
-                </p>
-              </div>
-
-              <Badge>
-                {getRoleLabel(workspaceRole)}
-              </Badge>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={loading}
-                className="h-11 flex-1 rounded-xl border border-border bg-background text-sm font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="inline-flex h-11 flex-[1.5] items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Mail className="h-4 w-4" />
-                    Send invitation
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function SectionHeader({
-  number,
-  title,
-  description,
-}: {
-  number: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="flex gap-3">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-[10px] font-semibold text-muted-foreground">
-        {number}
-      </div>
-
-      <div>
-        <h3 className="text-sm font-semibold text-foreground">
-          {title}
-        </h3>
-
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {description}
-        </p>
-      </div>
-    </div>
+          <AccessFields
+            professionalRole={professionalRole}
+            onProfessionalRole={setProfessionalRole}
+            workspaceRole={workspaceRole}
+            onWorkspaceRole={(role) => {
+              setWorkspaceRole(role);
+              setPermissions(presetPerms(role));
+            }}
+            permissions={permissions}
+            onPermissions={setPermissions}
+          />
+        </div>
+      </form>
+    </Drawer>
   );
 }
 
 /* =========================================================
-   EDIT MEMBER DRAWER
+   EDIT DRAWER
 ========================================================= */
 
-function EditMemberModal({
+function EditDrawer({
   member,
   loading,
   onClose,
@@ -1596,7 +1712,7 @@ function EditMemberModal({
   onSubmit: (
     memberId: string,
     payload: {
-      workspaceRole?: Exclude<WorkspaceRole, "owner">;
+      workspaceRole?: InvitableRole;
       role?: ProfessionalRole;
       permissions?: string[];
     }
@@ -1605,240 +1721,91 @@ function EditMemberModal({
   const [professionalRole, setProfessionalRole] = useState<ProfessionalRole>(
     (member.user.role as ProfessionalRole) || "lawyer"
   );
-
-  const [workspaceRole, setWorkspaceRole] = useState<
-    Exclude<WorkspaceRole, "owner">
-  >(
-    member.workspaceRole === "owner"
-      ? "admin"
-      : member.workspaceRole
+  const [workspaceRole, setWorkspaceRole] = useState<InvitableRole>(
+    member.workspaceRole === "owner" ? "admin" : member.workspaceRole
   );
+  const [permissions, setPermissions] = useState<string[]>(member.permissions || []);
 
-  const [permissions, setPermissions] = useState<string[]>(
-    member.permissions || []
-  );
-
-  const togglePermission = (permission: string) => {
-    setPermissions((current) =>
-      current.includes(permission)
-        ? current.filter((item) => item !== permission)
-        : [...current, permission]
-    );
-  };
-
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault();
-
-    onSubmit(member._id, {
-      role: professionalRole,
-      workspaceRole,
-      permissions,
-    });
-  };
-
-  const avatar = getAvatar(member.user);
+  const changed =
+    professionalRole !== member.user.role ||
+    workspaceRole !== member.workspaceRole ||
+    !samePerms(permissions, member.permissions || []);
 
   return (
-    <div className="fixed inset-0 z-50">
-      {/* Backdrop */}
-      <button
-        type="button"
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-[2px]"
-      />
-
-      {/* Drawer */}
-      <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col border-l border-border bg-background shadow-2xl">
-        {/* Header */}
-        <div className="flex items-start justify-between border-b border-border px-6 py-5">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Settings2 className="h-5 w-5" />
-            </div>
-
-            <div>
-              <h2 className="text-base font-semibold text-foreground">
-                Manage access
-              </h2>
-
-              <p className="mt-1 text-sm text-muted-foreground">
-                Update this member's workspace access and permissions.
-              </p>
-            </div>
-          </div>
-
+    <Drawer
+      title="Manage access"
+      description="Changes apply as soon as you save."
+      icon={<Settings2 className="h-5 w-5" />}
+      onClose={onClose}
+      footer={
+        <div className="flex items-center gap-3">
+          <p className="mr-auto hidden text-xs text-muted-foreground sm:block">
+            {changed ? "You have unsaved changes." : "No changes yet."}
+          </p>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
-            aria-label="Close"
+            disabled={loading}
+            className="h-10 rounded-lg border border-border px-4 text-sm font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
           >
-            <X className="h-4 w-4" />
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="tm-edit-form"
+            disabled={loading || !changed}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" />
+                Save changes
+              </>
+            )}
           </button>
         </div>
-
-        {/* Scrollable content */}
-        <form
-          onSubmit={submit}
-          className="flex min-h-0 flex-1 flex-col"
-        >
-          <div className="flex-1 overflow-y-auto px-6 py-6">
-            {/* Member identity */}
-            <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4">
-              {avatar ? (
-                <img
-                  src={avatar}
-                  alt={member.user.fullName}
-                  className="h-12 w-12 shrink-0 rounded-full object-cover ring-2 ring-background"
-                />
-              ) : (
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                  {getInitials(member.user.fullName)}
-                </div>
-              )}
-
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-foreground">
-                  {member.user.fullName}
-                </p>
-
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {member.user.email}
-                </p>
-              </div>
-
-              <StatusBadge status={member.status} />
-            </div>
-
-            {/* Member details */}
-            <div className="mt-8">
-              <SectionHeader
-                number="01"
-                title="Member details"
-                description="Define how this person is identified within the workspace."
-              />
-
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <Field label="Professional role">
-                  <Select
-                    value={professionalRole}
-                    onChange={(value) =>
-                      setProfessionalRole(value as ProfessionalRole)
-                    }
-                    options={PROFESSIONAL_ROLES}
-                  />
-                </Field>
-
-                <Field label="Workspace role">
-                  <Select
-                    value={workspaceRole}
-                    onChange={(value) =>
-                      setWorkspaceRole(
-                        value as Exclude<WorkspaceRole, "owner">
-                      )
-                    }
-                    options={WORKSPACE_ROLES.map((role) => ({
-                      value: role.value,
-                      label: role.label,
-                    }))}
-                  />
-                </Field>
-              </div>
-            </div>
-
-            {/* Permissions */}
-            <div className="mt-8">
-              <SectionHeader
-                number="02"
-                title="Permissions"
-                description="Control what this member can access and manage."
-              />
-
-              <div className="mt-5 rounded-2xl border border-border bg-card">
-                <PermissionSelector
-                  permissions={permissions}
-                  onToggle={togglePermission}
-                />
-              </div>
-            </div>
-
-            {/* Access summary */}
-            <div className="mt-6 rounded-xl border border-border bg-muted/30 p-4">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <ShieldCheck className="h-4 w-4" />
-                </div>
-
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    Access summary
-                  </p>
-
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    This member will have{" "}
-                    <span className="font-medium text-foreground">
-                      {getRoleLabel(workspaceRole)}
-                    </span>{" "}
-                    access with{" "}
-                    <span className="font-medium text-foreground">
-                      {permissions.length}
-                    </span>{" "}
-                    custom permission
-                    {permissions.length === 1 ? "" : "s"}.
-                  </p>
-                </div>
-              </div>
-            </div>
+      }
+    >
+      <form
+        id="tm-edit-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmit(member._id, { role: professionalRole, workspaceRole, permissions });
+        }}
+        className="min-h-0 flex-1 overflow-y-auto px-6 py-6"
+      >
+        <div className="mb-8 flex items-center gap-4 rounded-2xl border border-border bg-card p-4">
+          <Avatar user={member.user} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-foreground">{member.user.fullName}</p>
+            <p className="truncate text-xs text-muted-foreground">{member.user.email}</p>
           </div>
+          <StatusPill status={member.status} />
+        </div>
 
-          {/* Sticky footer */}
-          <div className="border-t border-border bg-background px-6 py-4">
-            <div className="flex items-center justify-between gap-4">
-              <p className="hidden text-xs text-muted-foreground sm:block">
-                Changes apply immediately after saving.
-              </p>
-
-              <div className="ml-auto flex gap-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  disabled={loading}
-                  className="h-10 rounded-lg border border-border px-4 text-sm font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4" />
-                      Save changes
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </form>
-      </aside>
-    </div>
+        <AccessFields
+          professionalRole={professionalRole}
+          onProfessionalRole={setProfessionalRole}
+          workspaceRole={workspaceRole}
+          onWorkspaceRole={setWorkspaceRole}
+          permissions={permissions}
+          onPermissions={setPermissions}
+        />
+      </form>
+    </Drawer>
   );
 }
+
 /* =========================================================
-   VIEW MEMBER DRAWER
+   VIEW DRAWER
 ========================================================= */
 
-function ViewMemberModal({
+function ViewDrawer({
   member,
   onClose,
   onEdit,
@@ -1847,542 +1814,153 @@ function ViewMemberModal({
   onClose: () => void;
   onEdit: () => void;
 }) {
-  const avatar = getAvatar(member.user);
+  const perms = effectivePerms(member);
+  const isOwner = member.workspaceRole === "owner";
 
   return (
-    <div className="fixed inset-0 z-50">
-      {/* Backdrop */}
-      <button
-        type="button"
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-[2px]"
-      />
-
-      {/* Drawer */}
-      <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col border-l border-border bg-background shadow-2xl">
-        {/* Header */}
-        <div className="flex items-start justify-between border-b border-border px-6 py-5">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <UserRound className="h-5 w-5" />
-            </div>
-
-            <div>
-              <h2 className="text-base font-semibold text-foreground">
-                Team member
-              </h2>
-
-              <p className="mt-1 text-sm text-muted-foreground">
-                Membership and workspace access details.
-              </p>
-            </div>
-          </div>
-
+    <Drawer
+      title="Team member"
+      description="Membership and what this person can open."
+      icon={<Users className="h-5 w-5" />}
+      onClose={onClose}
+      footer={
+        <div className="flex gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
-            aria-label="Close"
+            className="h-10 flex-1 rounded-lg border border-border text-sm font-medium text-foreground transition hover:bg-muted"
           >
-            <X className="h-4 w-4" />
+            Close
           </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          {/* Profile */}
-          <div className="rounded-2xl border border-border bg-card p-5">
-            <div className="flex items-center gap-4">
-              {avatar ? (
-                <img
-                  src={avatar}
-                  alt={member.user.fullName}
-                  className="h-16 w-16 shrink-0 rounded-full object-cover ring-2 ring-background"
-                />
-              ) : (
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary">
-                  {getInitials(member.user.fullName)}
-                </div>
-              )}
-
-              <div className="min-w-0 flex-1">
-                <h3 className="truncate text-base font-semibold text-foreground">
-                  {member.user.fullName}
-                </h3>
-
-                <p className="mt-1 truncate text-sm text-muted-foreground">
-                  {member.user.email}
-                </p>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Badge>
-                    {getRoleLabel(member.workspaceRole)}
-                  </Badge>
-
-                  <Badge variant="secondary">
-                    {getProfessionalRoleLabel(member.user.role)}
-                  </Badge>
-
-                  <StatusBadge status={member.status} />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Overview */}
-          <div className="mt-8">
-            <SectionHeader
-              number="01"
-              title="Member overview"
-              description="Basic information about this workspace member."
-            />
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <InfoItem
-                label="Email"
-                value={member.user.email}
-              />
-
-              <InfoItem
-                label="Phone"
-                value={member.user.phone || "Not available"}
-              />
-
-              <InfoItem
-                label="Professional role"
-                value={getProfessionalRoleLabel(member.user.role)}
-              />
-
-              <InfoItem
-                label="Workspace role"
-                value={getRoleLabel(member.workspaceRole)}
-              />
-
-              <InfoItem
-                label="Joined"
-                value={
-                  member.joinedAt
-                    ? formatDate(member.joinedAt)
-                    : "Pending"
-                }
-              />
-
-              <InfoItem
-                label="Permissions"
-                value={`${member.permissions?.length || 0} granted`}
-              />
-            </div>
-          </div>
-
-          {/* Permissions */}
-          <div className="mt-8">
-            <SectionHeader
-              number="02"
-              title="Permissions"
-              description="Capabilities currently granted to this member."
-            />
-
-            <div className="mt-5 rounded-2xl border border-border bg-card p-4">
-              {member.permissions?.length ? (
-                <div className="space-y-2">
-                  {member.permissions.map((permission) => (
-                    <div
-                      key={permission}
-                      className="flex items-center justify-between rounded-xl border border-border bg-muted/30 px-3 py-2.5"
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                          <Check className="h-3.5 w-3.5" />
-                        </div>
-
-                        <span className="truncate text-sm text-foreground">
-                          {permission}
-                        </span>
-                      </div>
-
-                      <span className="ml-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                        Granted
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-                    <ShieldOff className="h-5 w-5" />
-                  </div>
-
-                  <p className="mt-3 text-sm font-medium text-foreground">
-                    No custom permissions
-                  </p>
-
-                  <p className="mt-1 max-w-xs text-xs leading-5 text-muted-foreground">
-                    This member does not have any custom permissions assigned.
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="border-t border-border bg-background px-6 py-4">
-          <div className="flex gap-2">
+          {!isOwner && member.status !== "removed" && (
             <button
               type="button"
-              onClick={onClose}
-              className="h-10 flex-1 rounded-lg border border-border text-sm font-medium text-foreground transition hover:bg-muted"
+              onClick={onEdit}
+              className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-primary text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
             >
-              Close
+              <Settings2 className="h-4 w-4" />
+              Manage access
             </button>
+          )}
+        </div>
+      }
+    >
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+        <div className="flex items-center gap-5 rounded-3xl border border-border bg-card p-5">
+          <AccessSeal perms={perms} size={96} isOwner={isOwner} className="shrink-0" />
 
-            {member.workspaceRole !== "owner" && (
-              <button
-                type="button"
-                onClick={onEdit}
-                className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-primary text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-              >
-                <Settings2 className="h-4 w-4" />
-                Manage access
-              </button>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-3">
+              <Avatar user={member.user} size={40} />
+              <h3 className="tm-display truncate text-xl font-semibold text-foreground">
+                {member.user.fullName}
+              </h3>
+            </div>
+            <p className="mt-2 truncate text-sm text-muted-foreground">{member.user.email}</p>
+            {member.user.phone && (
+              <p className="truncate text-sm text-muted-foreground">{member.user.phone}</p>
             )}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Pill>{getRoleLabel(member.workspaceRole)}</Pill>
+              <Pill tone="muted">{getProfessionalRoleLabel(member.user.role)}</Pill>
+              <StatusPill status={member.status} />
+            </div>
           </div>
         </div>
-      </aside>
-    </div>
-  );
-}
 
-/* =========================================================
-   PERMISSIONS
-========================================================= */
+        <h3 className="mt-8 text-sm font-semibold text-foreground">What they can open</h3>
 
-function PermissionSelector({
-  permissions,
-  onToggle,
-}: {
-  permissions: string[];
-  onToggle: (permission: string) => void;
-}) {
-  return (
-    <div>
-      <div className="mb-3">
-        <p className="text-sm font-medium text-foreground">
-          Permissions
-        </p>
-
-        <p className="mt-1 text-xs text-muted-foreground">
-          Control what this team member can access.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {PERMISSIONS.map((permission) => {
-          const checked = permissions.includes(
-            permission.key
-          );
-
-          return (
-            <label
-              key={permission.key}
-              className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition ${checked
-                  ? "border-primary/30 bg-primary/5"
-                  : "border-border hover:bg-muted/50"
-                }`}
-            >
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={() =>
-                  onToggle(permission.key)
-                }
-                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-              />
-
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  {permission.label}
-                </p>
-
-                <p className="text-[11px] text-muted-foreground">
-                  {permission.group}
-                </p>
+        <div className="mt-3 divide-y divide-border rounded-2xl border border-border bg-card">
+          {MODULES.map((mod) => {
+            const level = levelOf(perms, mod.key);
+            return (
+              <div key={mod.key} className="flex items-center justify-between gap-4 px-4 py-3">
+                <div className="flex items-center gap-2.5 text-sm font-medium text-foreground">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: mod.color }} />
+                  {mod.label}
+                </div>
+                <span
+                  className="rounded-full px-3 py-1 text-xs font-medium"
+                  style={
+                    level === 2
+                      ? { background: mod.color, color: "#fff" }
+                      : level === 1
+                        ? { background: `${mod.color}24`, color: mod.color }
+                        : undefined
+                  }
+                >
+                  {level === 0 ? (
+                    <span className="text-muted-foreground">No access</span>
+                  ) : (
+                    LEVEL_LABEL[level]
+                  )}
+                </span>
               </div>
-            </label>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* =========================================================
-   MODAL
-========================================================= */
-
-function Modal({
-  title,
-  description,
-  children,
-  onClose,
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <button
-        aria-label="Close modal"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
-      />
-
-      <div className="relative z-10 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-card shadow-2xl">
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-card px-6 py-5">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">
-              {title}
-            </h2>
-
-            {description && (
-              <p className="mt-1 text-sm text-muted-foreground">
-                {description}
-              </p>
-            )}
-          </div>
-
-          <button
-            onClick={onClose}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
+            );
+          })}
         </div>
 
-        <div className="px-6 py-5">{children}</div>
+        <dl className="mt-8 grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <dt className="text-xs text-muted-foreground">Joined</dt>
+            <dd className="mt-1 font-medium text-foreground">
+              {member.joinedAt ? formatDate(member.joinedAt) : "Not yet"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Invited by</dt>
+            <dd className="mt-1 font-medium text-foreground">
+              {member.invitedBy?.fullName || "—"}
+            </dd>
+          </div>
+        </dl>
       </div>
-    </div>
+    </Drawer>
   );
 }
 
 /* =========================================================
-   MODAL FOOTER
+   EMPTY + LOADING
 ========================================================= */
 
-function ModalFooter({
-  onClose,
-  loading,
-  submitLabel,
-}: {
-  onClose: () => void;
-  loading: boolean;
-  submitLabel: string;
-}) {
-  return (
-    <div className="mt-6 flex justify-end gap-3 border-t border-border pt-5">
-      <button
-        type="button"
-        onClick={onClose}
-        disabled={loading}
-        className="h-10 rounded-lg border border-border px-4 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
-      >
-        Cancel
-      </button>
-
-      <button
-        type="submit"
-        disabled={loading}
-        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {loading && (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        )}
-
-        {submitLabel}
-      </button>
-    </div>
-  );
-}
-
-/* =========================================================
-   FIELD
-========================================================= */
-
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm font-medium text-foreground">
-        {label}
-
-        {required && (
-          <span className="ml-1 text-destructive">*</span>
-        )}
-      </label>
-
-      {children}
-    </div>
-  );
-}
-
-/* =========================================================
-   SELECT
-========================================================= */
-
-function Select({
-  value,
-  onChange,
-  options,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: {
-    value: string;
-    label: string;
-  }[];
-}) {
-  return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(event) =>
-          onChange(event.target.value)
-        }
-        className="input-field appearance-none pr-10"
-      >
-        {options.map((option) => (
-          <option
-            key={option.value}
-            value={option.value}
-          >
-            {option.label}
-          </option>
-        ))}
-      </select>
-
-      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-    </div>
-  );
-}
-
-/* =========================================================
-   INFO ITEM
-========================================================= */
-
-function InfoItem({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground">
-        {label}
-      </p>
-
-      <p className="mt-1 break-words text-sm font-medium text-foreground">
-        {value}
-      </p>
-    </div>
-  );
-}
-
-/* =========================================================
-   SUMMARY CARD
-========================================================= */
-
-function SummaryCard({
-  icon,
-  title,
-  value,
-  description,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  value: string;
-  description: string;
-}) {
-  return (
-    <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-5">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-        {icon}
-      </div>
-
-      <div className="min-w-0">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {title}
-        </p>
-
-        <p className="mt-1 text-lg font-semibold text-foreground">
-          {value}
-        </p>
-
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {description}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/* =========================================================
-   EMPTY STATE
-========================================================= */
-
-function EmptyTeamState({
+function EmptyState({
   hasFilters,
-  onClearFilters,
+  onClear,
   onAdd,
 }: {
   hasFilters: boolean;
-  onClearFilters: () => void;
+  onClear: () => void;
   onAdd: () => void;
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-        <Users className="h-6 w-6" />
-      </div>
+    <div className="rounded-3xl border border-dashed border-border bg-card px-6 py-16 text-center">
+      <AccessSeal perms={[]} size={72} className="mx-auto" />
 
-      <h3 className="mt-5 text-base font-semibold text-foreground">
-        {hasFilters
-          ? "No team members found"
-          : "Your team is empty"}
+      <h3 className="tm-display mt-5 text-xl font-semibold text-foreground">
+        {hasFilters ? "No one matches these filters" : "No one else has access yet"}
       </h3>
 
       <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
         {hasFilters
-          ? "Try adjusting your search or filters."
-          : "Invite employees, lawyers, CAs, CSs and consultants to collaborate in your workspace."}
+          ? "Try a different search, or clear the filters to see everyone."
+          : "Invite lawyers, CAs, company secretaries and your own staff, and choose what each of them can open."}
       </p>
 
-      <div className="mt-5 flex justify-center gap-2">
+      <div className="mt-6 flex justify-center">
         {hasFilters ? (
           <button
-            onClick={onClearFilters}
+            onClick={onClear}
             className="h-10 rounded-lg border border-border px-4 text-sm font-medium text-foreground hover:bg-muted"
           >
-            Clear Filters
+            Clear filters
           </button>
         ) : (
           <button
             onClick={onAdd}
-            className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            className="inline-flex h-10 items-center gap-2 rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
-            Add Team Member
+            Invite someone
           </button>
         )}
       </div>
@@ -2390,67 +1968,29 @@ function EmptyTeamState({
   );
 }
 
-/* =========================================================
-   LOADING
-========================================================= */
-
-function TeamLoadingState() {
+function LoadingState() {
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
       {[1, 2, 3, 4].map((item) => (
         <div
           key={item}
-          className="animate-pulse rounded-2xl border border-border bg-card p-5"
+          className="animate-pulse rounded-3xl border border-border bg-card p-5"
         >
           <div className="flex items-center gap-4">
             <div className="h-12 w-12 rounded-full bg-muted" />
-
             <div className="flex-1">
               <div className="h-4 w-36 rounded bg-muted" />
               <div className="mt-2 h-3 w-48 rounded bg-muted" />
             </div>
+            <div className="h-16 w-16 rounded-full bg-muted" />
           </div>
-
           <div className="mt-5 flex gap-2">
-            <div className="h-6 w-24 rounded-full bg-muted" />
+            <div className="h-6 w-20 rounded-full bg-muted" />
             <div className="h-6 w-28 rounded-full bg-muted" />
           </div>
-
-          <div className="mt-5 h-px bg-muted" />
-
-          <div className="mt-5 grid grid-cols-2 gap-4">
-            <div>
-              <div className="h-3 w-12 rounded bg-muted" />
-              <div className="mt-2 h-4 w-24 rounded bg-muted" />
-            </div>
-
-            <div>
-              <div className="h-3 w-12 rounded bg-muted" />
-              <div className="mt-2 h-4 w-20 rounded bg-muted" />
-            </div>
-          </div>
+          <div className="mt-5 h-3 w-3/4 rounded bg-muted" />
         </div>
       ))}
     </div>
   );
-}
-
-/* =========================================================
-   HELPERS
-========================================================= */
-
-function formatDate(date?: string) {
-  if (!date) return "—";
-
-  const parsed = new Date(date);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return "—";
-  }
-
-  return parsed.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
 }
