@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Toggle } from '@/components/ui/toggle'
+// import { Toggle } from '@/components/ui/toggle'
 
 export function NotificationSettings() {
   return (

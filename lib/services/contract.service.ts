@@ -1,42 +1,31 @@
 // lib/services/contract.service.ts
-
 // ============================================================
 // API CONFIG
 // ============================================================
-
 const API_ROOT =
     process.env.NEXT_PUBLIC_API_URL ||
     "https://nyaymitra-backend-production.up.railway.app/api/v1";
-
 const CONTRACT_REQUESTS_URL = `${API_ROOT}/contracts/requests`;
 const CONTRACTS_URL = `${API_ROOT}/contracts`;
-
-
 // ============================================================
 // AUTH
 // ============================================================
-
 const getAuthToken = (): string | null => {
     if (typeof window === "undefined") {
         return null;
     }
-
     const directToken =
         localStorage.getItem("authToken") ||
         localStorage.getItem("token") ||
         localStorage.getItem("accessToken") ||
         localStorage.getItem("userToken");
-
     if (directToken) {
         return directToken;
     }
-
     try {
         const userStr = localStorage.getItem("user");
-
         if (userStr) {
             const user = JSON.parse(userStr);
-
             return (
                 user?.token ||
                 user?.accessToken ||
@@ -47,31 +36,23 @@ const getAuthToken = (): string | null => {
     } catch {
         // Ignore invalid localStorage JSON
     }
-
     return null;
 };
-
-
 const getHeaders = (): HeadersInit => {
     const token = getAuthToken();
-
     if (!token) {
         throw new Error(
             "Authorization token is required. Please log in again."
         );
     }
-
     return {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
     };
 };
-
-
 // ============================================================
 // COMMON TYPES
 // ============================================================
-
 export interface ApiResponse<T> {
     success?: boolean;
     message?: string;
@@ -79,7 +60,6 @@ export interface ApiResponse<T> {
     requests?: ContractRequest[];
     pagination?: Pagination;
 }
-
 export interface Pagination {
     page: number;
     limit: number;
@@ -93,12 +73,9 @@ export interface Pagination {
     hasNextPage?: boolean;
     hasPrevPage?: boolean;
 }
-
-
 // ============================================================
 // CONTRACT REQUEST TYPES
 // ============================================================
-
 export type ContractRequestStatus =
     | "Pending"
     | "Under Review"
@@ -106,18 +83,14 @@ export type ContractRequestStatus =
     | "Converted"
     | "Completed"
     | "Cancelled";
-
 export type ContractRequestPriority =
     | "Low"
     | "Medium"
     | "High"
     | "Urgent";
-
-
 // ============================================================
 // CONTRACT TYPES
 // ============================================================
-
 export type ContractType =
     | "NDA"
     | "Employment Agreement"
@@ -136,8 +109,6 @@ export type ContractType =
     | "Investment Agreement"
     | "Custom Contract"
     | "Other";
-
-
 export type ContractStatus =
     | "Draft"
     | "Internal Review"
@@ -150,19 +121,14 @@ export type ContractStatus =
     | "Expired"
     | "Terminated"
     | "Archived";
-
-
 export type ContractPriority =
     | "Low"
     | "Medium"
     | "High"
     | "Urgent";
-
-
 // ============================================================
 // SHARED POPULATED TYPES
 // ============================================================
-
 export interface AuthUserReference {
     _id: string;
     userId?: string;
@@ -173,7 +139,6 @@ export interface AuthUserReference {
     profilePhoto?: string;
     avatar?: string;
 }
-
 export interface AssignedProfessional {
     _id: string;
     fullName?: string;
@@ -181,12 +146,9 @@ export interface AssignedProfessional {
     email?: string;
     profilePhoto?: string;
 }
-
-
 // ============================================================
 // COUNTERPARTY
 // ============================================================
-
 export interface Counterparty {
     name: string;
     company?: string;
@@ -194,12 +156,9 @@ export interface Counterparty {
     phone?: string;
     address?: string;
 }
-
-
 // ============================================================
 // CONTRACT REQUEST FORM
 // ============================================================
-
 export interface ContractRequestFormData {
     title: string;
     contractType: ContractType;
@@ -208,15 +167,11 @@ export interface ContractRequestFormData {
     expectedDeliveryDate?: string | null;
     specialInstructions?: string;
 }
-
-
 // ============================================================
 // CONTRACT REQUEST
 // ============================================================
-
 export interface ContractRequest {
     _id: string;
-
     business:
     | string
     | {
@@ -224,7 +179,6 @@ export interface ContractRequest {
         name?: string;
         businessName?: string;
     };
-
     requestedBy:
     | string
     | {
@@ -234,53 +188,31 @@ export interface ContractRequest {
         fullName?: string;
         email?: string;
     };
-
-
     requestNumber: string;
-
     title: string;
-
     contractType: ContractType;
-
     description?: string;
-
     priority: ContractRequestPriority;
-
     status: ContractRequestStatus;
-
     assignedProfessional?: AssignedProfessional | null;
-
     contract?: string | Contract | null;
-
     expectedDeliveryDate?: string | null;
-
     specialInstructions?: string;
-
     isDeleted: boolean;
-
     deletedAt?: string | null;
-
     createdAt: string;
-
     updatedAt: string;
 }
-
-
 // ============================================================
 // REQUEST LIST RESPONSE
 // ============================================================
-
 export interface ContractRequestListResponse {
     requests: ContractRequest[];
-
     pagination: Pagination;
 }
-
-
 // ============================================================
 // BUSINESS DOCUMENT
 // ============================================================
-
 export type DocumentCategory =
     | "incorporation"
     | "tax"
@@ -290,24 +222,17 @@ export type DocumentCategory =
     | "agreement"
     | "contract"
     | "other";
-
-
 export type BusinessDocumentStatus =
     | "pending"
     | "uploaded"
     | "failed"
     | "deleted";
-
-
 export type BusinessDocumentVisibility =
     | "business"
     | "lawyer"
     | "private";
-
-
 export interface BusinessDocument {
     _id: string;
-
     business:
     | string
     | {
@@ -315,42 +240,26 @@ export interface BusinessDocument {
         name?: string;
         businessName?: string;
     };
-
     uploadedBy:
     | string
     | AuthUserReference;
-
     name: string;
-
     originalName: string;
-
     key: string;
-
     mimeType: string;
-
     size: number;
-
     category: DocumentCategory;
-
     status: BusinessDocumentStatus;
-
     visibility: BusinessDocumentVisibility;
-
     uploadedAt?: string;
-
     createdAt: string;
-
     updatedAt: string;
 }
-
-
 // ============================================================
 // CONTRACT
 // ============================================================
-
 export interface Contract {
     _id: string;
-
     business:
     | string
     | {
@@ -358,122 +267,89 @@ export interface Contract {
         name?: string;
         businessName?: string;
     };
-
     contractNumber: string;
-
     title: string;
-
     contractType: ContractType;
-
     description?: string;
-
     counterparty: Counterparty;
-
     contractValue?: number;
-
     currency?: string;
-
     status: ContractStatus;
-
     priority: ContractPriority;
-
     owner?:
     | string
     | AuthUserReference
     | null;
-
     createdBy:
     | string
     | AuthUserReference;
-
     assignedProfessional?: AssignedProfessional | null;
-
     contractRequest?:
     | string
     | ContractRequest
     | null;
-
     currentVersion?:
     | string
     | ContractVersion
     | null;
-
     effectiveDate?: string | null;
-
     expiryDate?: string | null;
-
     renewalDate?: string | null;
-
     autoRenewal: boolean;
-
     supportingDocuments?: BusinessDocument[];
-
     currentDocument?:
     | BusinessDocument
     | string
     | null;
-
     signedDocument?:
     | BusinessDocument
     | string
     | null;
-
     isArchived: boolean;
-
     isDeleted: boolean;
-
     deletedAt?: string | null;
-
     createdAt: string;
-
     updatedAt: string;
 }
-
-
 // ============================================================
 // CONTRACT LIST RESPONSE
 // ============================================================
-
 export interface ContractListResponse {
     data: Contract[];
-
     pagination: Pagination;
 }
-
-
 // ============================================================
 // CONTRACT UPDATE DATA
 // ============================================================
+export interface ContractFormData {
+    title: string;
+    contractType: ContractType;
+    purpose: string;
+    description: string;
+    counterparty: string;
+    contractValue: string;
+    currency: string;
+    priority: ContractPriority;
+    expectedDeliveryDate: string;
+    specialInstructions: string;
+}
 
 export interface ContractUpdateData {
     title?: string;
-
     description?: string;
-
     contractType?: ContractType;
-
     counterparty?: Counterparty;
-
     contractValue?: number;
-
     currency?: string;
-
     priority?: ContractPriority;
-
     effectiveDate?: string | null;
-
     expiryDate?: string | null;
-
     renewalDate?: string | null;
-
     autoRenewal?: boolean;
 }
-
-
 // ============================================================
 // CONTRACT VERSION
 // ============================================================
-
 export type ContractVersionStatus =
     | "Draft"
     | "Internal Review"
@@ -481,90 +357,57 @@ export type ContractVersionStatus =
     | "Approved"
     | "Executed"
     | "Superseded";
-
-
 export interface ContractVersion {
     _id: string;
-
     contract:
     | string
     | Contract;
-
     business:
     | string
     | {
         _id: string;
         name?: string;
     };
-
     versionNumber: number;
-
     document: BusinessDocument;
-
     uploadedBy:
     | string
     | AuthUserReference;
-
     status: ContractVersionStatus;
-
     changeSummary?: string;
-
     isCurrent: boolean;
-
     createdAt: string;
-
     updatedAt: string;
 }
-
-
 // ============================================================
 // COMMENTS
 // ============================================================
-
 export type ContractCommentRole =
     | "business"
     | "lawyer"
     | "admin";
-
-
 export interface ContractComment {
     _id: string;
-
     business: string;
-
     contract: string;
-
     version?:
     | string
     | ContractVersion
     | null;
-
     author: AuthUserReference;
-
     authorRole: ContractCommentRole;
-
     message: string;
-
     isInternal: boolean;
-
     attachments: BusinessDocument[];
-
     isEdited: boolean;
-
     editedAt?: string | null;
-
     isDeleted: boolean;
-
     createdAt: string;
-
     updatedAt: string;
 }
-
-
 // ============================================================
 // ASSIGNMENT
 // ============================================================
-
 export type AssignmentType =
     | "Drafting"
     | "Review"
@@ -572,8 +415,6 @@ export type AssignmentType =
     | "Legal Opinion"
     | "Execution"
     | "General";
-
-
 export type AssignmentStatus =
     | "Assigned"
     | "Accepted"
@@ -581,97 +422,59 @@ export type AssignmentStatus =
     | "Completed"
     | "Rejected"
     | "Cancelled";
-
-
 export interface LegalAssignment {
     _id: string;
-
     business: string;
-
     contract: string;
-
     professional: AssignedProfessional;
-
     assignedBy:
     | string
     | AuthUserReference;
-
     assignmentType: AssignmentType;
-
     instructions?: string;
-
     status: AssignmentStatus;
-
     dueDate?: string | null;
-
     acceptedAt?: string | null;
-
     completedAt?: string | null;
-
     rejectedAt?: string | null;
-
     rejectionReason?: string;
-
     createdAt: string;
-
     updatedAt: string;
 }
-
-
 // ============================================================
 // APPROVAL
 // ============================================================
-
 export type ApprovalType =
     | "Legal Review"
     | "Business Approval"
     | "Final Approval";
-
-
 export type ApprovalStatus =
     | "Pending"
     | "Approved"
     | "Rejected"
     | "Cancelled";
-
-
 export interface ContractApproval {
     _id: string;
-
     business: string;
-
     contract: string;
-
     version?: string | null;
-
     requestedFrom:
     | string
     | AuthUserReference;
-
     requestedBy:
     | string
     | AuthUserReference;
-
     approvalType: ApprovalType;
-
     status: ApprovalStatus;
-
     comments?: string;
-
     approvedAt?: string | null;
-
     rejectedAt?: string | null;
-
     createdAt: string;
-
     updatedAt: string;
 }
-
-
 // ============================================================
 // ACTIVITY
 // ============================================================
-
 export type ContractActivityEntityType =
     | "Contract"
     | "ContractRequest"
@@ -679,96 +482,56 @@ export type ContractActivityEntityType =
     | "Assignment"
     | "Approval"
     | "Document";
-
-
 export interface ContractActivity {
     _id: string;
-
     business: string;
-
     entityType: ContractActivityEntityType;
-
     entityId: string;
-
     action: string;
-
     description?: string;
-
     performedBy: AuthUserReference;
-
     metadata?: Record<string, unknown>;
-
     createdAt: string;
 }
-
-
 // ============================================================
 // DASHBOARD STATS
 // ============================================================
-
 export interface DashboardStats {
     totalRequests: number;
-
     pending: number;
-
     underReview: number;
-
     assigned: number;
-
     converted: number;
-
     completed: number;
-
     cancelled: number;
-
     lowPriority: number;
-
     mediumPriority: number;
-
     highPriority: number;
-
     urgentPriority: number;
-
     activeContracts?: number;
-
     pendingReview?: number;
-
     expiringSoon?: number;
-
     openRequests?: number;
-
     recentRequests?: ContractRequest[];
-
     totalContracts?: number;
-
     recentContracts?: Contract[];
 }
-
-
 // ============================================================
 // FILE UPLOAD TYPES
 // ============================================================
-
 export interface SignedUploadResponse {
     uploadUrl: string;
-
     key?: string;
-
     storageKey?: string;
-
     documentId?: string;
-
     expiresIn?: number;
-
     /**
      * Present on the final-file upload URL response.
      * Echoes back the requested type: "pdf" | "docx" | "signedPdf".
      */
     fileType?: string;
-
     [key: string]: unknown;
 }
-
 export interface ContractUploadUrlResponse {
     uploadUrl: string;
     key: string;
@@ -776,32 +539,24 @@ export interface ContractUploadUrlResponse {
     contractId: string;
     expiresIn?: number;
 }
-
-
 export interface FileUrlResponse {
     url: string;
-
     expiresIn?: number;
-
 }
-
 // ============================================================
 // AI CONTRACT INTELLIGENCE
 // ============================================================
-
 export interface EvidenceVerification {
     verified: boolean;
     reason?: string;
     [key: string]: unknown;
 }
-
 export interface AIUsage {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
     [key: string]: unknown;
 }
-
 export interface AIMetadata {
     provider?: string;
     model?: string;
@@ -810,7 +565,6 @@ export interface AIMetadata {
     analyzedAt?: string;
     [key: string]: unknown;
 }
-
 export interface LawyerReview {
     status:
     | "Not Reviewed"
@@ -822,7 +576,6 @@ export interface LawyerReview {
     comments?: string;
     [key: string]: unknown;
 }
-
 export interface AIContractAnalysisRecord {
     _id: string;
     business: string;
@@ -830,22 +583,18 @@ export interface AIContractAnalysisRecord {
     contractVersion: string;
     document: string;
     analyzedBy: string;
-
     status:
     | "Processing"
     | "Pending"
     | "Queued"
     | "Completed"
     | "Failed";
-
     analysis: Record<string, unknown> | null;
-
     /**
      * Optional lawyer review attached to the analysis.
      * Present once a lawyer has touched the report.
      */
     lawyerReview?: LawyerReview;
-
     source: {
         fileName?: string;
         mimeType?: string;
@@ -853,25 +602,18 @@ export interface AIContractAnalysisRecord {
         characterCount?: number;
         contentHash?: string;
     };
-
     aiMetadata?: AIMetadata;
-
     errorMessage?: string;
-
     createdAt: string;
     updatedAt: string;
 }
-
-
 // ============================================================
 // REQUEST HELPERS
 // ============================================================
-
 const buildQueryString = (
     params: Record<string, unknown>
 ): string => {
     const query = new URLSearchParams();
-
     Object.entries(params).forEach(
         ([key, value]) => {
             if (
@@ -883,50 +625,40 @@ const buildQueryString = (
             }
         }
     );
-
     return query.toString();
 };
-
-
 // ============================================================
 // RESPONSE HANDLER
 // ============================================================
-
 const handleResponse = async <T>(
     response: Response,
     fallbackMessage: string
 ): Promise<T> => {
     let result: any = null;
-
     try {
         result = await response.json();
     } catch {
         // Backend returned no JSON
     }
-
     if (!response.ok) {
         let message =
             result?.message ||
             result?.error ||
             fallbackMessage;
-
         if (response.status === 401) {
             message =
                 result?.message ||
                 "Your session has expired. Please log in again.";
         }
-
         if (response.status === 403) {
             message =
                 result?.message ||
                 "You are not authorized to perform this action.";
         }
-
         throw new Error(
             `${message} (${response.status})`
         );
     }
-
     if (
         result &&
         Object.prototype.hasOwnProperty.call(
@@ -936,43 +668,85 @@ const handleResponse = async <T>(
     ) {
         return result.data as T;
     }
-
     return result as T;
 };
-
-
 // ============================================================
 // SERVICE
 // ============================================================
 
+export interface AIContractQuestionRequest {
+    query: string;
+    contractId?: string | null;
+    contractVersionId?: string | null;
+    limit?: number;
+}
+export interface AIContractEvidence {
+    chunkId: string;
+    quote: string;
+    contract: { id: string; title: string; contractNumber: string; contractType: string; status: string };
+    contractVersionId: string;
+    version?: { id: string; versionNumber: number; status: string; isCurrent: boolean } | null;
+    documentId: string;
+    chunkIndex: number;
+    clauseType: string;
+    pageNumber: number | null;
+    similarityScore: number;
+    scoreType: string;
+    verificationStatus: "quote_verified";
+    claimIds?: string[];
+}
+export interface AIContractQuestionResponse {
+    question: string;
+    answer: string;
+    answerStatus: "supported" | "partially_supported" | "not_found";
+    keyPoints: string[];
+    claims: { claimId: string; statement: string; claimType: "explicit" | "inference"; verificationStatus: "quotes_verified"; evidence: AIContractEvidence[] }[];
+    evidence: AIContractEvidence[];
+    missingInformation: string[];
+    verification: { totalGeneratedClaims: number; verifiedClaims: number; rejectedClaims: number; verifiedEvidence: number; rejectedEvidence: number; evidenceCoverage: number; verificationMethod: string };
+    retrieval: { totalResults: number; embeddingModel: string | null; usage: AIUsage | null; scope: { mode: "portfolio" | "contract" | "version"; contractId: string | null; contractVersionId: string | null; currentVersionsOnly: boolean; contractsConsidered: number; authorizedVersionCount: number }; retrievalStatus: string };
+    ai: { model: string; usage: AIUsage | null; finishReason: string | null } | null;
+    metadata: { promptVersion: string; processingTimeMs: number; answeredAt: string };
+    disclaimer: string;
+}
+
 class ContractService {
+    async askContractQuestion(data: AIContractQuestionRequest, signal?: AbortSignal): Promise<AIContractQuestionResponse> {
+        const query = data.query.trim();
+        const { contractId = null, contractVersionId = null, limit = 8 } = data;
+        if (!query || query.length > 1000) throw new Error("Enter a question of 1–1000 characters.");
+        if (contractVersionId && !contractId) throw new Error("Contract ID is required when selecting a version.");
+        if (!Number.isInteger(limit) || limit < 1 || limit > 12) throw new Error("Limit must be between 1 and 12.");
+        const response = await fetch(`${CONTRACTS_URL}/ask`, {
+            method: "POST", headers: getHeaders(), cache: "no-store", signal,
+            body: JSON.stringify({ query, contractId, contractVersionId, limit }),
+        });
+        const result = await handleResponse<AIContractQuestionResponse>(response, "Unable to answer the contract question.");
+        if (!result || typeof result.answer !== "string" || !Array.isArray(result.claims) || !Array.isArray(result.evidence) || !Array.isArray(result.missingInformation) || !result.retrieval?.scope || !result.verification) throw new Error("Invalid response from Contract AI.");
+        return result;
+    }
+
     // ==========================================================
     // CONTRACT REQUESTS
     // ==========================================================
-
     async createContractRequest(
         data: ContractRequestFormData
     ): Promise<ContractRequest> {
         const payload = {
             title: data.title.trim(),
-
             contractType: data.contractType,
-
             ...(data.description?.trim()
                 ? { description: data.description.trim() }
                 : {}),
-
             ...(data.priority
                 ? { priority: data.priority }
                 : {}),
-
             ...(data.expectedDeliveryDate
                 ? {
                     expectedDeliveryDate:
                         data.expectedDeliveryDate,
                 }
                 : {}),
-
             ...(data.specialInstructions?.trim()
                 ? {
                     specialInstructions:
@@ -980,7 +754,6 @@ class ContractService {
                 }
                 : {}),
         };
-
         const response = await fetch(
             CONTRACT_REQUESTS_URL,
             {
@@ -989,40 +762,31 @@ class ContractService {
                 body: JSON.stringify(payload),
             }
         );
-
         return handleResponse<ContractRequest>(
             response,
             "Failed to create contract request"
         );
     }
-
     async uploadContract(formData: FormData): Promise<Contract> {
         const file = formData.get("file");
-
         const title = formData.get("title");
         const contractType = formData.get("contractType");
-
         if (!(file instanceof File)) {
             throw new Error("Contract file is required.");
         }
-
         if (typeof title !== "string" || !title.trim()) {
             throw new Error("Contract title is required.");
         }
-
         if (
             typeof contractType !== "string" ||
             !contractType.trim()
         ) {
             throw new Error("Contract type is required.");
         }
-
         const mimeType =
             file.type || "application/octet-stream";
-
         const size = file.size;
         const originalName = file.name;
-
         const uploadUrlResponse = await fetch(
             `${CONTRACTS_URL}/upload-url`,
             {
@@ -1037,42 +801,35 @@ class ContractService {
                 }),
             }
         );
-
         const uploadData =
             await handleResponse<ContractUploadUrlResponse>(
                 uploadUrlResponse,
                 "Failed to generate contract upload URL"
             );
-
         if (!uploadData?.uploadUrl) {
             throw new Error(
                 "Backend did not return a valid upload URL."
             );
         }
-
         if (!uploadData?.key) {
             throw new Error(
                 "Backend did not return the storage key."
             );
         }
-
         if (!uploadData?.documentId) {
             throw new Error(
                 "Backend did not return the document ID."
             );
         }
-
         if (!uploadData?.contractId) {
             throw new Error(
                 "Backend did not return the contract ID."
             );
         }
-
         await this.uploadToSignedUrl(
             uploadData.uploadUrl,
             file
         );
-
         const completeResponse = await fetch(
             `${CONTRACTS_URL}/upload/complete`,
             {
@@ -1088,13 +845,11 @@ class ContractService {
                 }),
             }
         );
-
         return handleResponse<Contract>(
             completeResponse,
             "Failed to complete contract upload"
         );
     }
-
     async getContractRequests(params: {
         page?: number;
         limit?: number;
@@ -1104,47 +859,35 @@ class ContractService {
         search?: string;
     } = {}): Promise<ContractRequestListResponse> {
         const query = new URLSearchParams();
-
         if (params.page) {
             query.set("page", params.page.toString());
         }
-
         if (params.limit) {
             query.set("limit", params.limit.toString());
         }
-
         if (params.status) {
             query.set("status", params.status);
         }
-
         if (params.priority) {
             query.set("priority", params.priority);
         }
-
         if (params.contractType) {
             query.set("contractType", params.contractType);
         }
-
         if (params.search) {
             query.set("search", params.search);
         }
-
         const queryString = query.toString();
-
         const url = queryString
             ? `${CONTRACT_REQUESTS_URL}?${queryString}`
             : CONTRACT_REQUESTS_URL;
-
         const response = await fetch(url, {
             method: "GET",
             headers: getHeaders(),
         });
-
         if (!response.ok) {
             const text = await response.text();
-
             let message = "Failed to fetch contract requests";
-
             try {
                 const error = JSON.parse(text);
                 message = error?.message || message;
@@ -1153,20 +896,15 @@ class ContractService {
                     message = text;
                 }
             }
-
             throw new Error(message);
         }
-
         const result = await response.json();
-
         console.log(
             "[Contract Requests API]",
             `${response.status} ${url}`,
             result
         );
-
         const payload = result?.data ?? result;
-
         if (Array.isArray(payload)) {
             return {
                 requests: payload,
@@ -1178,27 +916,22 @@ class ContractService {
                 },
             };
         }
-
         const requests = Array.isArray(payload?.requests)
             ? payload.requests
             : Array.isArray(payload?.data)
                 ? payload.data
                 : [];
-
         const pagination = payload?.pagination ?? {
             page: params.page ?? 1,
             limit: params.limit ?? 50,
             total: requests.length,
             pages: 1,
         };
-
         return {
             requests,
             pagination,
         };
     }
-
-
     async getContractRequestById(
         requestId: string
     ): Promise<ContractRequest> {
@@ -1207,7 +940,6 @@ class ContractService {
                 "Contract request ID is required."
             );
         }
-
         const response = await fetch(
             `${CONTRACT_REQUESTS_URL}/${requestId}`,
             {
@@ -1215,14 +947,11 @@ class ContractService {
                 headers: getHeaders(),
             }
         );
-
         return handleResponse<ContractRequest>(
             response,
             "Failed to fetch contract request"
         );
     }
-
-
     async updateContractRequest(
         requestId: string,
         data: Partial<ContractRequestFormData>
@@ -1232,7 +961,6 @@ class ContractService {
                 "Contract request ID is required."
             );
         }
-
         const response = await fetch(
             `${CONTRACT_REQUESTS_URL}/${requestId}`,
             {
@@ -1241,14 +969,11 @@ class ContractService {
                 body: JSON.stringify(data),
             }
         );
-
         return handleResponse<ContractRequest>(
             response,
             "Failed to update contract request"
         );
     }
-
-
     async updateContractRequestStatus(
         requestId: string,
         status: ContractRequestStatus
@@ -1258,7 +983,6 @@ class ContractService {
                 "Contract request ID is required."
             );
         }
-
         const response = await fetch(
             `${CONTRACT_REQUESTS_URL}/${requestId}/status`,
             {
@@ -1267,14 +991,11 @@ class ContractService {
                 body: JSON.stringify({ status }),
             }
         );
-
         return handleResponse<ContractRequest>(
             response,
             "Failed to update contract request status"
         );
     }
-
-
     async deleteContractRequest(
         requestId: string
     ): Promise<void> {
@@ -1283,7 +1004,6 @@ class ContractService {
                 "Contract request ID is required."
             );
         }
-
         const response = await fetch(
             `${CONTRACT_REQUESTS_URL}/${requestId}`,
             {
@@ -1291,18 +1011,14 @@ class ContractService {
                 headers: getHeaders(),
             }
         );
-
         await handleResponse<unknown>(
             response,
             "Failed to delete contract request"
         );
     }
-
-
     // ==========================================================
     // ACTUAL CONTRACTS
     // ==========================================================
-
     async createContract(
         data: {
             title: string;
@@ -1321,21 +1037,17 @@ class ContractService {
     ): Promise<Contract> {
         const payload = {
             ...data,
-
             title: data.title.trim(),
-
             ...(data.contractValue !== undefined
                 ? {
                     contractValue:
                         Number(data.contractValue) || 0,
                 }
                 : {}),
-
             ...(data.description?.trim()
                 ? { description: data.description.trim() }
                 : {}),
         };
-
         const response = await fetch(
             CONTRACTS_URL,
             {
@@ -1344,14 +1056,11 @@ class ContractService {
                 body: JSON.stringify(payload),
             }
         );
-
         return handleResponse<Contract>(
             response,
             "Failed to create contract"
         );
     }
-
-
     async getContracts(
         params: {
             page?: number;
@@ -1363,33 +1072,26 @@ class ContractService {
         } = {}
     ): Promise<ContractListResponse> {
         const queryString = buildQueryString(params);
-
         const url = queryString
             ? `${CONTRACTS_URL}?${queryString}`
             : CONTRACTS_URL;
-
         const response = await fetch(url, {
             method: "GET",
             headers: getHeaders(),
         });
-
         let result: any = null;
-
         try {
             result = await response.json();
         } catch {
             // Backend returned no JSON
         }
-
         if (!response.ok) {
             throw new Error(
                 result?.message ||
                 `Failed to fetch contracts (${response.status})`
             );
         }
-
         const payload = result?.data ?? result;
-
         if (Array.isArray(payload)) {
             return {
                 data: payload,
@@ -1402,13 +1104,11 @@ class ContractService {
                     },
             };
         }
-
         const contracts = Array.isArray(payload?.contracts)
             ? payload.contracts
             : Array.isArray(payload?.data)
                 ? payload.data
                 : [];
-
         const pagination =
             result?.pagination ??
             payload?.pagination ?? {
@@ -1417,13 +1117,11 @@ class ContractService {
                 total: contracts.length,
                 pages: 1,
             };
-
         return {
             data: contracts,
             pagination,
         };
     }
-
     async getContractById(
         contractId: string
     ): Promise<Contract> {
@@ -1432,7 +1130,6 @@ class ContractService {
                 "Contract ID is required."
             );
         }
-
         const response = await fetch(
             `${CONTRACTS_URL}/${contractId}`,
             {
@@ -1440,14 +1137,11 @@ class ContractService {
                 headers: getHeaders(),
             }
         );
-
         return handleResponse<Contract>(
             response,
             "Failed to fetch contract"
         );
     }
-
-
     async updateContract(
         contractId: string,
         data: ContractUpdateData
@@ -1457,7 +1151,6 @@ class ContractService {
                 "Contract ID is required."
             );
         }
-
         const response = await fetch(
             `${CONTRACTS_URL}/${contractId}`,
             {
@@ -1466,14 +1159,11 @@ class ContractService {
                 body: JSON.stringify(data),
             }
         );
-
         return handleResponse<Contract>(
             response,
             "Failed to update contract"
         );
     }
-
-
     async updateContractStatus(
         contractId: string,
         status: ContractStatus
@@ -1483,7 +1173,6 @@ class ContractService {
                 "Contract ID is required."
             );
         }
-
         const response = await fetch(
             `${CONTRACTS_URL}/${contractId}/status`,
             {
@@ -1492,18 +1181,14 @@ class ContractService {
                 body: JSON.stringify({ status }),
             }
         );
-
         return handleResponse<Contract>(
             response,
             "Failed to update contract status"
         );
     }
-
-
     // ==========================================================
     // ASSIGNMENT
     // ==========================================================
-
     async assignProfessional(
         contractId: string,
         professionalId: string,
@@ -1518,13 +1203,11 @@ class ContractService {
                 "Contract ID is required."
             );
         }
-
         if (!professionalId) {
             throw new Error(
                 "Professional ID is required."
             );
         }
-
         const response = await fetch(
             `${CONTRACTS_URL}/${contractId}/assign`,
             {
@@ -1536,7 +1219,6 @@ class ContractService {
                 }),
             }
         );
-
         return handleResponse<
             LegalAssignment | Contract
         >(
@@ -1544,12 +1226,9 @@ class ContractService {
             "Failed to assign professional"
         );
     }
-
-
     // ==========================================================
     // COMMENTS
     // ==========================================================
-
     async addComment(
         contractId: string,
         message: string,
@@ -1562,27 +1241,20 @@ class ContractService {
         if (!contractId) {
             throw new Error("Contract ID is required.");
         }
-
         const cleanMessage = message.trim();
-
         if (!cleanMessage) {
             throw new Error("Comment message is required.");
         }
-
         const payload = {
             message: cleanMessage,
-
             isInternal: options?.isInternal ?? false,
-
             ...(options?.versionId
                 ? { versionId: options.versionId }
                 : {}),
-
             ...(options?.attachmentIds?.length
                 ? { attachmentIds: options.attachmentIds }
                 : {}),
         };
-
         const response = await fetch(
             `${CONTRACTS_URL}/${contractId}/comments`,
             {
@@ -1591,14 +1263,11 @@ class ContractService {
                 body: JSON.stringify(payload),
             }
         );
-
         return handleResponse<ContractComment>(
             response,
             "Failed to add comment"
         );
     }
-
-
     /**
      * GET /contracts/:id/comments
      *
@@ -1623,7 +1292,6 @@ class ContractService {
         if (!contractId) {
             throw new Error("Contract ID is required.");
         }
-
         const response = await fetch(
             `${CONTRACTS_URL}/${contractId}/comments`,
             {
@@ -1631,13 +1299,11 @@ class ContractService {
                 headers: getHeaders(),
             }
         );
-
         const result =
             await handleResponse<
                 | { contract?: unknown; comments?: ContractComment[] }
                 | ContractComment[]
             >(response, "Failed to fetch comments");
-
         // Case A: { contract, comments }
         if (
             result &&
@@ -1646,21 +1312,16 @@ class ContractService {
         ) {
             return (result as any).comments as ContractComment[];
         }
-
         // Case B: already an array
         if (Array.isArray(result)) {
             return result as ContractComment[];
         }
-
         // Fallback
         return [];
     }
-
-
     // ==========================================================
     // SUPPORTING DOCUMENTS - R2
     // ==========================================================
-
     async getSupportingDocumentUploadUrl(
         contractId: string,
         data: {
@@ -1678,14 +1339,11 @@ class ContractService {
                 body: JSON.stringify(data),
             }
         );
-
         return handleResponse<SignedUploadResponse>(
             response,
             "Failed to get document upload URL"
         );
     }
-
-
     async uploadToSignedUrl(
         uploadUrl: string,
         file: File
@@ -1695,7 +1353,6 @@ class ContractService {
                 "Signed upload URL is required."
             );
         }
-
         const response = await fetch(
             uploadUrl,
             {
@@ -1708,15 +1365,12 @@ class ContractService {
                 body: file,
             }
         );
-
         if (!response.ok) {
             throw new Error(
                 `Failed to upload file to storage (${response.status})`
             );
         }
     }
-
-
     async completeSupportingDocumentUpload(
         contractId: string,
         data: {
@@ -1735,14 +1389,11 @@ class ContractService {
                 body: JSON.stringify(data),
             }
         );
-
         return handleResponse<BusinessDocument>(
             response,
             "Failed to complete document upload"
         );
     }
-
-
     /**
      * End-to-end supporting document upload.
      *
@@ -1763,18 +1414,14 @@ class ContractService {
         if (!contractId) {
             throw new Error("Contract ID is required.");
         }
-
         if (!file) {
             throw new Error("File is required.");
         }
-
         const mimeType =
             file.type || "application/octet-stream";
-
         // ---------------------------------------------------------
         // Step 1 — signed upload URL
         // ---------------------------------------------------------
-
         const uploadData =
             await this.getSupportingDocumentUploadUrl(
                 contractId,
@@ -1785,40 +1432,32 @@ class ContractService {
                     category,
                 }
             );
-
         const uploadUrl =
             (uploadData as any)?.uploadUrl as
             | string
             | undefined;
-
         const storageKey =
             ((uploadData as any)?.storageKey ??
                 (uploadData as any)?.key) as
             | string
             | undefined;
-
         if (!uploadUrl) {
             throw new Error(
                 "Backend did not return a signed upload URL."
             );
         }
-
         if (!storageKey) {
             throw new Error(
                 "Backend did not return a storage key."
             );
         }
-
         // ---------------------------------------------------------
         // Step 2 — PUT the file directly to R2
         // ---------------------------------------------------------
-
         await this.uploadToSignedUrl(uploadUrl, file);
-
         // ---------------------------------------------------------
         // Step 3 — finalize on the backend
         // ---------------------------------------------------------
-
         return this.completeSupportingDocumentUpload(
             contractId,
             {
@@ -1830,8 +1469,6 @@ class ContractService {
             }
         );
     }
-
-
     async getSupportingDocumentUrl(
         contractId: string,
         documentId: string
@@ -1843,29 +1480,24 @@ class ContractService {
                 headers: getHeaders(),
             }
         );
-
         const raw = await handleResponse<any>(
             response,
             "Failed to get document URL"
         );
-
         // Backend returns `downloadUrl` for supporting documents
         // but `url` for final files. Normalize both into `url`.
         const url: string | undefined =
             raw?.url ?? raw?.downloadUrl;
-
         if (!url) {
             throw new Error(
                 "Backend did not return a download URL."
             );
         }
-
         return {
             url,
             expiresIn: raw?.expiresIn,
         };
     }
-
     async deleteSupportingDocument(
         contractId: string,
         documentId: string
@@ -1877,25 +1509,20 @@ class ContractService {
                 headers: getHeaders(),
             }
         );
-
         await handleResponse<unknown>(
             response,
             "Failed to delete supporting document"
         );
     }
-
-
     // ==========================================================
     // CONTRACT VERSIONS - R2
     // ==========================================================
-
     async getContractVersions(
         contractId: string
     ): Promise<ContractVersion[]> {
         if (!contractId) {
             throw new Error("Contract ID is required.");
         }
-
         const response = await fetch(
             `${CONTRACTS_URL}/${contractId}/versions`,
             {
@@ -1903,25 +1530,19 @@ class ContractService {
                 headers: getHeaders(),
             }
         );
-
         const result = await handleResponse<
             ContractVersion[] | { versions?: ContractVersion[] }
         >(
             response,
             "Failed to fetch contract versions"
         );
-
         if (Array.isArray(result)) {
             return result;
         }
-
         return Array.isArray(result?.versions)
             ? result.versions
             : [];
     }
-
-
-
     async getVersionUploadUrl(
         contractId: string,
         data: {
@@ -1938,14 +1559,11 @@ class ContractService {
                 body: JSON.stringify(data),
             }
         );
-
         return handleResponse<SignedUploadResponse>(
             response,
             "Failed to get version upload URL"
         );
     }
-
-
     async completeVersionUpload(
         contractId: string,
         data: {
@@ -1964,14 +1582,11 @@ class ContractService {
                 body: JSON.stringify(data),
             }
         );
-
         return handleResponse<ContractVersion>(
             response,
             "Failed to complete contract version upload"
         );
     }
-
-
     async getVersionUrl(
         contractId: string,
         versionId: string
@@ -1983,17 +1598,14 @@ class ContractService {
                 headers: getHeaders(),
             }
         );
-
         return handleResponse<FileUrlResponse>(
             response,
             "Failed to get contract version URL"
         );
     }
-
     // ==========================================================
     // AI CONTRACT ANALYSIS
     // ==========================================================
-
     /**
      * POST to kick off an AI analysis for a specific contract version.
      *
@@ -2007,11 +1619,9 @@ class ContractService {
         if (!contractId) {
             throw new Error("Contract ID is required.");
         }
-
         if (!versionId) {
             throw new Error("Contract version ID is required.");
         }
-
         const response = await fetch(
             `${CONTRACTS_URL}/${contractId}/versions/${versionId}/analyze`,
             {
@@ -2019,13 +1629,11 @@ class ContractService {
                 headers: getHeaders(),
             }
         );
-
         return handleResponse<AIContractAnalysisRecord>(
             response,
             "Failed to analyze contract"
         );
     }
-
     /**
      * POST to kick off an AI analysis.
      *
@@ -2044,11 +1652,9 @@ class ContractService {
         if (!contractId) {
             throw new Error("Contract ID is required.");
         }
-
         if (!versionId) {
             throw new Error("Contract version ID is required.");
         }
-
         const response = await fetch(
             `${CONTRACTS_URL}/${contractId}/versions/${versionId}/analyze`,
             {
@@ -2056,16 +1662,13 @@ class ContractService {
                 headers: getHeaders(),
             }
         );
-
         const record =
             await handleResponse<AIContractAnalysisRecord>(
                 response,
                 "Failed to analyze contract"
             );
-
         return { data: record };
     }
-
     /**
      * GET the latest AI analysis for a specific contract version.
      *
@@ -2086,7 +1689,6 @@ class ContractService {
             "Failed to get contract version analysis"
         );
     }
-
     /**
      * GET the latest AI analysis, wrapped as `{ data }`.
      *
@@ -2103,11 +1705,9 @@ class ContractService {
         if (!contractId) {
             throw new Error("Contract ID is required.");
         }
-
         if (!versionId) {
             throw new Error("Contract version ID is required.");
         }
-
         const response = await fetch(
             `${CONTRACTS_URL}/${contractId}/versions/${versionId}/analysis`,
             {
@@ -2115,20 +1715,16 @@ class ContractService {
                 headers: getHeaders(),
             }
         );
-
         const record =
             await handleResponse<AIContractAnalysisRecord>(
                 response,
                 "Failed to get contract version analysis"
             );
-
         return { data: record };
     }
-
     // ==========================================================
     // FINAL FILES - R2
     // ==========================================================
-
     async getFinalFileUploadUrl(
         contractId: string,
         data: {
@@ -2149,14 +1745,11 @@ class ContractService {
                 body: JSON.stringify(data),
             }
         );
-
         return handleResponse<SignedUploadResponse>(
             response,
             "Failed to get final file upload URL"
         );
     }
-
-
     async completeFinalFileUpload(
         contractId: string,
         data: {
@@ -2178,14 +1771,11 @@ class ContractService {
                 body: JSON.stringify(data),
             }
         );
-
         return handleResponse<BusinessDocument>(
             response,
             "Failed to complete final file upload"
         );
     }
-
-
     async getFinalFileUrl(
         contractId: string,
         fileType:
@@ -2201,18 +1791,14 @@ class ContractService {
                 headers: getHeaders(),
             }
         );
-
         return handleResponse<FileUrlResponse>(
             response,
             "Failed to get final file URL"
         );
     }
-
-
     // ==========================================================
     // APPROVALS
     // ==========================================================
-
     async createApproval(
         contractId: string,
         data: {
@@ -2229,14 +1815,11 @@ class ContractService {
                 body: JSON.stringify(data),
             }
         );
-
         return handleResponse<ContractApproval>(
             response,
             "Failed to create approval"
         );
     }
-
-
     async respondToApproval(
         approvalId: string,
         data: {
@@ -2254,25 +1837,20 @@ class ContractService {
                 body: JSON.stringify(data),
             }
         );
-
         return handleResponse<ContractApproval>(
             response,
             "Failed to respond to approval"
         );
     }
-
-
     // ==========================================================
     // ACTIVITY
     // ==========================================================
-
     async getActivities(
         contractId: string
     ): Promise<ContractActivity[]> {
         if (!contractId) {
             throw new Error("Contract ID is required.");
         }
-
         const response = await fetch(
             `${CONTRACTS_URL}/${contractId}/activity`,
             {
@@ -2280,34 +1858,26 @@ class ContractService {
                 headers: getHeaders(),
             }
         );
-
         const result =
             await handleResponse<any>(
                 response,
                 "Failed to fetch contract activity"
             );
-
         // Backend may wrap as { activities: [...] } inside data.
         if (Array.isArray(result)) {
             return result;
         }
-
         if (Array.isArray(result?.activities)) {
             return result.activities;
         }
-
         if (Array.isArray(result?.data)) {
             return result.data;
         }
-
         return [];
     }
-
-
     // ==========================================================
     // DASHBOARD
     // ==========================================================
-
     async getDashboardStats(): Promise<DashboardStats> {
         const response = await fetch(
             `${CONTRACTS_URL}/dashboard/stats`,
@@ -2316,18 +1886,14 @@ class ContractService {
                 headers: getHeaders(),
             }
         );
-
         return handleResponse<DashboardStats>(
             response,
             "Failed to fetch dashboard statistics"
         );
     }
-
-
     // ==========================================================
     // ARCHIVE
     // ==========================================================
-
     async archiveContract(
         contractId: string
     ): Promise<Contract> {
@@ -2338,18 +1904,14 @@ class ContractService {
                 headers: getHeaders(),
             }
         );
-
         return handleResponse<Contract>(
             response,
             "Failed to archive contract"
         );
     }
-
-
     // ==========================================================
     // DELETE CONTRACT
     // ==========================================================
-
     async deleteContract(
         contractId: string
     ): Promise<void> {
@@ -2360,18 +1922,14 @@ class ContractService {
                 headers: getHeaders(),
             }
         );
-
         await handleResponse<unknown>(
             response,
             "Failed to delete contract"
         );
     }
 }
-
-
 // ============================================================
 // EXPORT SINGLETON
 // ============================================================
-
 export const contractService =
     new ContractService();

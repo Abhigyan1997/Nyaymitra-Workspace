@@ -1,8 +1,8 @@
+'use client'
+
 // lib/hooks/useContracts.ts
-
 import { useState, useCallback, useEffect } from 'react'
-import { contractService, Contract, DashboardStats, ContractFormData } from '@/lib/services/contract.service'
-
+import { contractService, Contract, DashboardStats, ContractFormData, ContractStatus, ContractUpdateData } from '@/lib/services/contract.service'
 /**
  * Hook for managing contracts list with pagination and filtering
  */
@@ -16,7 +16,6 @@ export const useContracts = () => {
         total: 0,
         pages: 0,
     })
-
     const fetchContracts = useCallback(
         async (params: {
             page?: number
@@ -40,7 +39,6 @@ export const useContracts = () => {
         },
         []
     )
-
     return {
         contracts,
         loading,
@@ -49,7 +47,6 @@ export const useContracts = () => {
         fetchContracts,
     }
 }
-
 /**
  * Hook for managing a single contract
  */
@@ -57,7 +54,6 @@ export const useContract = (contractId?: string) => {
     const [contract, setContract] = useState<Contract | null>(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
-
     const fetchContract = useCallback(async (id: string) => {
         setLoading(true)
         setError(null)
@@ -70,8 +66,7 @@ export const useContract = (contractId?: string) => {
             setLoading(false)
         }
     }, [])
-
-    const updateStatus = useCallback(async (status: string) => {
+    const updateStatus = useCallback(async (status: ContractStatus) => {
         if (!contract) return
         setLoading(true)
         setError(null)
@@ -84,8 +79,7 @@ export const useContract = (contractId?: string) => {
             setLoading(false)
         }
     }, [contract])
-
-    const updateContract = useCallback(async (data: Partial<ContractFormData>) => {
+    const updateContract = useCallback(async (data: ContractUpdateData) => {
         if (!contract) return
         setLoading(true)
         setError(null)
@@ -98,13 +92,11 @@ export const useContract = (contractId?: string) => {
             setLoading(false)
         }
     }, [contract])
-
     useEffect(() => {
         if (contractId) {
             fetchContract(contractId)
         }
     }, [contractId, fetchContract])
-
     return {
         contract,
         loading,
@@ -114,7 +106,6 @@ export const useContract = (contractId?: string) => {
         updateContract,
     }
 }
-
 /**
  * Hook for managing contract creation
  */
@@ -122,13 +113,25 @@ export const useCreateContract = () => {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [success, setSuccess] = useState(false)
-
     const createContract = useCallback(async (data: ContractFormData) => {
         setLoading(true)
         setError(null)
         setSuccess(false)
         try {
-            const contract = await contractService.createContract(data)
+            const contractValue = data.contractValue.trim() ? Number(data.contractValue) : undefined
+            if (contractValue !== undefined && (!Number.isFinite(contractValue) || contractValue < 0)) {
+                throw new Error('Invalid contract value')
+            }
+            if (!data.counterparty.trim()) throw new Error('Counterparty name is required')
+            const contract = await contractService.createContract({
+                title: data.title.trim(),
+                contractType: data.contractType,
+                description: data.description.trim(),
+                counterparty: { name: data.counterparty.trim() },
+                contractValue,
+                currency: data.currency,
+                priority: data.priority,
+            })
             setSuccess(true)
             return contract
         } catch (err: any) {
@@ -138,12 +141,10 @@ export const useCreateContract = () => {
             setLoading(false)
         }
     }, [])
-
     const reset = useCallback(() => {
         setError(null)
         setSuccess(false)
     }, [])
-
     return {
         createContract,
         loading,
@@ -152,7 +153,6 @@ export const useCreateContract = () => {
         reset,
     }
 }
-
 /**
  * Hook for managing comments
  */
@@ -160,7 +160,6 @@ export const useComments = (contractId: string) => {
     const [comments, setComments] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
-
     const fetchComments = useCallback(async () => {
         setLoading(true)
         setError(null)
@@ -173,7 +172,6 @@ export const useComments = (contractId: string) => {
             setLoading(false)
         }
     }, [contractId])
-
     const addComment = useCallback(
         async (message: string, isInternal: boolean = false) => {
             setError(null)
@@ -181,22 +179,20 @@ export const useComments = (contractId: string) => {
                 const newComment = await contractService.addComment(
                     contractId,
                     message,
-                    isInternal
+                    { isInternal }
                 )
-                setComments([...comments, newComment])
+                setComments(prev => [...prev, newComment])
                 return newComment
             } catch (err: any) {
                 setError(err.message || 'Failed to add comment')
                 throw err
             }
         },
-        [contractId, comments]
+        [contractId]
     )
-
     useEffect(() => {
         fetchComments()
     }, [contractId, fetchComments])
-
     return {
         comments,
         loading,
@@ -205,7 +201,6 @@ export const useComments = (contractId: string) => {
         addComment,
     }
 }
-
 /**
  * Hook for dashboard statistics
  */
@@ -213,7 +208,6 @@ export const useDashboardStats = () => {
     const [stats, setStats] = useState<DashboardStats | null>(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
-
     const fetchStats = useCallback(async () => {
         setLoading(true)
         setError(null)
@@ -226,11 +220,9 @@ export const useDashboardStats = () => {
             setLoading(false)
         }
     }, [])
-
     useEffect(() => {
         fetchStats()
     }, [fetchStats])
-
     return {
         stats,
         loading,
@@ -238,14 +230,13 @@ export const useDashboardStats = () => {
         fetchStats,
     }
 }
-
 /**
  * Hook for form state management
  */
 export const useContractForm = (initialData?: Partial<ContractFormData>) => {
     const [formData, setFormData] = useState<ContractFormData>({
         title: '',
-        contractType: 'Service',
+        contractType: 'Service Agreement',
         purpose: '',
         description: '',
         counterparty: '',
@@ -256,9 +247,7 @@ export const useContractForm = (initialData?: Partial<ContractFormData>) => {
         specialInstructions: '',
         ...initialData,
     })
-
     const [errors, setErrors] = useState<Record<string, string>>({})
-
     const updateField = useCallback(
         (field: keyof ContractFormData, value: any) => {
             setFormData((prev) => ({
@@ -276,18 +265,16 @@ export const useContractForm = (initialData?: Partial<ContractFormData>) => {
         },
         [errors]
     )
-
     const updateMultiple = useCallback((updates: Partial<ContractFormData>) => {
         setFormData((prev) => ({
             ...prev,
             ...updates,
         }))
     }, [])
-
     const reset = useCallback(() => {
         setFormData({
             title: '',
-            contractType: 'Service',
+            contractType: 'Service Agreement',
             purpose: '',
             description: '',
             counterparty: '',
@@ -300,11 +287,9 @@ export const useContractForm = (initialData?: Partial<ContractFormData>) => {
         })
         setErrors({})
     }, [initialData])
-
     const setFieldErrors = useCallback((newErrors: Record<string, string>) => {
         setErrors(newErrors)
     }, [])
-
     return {
         formData,
         errors,
@@ -314,17 +299,14 @@ export const useContractForm = (initialData?: Partial<ContractFormData>) => {
         setFieldErrors,
     }
 }
-
 /**
  * Hook for managing modal states
  */
 export const useModal = (initialOpen: boolean = false) => {
     const [isOpen, setIsOpen] = useState(initialOpen)
-
     const open = useCallback(() => setIsOpen(true), [])
     const close = useCallback(() => setIsOpen(false), [])
     const toggle = useCallback(() => setIsOpen((prev) => !prev), [])
-
     return {
         isOpen,
         open,
@@ -332,7 +314,6 @@ export const useModal = (initialOpen: boolean = false) => {
         toggle,
     }
 }
-
 /**
  * Hook for debounced search
  */
@@ -346,35 +327,28 @@ export const useDebouncedSearch = (callback: (search: string) => void, delay: nu
         },
         [callback, delay]
     )
-
     return {
         searchTerm,
         setSearchTerm: timeoutRef,
     }
 }
-
 /**
  * Hook for pagination
  */
 export const usePagination = (itemsPerPage: number = 10) => {
     const [currentPage, setCurrentPage] = useState(1)
     const [totalItems, setTotalItems] = useState(0)
-
     const totalPages = Math.ceil(totalItems / itemsPerPage)
-
     const goToPage = useCallback((page: number) => {
         const pageNum = Math.min(Math.max(1, page), totalPages)
         setCurrentPage(pageNum)
     }, [totalPages])
-
     const nextPage = useCallback(() => {
         setCurrentPage((prev) => Math.min(prev + 1, totalPages))
     }, [totalPages])
-
     const prevPage = useCallback(() => {
         setCurrentPage((prev) => Math.max(prev - 1, 1))
     }, [])
-
     return {
         currentPage,
         totalPages,
@@ -385,7 +359,6 @@ export const usePagination = (itemsPerPage: number = 10) => {
         prevPage,
     }
 }
-
 /**
  * Hook for managing notification/toast state
  */
@@ -394,7 +367,6 @@ export const useNotification = () => {
         type: 'success' | 'error' | 'info' | 'warning'
         message: string
     } | null>(null)
-
     const showNotification = useCallback(
         (
             message: string,
@@ -407,25 +379,21 @@ export const useNotification = () => {
         },
         []
     )
-
     const hideNotification = useCallback(() => {
         setNotification(null)
     }, [])
-
     return {
         notification,
         showNotification,
         hideNotification,
     }
 }
-
 /**
  * Hook for local storage
  */
 export const useLocalStorage = <T,>(key: string, initialValue: T) => {
     const [storedValue, setStoredValue] = useState<T>(() => {
         if (typeof window === 'undefined') return initialValue
-
         try {
             const item = window.localStorage.getItem(key)
             return item ? JSON.parse(item) : initialValue
@@ -434,13 +402,11 @@ export const useLocalStorage = <T,>(key: string, initialValue: T) => {
             return initialValue
         }
     })
-
     const setValue = useCallback(
         (value: T | ((val: T) => T)) => {
             try {
                 const valueToStore = value instanceof Function ? value(storedValue) : value
                 setStoredValue(valueToStore)
-
                 if (typeof window !== 'undefined') {
                     window.localStorage.setItem(key, JSON.stringify(valueToStore))
                 }
@@ -450,16 +416,13 @@ export const useLocalStorage = <T,>(key: string, initialValue: T) => {
         },
         [key, storedValue]
     )
-
     return [storedValue, setValue] as const
 }
-
 /**
  * Hook for API error handling
  */
 export const useApiError = () => {
     const [error, setError] = useState<string | null>(null)
-
     const handleError = useCallback((err: any) => {
         if (err.message) {
             setError(err.message)
@@ -469,11 +432,9 @@ export const useApiError = () => {
             setError('An unexpected error occurred')
         }
     }, [])
-
     const clearError = useCallback(() => {
         setError(null)
     }, [])
-
     return {
         error,
         handleError,

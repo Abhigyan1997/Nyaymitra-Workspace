@@ -13,6 +13,7 @@ import {
     Contract,
     ContractVersion,
     AIContractAnalysisRecord,
+    AIContractQuestionResponse,
 } from "@/lib/services/contract.service";
 
 /* -------------------------------------------------------------------------- */
@@ -33,7 +34,7 @@ type AnalysisData = {
 };
 
 type RiskLevel = "High" | "Medium" | "Low" | "None" | "Unknown";
-type Tab = "overview" | "risks" | "clauses" | "obligations" | "details" | "parties";
+type Tab = "overview" | "risks" | "clauses" | "obligations" | "details" | "parties" | "qa";
 
 interface Item {
     contract: Contract;
@@ -832,6 +833,185 @@ function Evidence({ f }: { f: Finding }) {
     );
 }
 
+
+/* Waiting animation is illustrative, not backend progress telemetry. */
+function QuestionResearch({ startedAt, onCancel }: { startedAt: number; onCancel: () => void }) {
+    const elapsed = useElapsed(startedAt);
+    const tips = [
+        { title: "Check the original wording", text: "Small words such as ‘may’ and ‘must’ can change your obligations." },
+        { title: "Know which version you are reading", text: "An older draft may contain different terms from your signed agreement." },
+        { title: "Look beyond the headline price", text: "Payment deadlines, renewal terms and exit fees can matter just as much." },
+        { title: "Review the source", text: "When your answer arrives, expand its supporting excerpts to read the original wording." },
+    ];
+    const tip = tips[Math.floor(Math.max(0, elapsed) / 18) % tips.length];
+    return (
+        <section className="ci-hairline overflow-hidden rounded-xl border border-[#F59E0B]/25 bg-[#0A0A0B]" aria-label="AI answer in progress">
+            <div className="flex items-center gap-4 p-4 sm:p-5">
+                <div aria-hidden="true" className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-[#F59E0B]/30 bg-[#F59E0B]/5">
+                    <span className="absolute inset-1 rounded-xl border border-dashed border-[#F59E0B]/50 motion-safe:animate-spin" style={{ animationDuration: "9s" }} />
+                    <FileText size={26} className="text-[#FBBF24]" />
+                    <span className="ci-scan absolute inset-x-2 h-px bg-[#F59E0B] shadow-[0_0_12px_#F59E0B]" />
+                </div>
+                <div className="min-w-0 flex-1">
+                    <p role="status" className="flex items-center gap-2 text-xs font-medium text-[#FBBF24]"><Loader2 size={12} className="motion-safe:animate-spin" /> Working on your question</p>
+                    <h4 className="ci-serif mt-1 text-lg text-white">Your answer is being prepared</h4>
+                    <p className="mt-1 text-xs leading-relaxed text-neutral-400">{elapsed >= 300 ? "This is taking longer than usual. You can keep waiting or stop waiting." : elapsed >= 60 ? "Some questions take several minutes. Your request is still pending." : "Please keep this window open while we wait for your answer."}</p>
+                </div>
+            </div>
+            <div className="mx-4 h-1 overflow-hidden rounded-full bg-[#26262A]" aria-hidden="true"><div className="h-full w-full bg-gradient-to-r from-transparent via-[#F59E0B] to-transparent motion-safe:animate-pulse" /></div>
+            <div className="mx-4 my-4 rounded-lg border border-[#26262A] bg-[#161618] p-3">
+                <p className="flex items-center gap-2 text-xs font-medium text-[#FBBF24]"><Sparkles size={13} /> While you wait · Contract essentials</p>
+                <div key={tip.title} className="ci-fade mt-2"><p className="text-sm font-medium text-white">{tip.title}</p><p className="mt-1 text-xs leading-relaxed text-neutral-300">{tip.text}</p></div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#26262A] px-4 py-3">
+                <span className="flex items-center gap-2 text-xs text-neutral-300"><Clock3 size={14} /> <span className="tabular-nums">{fmtClock(Math.max(0, elapsed))} elapsed</span></span>
+                <button type="button" className={btnGhost} onClick={onCancel}>Stop waiting</button>
+                <p className="w-full text-[11px] text-neutral-400">Stopping the wait may not stop processing on the server. Live progress is not available yet.</p>
+            </div>
+        </section>
+    );
+}
+
+function ContractQA({ item }: { item?: Item }) {
+    const initialContractId = item?.contract._id;
+    const [question, setQuestion] = useState("");
+    const [answer, setAnswer] = useState<AIContractQuestionResponse | null>(null);
+    const [error, setError] = useState("");
+    const [busy, setBusy] = useState(false);
+    const [startedAt, setStartedAt] = useState(0);
+    const request = useRef<AbortController | null>(null);
+    useEffect(() => () => request.current?.abort(), []);
+    const [contractId, setContractId] = useState(item?.contract._id ?? "");
+    const [versionId, setVersionId] = useState("");
+    const [contracts, setContracts] = useState<Contract[]>([]);
+    const [eligibleVersions, setEligibleVersions] = useState<Record<string, ContractVersion[]>>({});
+    const versions = eligibleVersions[contractId] ?? [];
+    const [loadingContracts, setLoadingContracts] = useState(true);
+    const [listError, setListError] = useState("");
+    const [reload, setReload] = useState(0);
+    useEffect(() => {
+        let active = true;
+        setLoadingContracts(true); setListError("");
+        void (async () => {
+            try {
+                const all = new Map<string, Contract>();
+                let page = 1;
+                while (active) {
+                    const result = await contractService.getContracts({ page, limit: PAGE_SIZE });
+                    for (const c of result.data) all.set(c._id, c);
+                    if (page >= (result.pagination?.totalPages ?? result.pagination?.pages ?? 1) || !result.data.length) break;
+                    page++;
+                }
+                const candidates = [...all.values()];
+                const eligible: Record<string, ContractVersion[]> = {};
+                let next = 0;
+                const worker = async () => {
+                    while (active && next < candidates.length) {
+                        const c = candidates[next++];
+                        const list = await contractService.getContractVersions(c._id);
+                        const completed: ContractVersion[] = [];
+                        for (const v of list) {
+                            if (!active) return;
+                            try {
+                                const report = await contractService.getContractVersionAnalysis(c._id, v._id);
+                                if (report?.status === "Completed" && report.analysis) completed.push(v);
+                            } catch {
+                                // Fail closed: unavailable reports never unlock questions.
+                            }
+                        }
+                        if (completed.length) eligible[c._id] = completed.sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent) || b.versionNumber - a.versionNumber);
+                    }
+                };
+                await Promise.all(Array.from({ length: Math.min(4, candidates.length) }, worker));
+                if (active) {
+                    setEligibleVersions(eligible);
+                    setContracts(candidates.filter(c => eligible[c._id]?.length));
+                    const initial = initialContractId && eligible[initialContractId]?.length ? initialContractId : "";
+                    setContractId(initial);
+                    setVersionId(initial ? eligible[initial][0]._id : "");
+                }
+            } catch (e) { if (active) setListError(e instanceof Error ? e.message : "Could not load contracts."); }
+            finally { if (active) setLoadingContracts(false); }
+        })();
+        return () => { active = false; };
+    }, [reload, initialContractId]);
+    const selectedContract = contracts.find(c => c._id === contractId);
+    const selectedVersion = versions.find(v => v._id === versionId);
+    const ready = !loadingContracts && !listError && !!selectedContract && !!selectedVersion;
+    const clearAnswer = () => { setAnswer(null); setError(""); };
+    const submit = async () => {
+        if (request.current || !question.trim() || !ready) return;
+        const controller = new AbortController();
+        request.current = controller;
+        setStartedAt(Date.now()); setBusy(true); setError(""); setAnswer(null);
+        try {
+            const result = await contractService.askContractQuestion({
+                query: question, limit: 8,
+                contractId: contractId,
+                contractVersionId: versionId,
+            }, controller.signal);
+            if (!controller.signal.aborted) setAnswer(result);
+        } catch (e) {
+            if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Unable to answer question.");
+        } finally {
+            if (request.current === controller) { request.current = null; if (!controller.signal.aborted) setBusy(false); }
+        }
+    };
+    return <div className="space-y-4">
+        <div className={`${panel} space-y-3 p-4`}>
+            <h3 className="flex items-center gap-2 text-lg font-semibold text-white"><Sparkles size={18} className="text-[#F59E0B]" /> Ask AI</h3>
+            <p className="text-sm text-neutral-300">Understand your agreements in plain English. Choose what you want to ask about.</p>
+            <label className="block text-sm text-neutral-200">Choose a contract
+                <select disabled={busy || loadingContracts || !!listError} value={contractId} onChange={e => { setContractId(e.target.value); setVersionId(eligibleVersions[e.target.value]?.[0]?._id ?? ""); clearAnswer(); }} className="mt-1.5 block w-full rounded-md border border-[#26262A] bg-black p-3 text-sm text-white">
+                    <option value="">Choose an analysed contract</option>
+                    {contracts.map(c => <option key={c._id} value={c._id}>{contractTitle(c)} — {c.contractNumber}</option>)}
+                </select>
+            </label>
+            {loadingContracts && <p role="status" className="text-xs text-neutral-400">Checking which contracts have completed analysis…</p>}
+            {listError && <p role="alert" className="text-xs text-rose-300">{listError} <button type="button" disabled={busy} onClick={() => setReload(n => n + 1)} className="underline">Try again</button></p>}
+            {!loadingContracts && !listError && !contracts.length && <div className="rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/5 p-4 text-sm text-neutral-200"><p className="font-semibold text-[#FBBF24]">Analyse a contract to get started</p><p className="mt-2">1. Close Ask AI and choose or upload a contract.</p><p>2. Click Run analysis and wait for the report.</p><p>3. Open Ask AI again and select your analysed contract.</p><button type="button" className={`${btnGhost} mt-3`} onClick={() => setReload(n => n + 1)}>Refresh analysed contracts</button></div>}
+            {contractId && <label className="block text-sm text-neutral-200">Choose a version
+                <select disabled={busy || loadingContracts || !!listError} value={versionId} onChange={e => { setVersionId(e.target.value); clearAnswer(); }} className="mt-1.5 block w-full rounded-md border border-[#26262A] bg-black p-3 text-sm text-white">
+
+                    {versions.map(v => <option key={v._id} value={v._id}>Version {v.versionNumber} — {v.status}{v.isCurrent ? " (current)" : " (older)"}{fmtDate(v.createdAt) ? ` — ${fmtDate(v.createdAt)}` : ""}</option>)}
+                </select>
+            </label>}
+            <div className="rounded-lg border border-[#26262A] bg-black/60 p-3 text-xs leading-relaxed text-neutral-300">
+                <p className="font-medium text-white">{contractId ? selectedContract ? contractTitle(selectedContract) : "Selected contract" : "Choose an analysed contract"}</p>
+                <p>{contractId ? selectedVersion ? `Version ${selectedVersion.versionNumber} · ${selectedVersion.status}` : "Choose an available version" : "Select a contract to ask a question."}</p>
+                {selectedVersion?.status === "Draft" && <p className="mt-1 text-amber-300">This is a draft, not necessarily a signed agreement.</p>}
+                <p className="mt-1">Only completed analyses are listed. Some analysed documents may still need preparation for AI questions.</p>
+            </div>
+            <p className="text-xs font-medium text-neutral-300">Not sure what to ask? Try one of these:</p>
+            <div className="flex flex-wrap gap-2">{["How can I end this agreement?", "What am I required to do?", "What should I check before signing?", "Are there any payment deadlines or penalties?"].map(q => <button type="button" key={q} disabled={busy || !ready} className={btnGhost} onClick={() => setQuestion(q)}>{q}</button>)}</div>
+            <form onSubmit={e => { e.preventDefault(); void submit(); }} className="space-y-2">
+                <textarea aria-label="Contract question" value={question} onChange={e => setQuestion(e.target.value)} disabled={busy || !ready} maxLength={1000} rows={3} placeholder="For example, can I cancel this agreement without paying a penalty?" className="w-full rounded-md border border-[#26262A] bg-black p-3 text-sm text-white outline-none focus:border-[#F59E0B]" />
+                <div className="flex items-center justify-between"><span className="text-xs text-neutral-400">{question.length}/1000</span><button type="submit" disabled={busy || !question.trim() || !ready} className={btnPrimary}>{busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}{busy ? "Searching…" : "Ask AI"}</button></div>
+            </form>
+            {busy && <QuestionResearch startedAt={startedAt} onCancel={() => { request.current?.abort(); request.current = null; setBusy(false); }} />}
+            {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
+        </div>
+        {answer && <div className={`${panel} space-y-4 p-4`} aria-live="polite">
+            <p className="text-xs text-neutral-400">{answer.question}</p>
+            <p className="text-sm font-semibold text-[#FBBF24]">{answer.answerStatus === "supported" ? "Source-backed answer" : answer.answerStatus === "partially_supported" ? "Partially supported" : "Not enough information to answer"}</p>
+            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-neutral-200">{answer.answer}</p>
+            {answer.retrieval.retrievalStatus !== "completed" && <p className="text-xs text-amber-300">AI could not find usable text. Your document may not be ready for AI search yet.</p>}
+            {answer.claims.map(claim => <details key={claim.claimId} className="rounded-md border border-[#26262A] p-3">
+                <summary className="cursor-pointer text-sm text-white">{claim.claimType === "inference" ? "Possible interpretation: " : ""}{claim.statement}</summary>
+                {claim.evidence.map((ev, i) => <div key={`${ev.chunkId}-${i}`} className="mt-3 border-l-2 border-[#F59E0B] pl-3 text-xs text-neutral-300">
+                    <p className="font-medium text-white">{ev.contract.title} · {ev.contract.contractNumber}</p>
+                    <p>{ev.version ? `Version ${ev.version.versionNumber} · ${ev.version.status}` : ev.contract.status}{ev.pageNumber != null ? ` · Page ${ev.pageNumber}` : ` · Source excerpt ${ev.chunkIndex + 1}`}</p>
+                    <blockquote className="my-2 whitespace-pre-wrap break-words">{ev.quote}</blockquote>
+                    <p className="text-emerald-300">Quote found in the original document</p>
+                </div>)}
+            </details>)}
+            {!!answer.missingInformation.length && <div><h4 className="text-sm font-medium text-white">What we could not confirm</h4><ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-neutral-300">{answer.missingInformation.map((m, i) => <li key={i}>{m}</li>)}</ul></div>}
+            <details className="text-xs text-neutral-400"><summary className="cursor-pointer">Answer checking details</summary><p className="mt-2">{answer.verification.verifiedClaims} of {answer.verification.totalGeneratedClaims} generated claims passed quotation checks · {answer.retrieval.totalResults} retrieved passages. This is not an accuracy score.</p></details>
+            <p className="text-xs text-neutral-400">{answer.disclaimer}</p>
+        </div>}
+    </div>;
+}
+
 function Report({ item, initialTab, onClose }: { item: Item; initialTab: Tab; onClose: () => void }) {
     const [tab, setTab] = useState<Tab>(initialTab);
     const [showAll, setShowAll] = useState(false);
@@ -887,6 +1067,7 @@ function Report({ item, initialTab, onClose }: { item: Item; initialTab: Tab; on
         { id: "obligations", label: "Obligations", icon: ListChecks, count: d.obligations?.length },
         { id: "details", label: "Key terms", icon: KeyRound, count: d.keyDetails?.length },
         { id: "parties", label: "Parties", icon: Users, count: parties.length },
+        { id: "qa", label: "Ask AI", icon: Sparkles },
     ];
 
     const summary = d.summary ?? "";
@@ -938,6 +1119,7 @@ function Report({ item, initialTab, onClose }: { item: Item; initialTab: Tab; on
                 </header>
 
                 <div key={tab} className="ci-fade flex-1 space-y-3 overflow-y-auto p-4 sm:p-6">
+                    {tab === "qa" && <ContractQA key={`${item.contract._id}-${item.version?._id ?? "current"}`} item={item} />}
                     {tab === "overview" && (
                         <>
                             <div className={`${panel} flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:gap-8`}>
@@ -1177,6 +1359,7 @@ export default function ContractIntelligencePage() {
     const [runs, setRuns] = useState<Record<string, RunState>>({});
     const [toast, setToast] = useState<{ id: string; text: string } | null>(null);
     const [uploadOpen, setUploadOpen] = useState(false);
+    const [qaOpen, setQaOpen] = useState(false);
     const [railExpanded, setRailExpanded] = useState(false);
     const [deleting, setDeleting] = useState<string | null>(null);
 
@@ -1469,6 +1652,7 @@ export default function ContractIntelligencePage() {
                             <button onClick={() => setUploadOpen(true)} className={`${btnPrimary} px-5 py-2.5`}>
                                 <Upload size={15} /> Upload contract
                             </button>
+                            <button onClick={() => setQaOpen(true)} className={btnGhost}><Sparkles size={15} /> Ask AI</button>
                             <button onClick={() => load(false)} disabled={refreshing} className={`${btnGhost} px-5 py-2.5`}>
                                 <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
                                 Refresh
@@ -1700,6 +1884,13 @@ export default function ContractIntelligencePage() {
                 )}
             </div>
 
+            {qaOpen && <div className="fixed inset-0 z-[60] flex justify-end" role="dialog" aria-modal="true" aria-label="Contract AI">
+                <div className="absolute inset-0 bg-black/70" onClick={() => setQaOpen(false)} />
+                <aside className="relative h-full w-full overflow-y-auto border-l border-[#26262A] bg-black p-4 sm:max-w-3xl sm:p-6">
+                    <div className="mb-4 flex justify-between text-white"><h2 className="text-lg font-semibold">Contract AI workspace</h2><button aria-label="Close AI workspace" onClick={() => setQaOpen(false)}><X size={20} /></button></div>
+                    <ContractQA key={`${selected?.contract._id ?? "portfolio"}-${selected?.version?._id ?? "current"}`} item={selected ?? undefined} />
+                </aside>
+            </div>}
             <UploadDialog
                 open={uploadOpen}
                 onClose={() => setUploadOpen(false)}
