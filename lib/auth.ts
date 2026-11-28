@@ -1,7 +1,7 @@
 // lib/auth.ts
 import { jwtDecode } from 'jwt-decode'
 
-export const LOGIN_PATH = '/login' // must match your real login route
+export const LOGIN_PATH = '/' // must match your real login route
 
 // every key your LoginForm writes on sign-in
 const SESSION_KEYS = [
