@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { motion, type Variants } from 'framer-motion'
 import Link from 'next/link'
 import { Mail, Lock, Loader2, Eye, EyeOff, Scale, ArrowRight } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import axios from 'axios'
 import { premiumToast } from '@/lib/premium-toast'
 
@@ -20,6 +20,9 @@ type LoginFormData = z.infer<typeof loginSchema>
 
 export function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const expired = searchParams.get('session') === 'expired'
+
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
@@ -71,30 +74,25 @@ export function LoginForm() {
 
       // Role-based redirection
       setTimeout(() => {
-        const redirectTo = new URLSearchParams(window.location.search).get('redirect')
+        const redirectTo = searchParams.get('redirect')
 
-        if (redirectTo) {
-          router.push(redirectTo)
+        // Only allow same-site paths (blocks https://evil.com and //evil.com)
+        const isSafeRedirect =
+          !!redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')
+
+        if (isSafeRedirect) {
+          router.push(redirectTo!)
+          return
+        }
+
+        const userRole = user.role?.toLowerCase() || ''
+
+        if (userRole === 'admin' || userRole === 'superadmin') {
+          router.push('/admin-dashboard')
+        } else if (userRole === 'lawyer' || userRole === 'ca' || userRole === 'cs') {
+          router.push('/lawyer-dashboard')
         } else {
-          const userRole = user.role?.toLowerCase() || ''
-
-          if (userRole === 'admin' || userRole === 'superadmin') {
-            router.push('/admin-dashboard')
-          } else if (
-            userRole === 'lawyer' ||
-            userRole === 'CA' ||
-            userRole === 'CS'
-          ) {
-            router.push('/lawyer-dashboard')
-          } else if (
-            userRole === 'business' ||
-            userRole === 'client' ||
-            userRole === 'user'
-          ) {
-            router.push('/dashboard')
-          } else {
-            router.push('/dashboard')
-          }
+          router.push('/dashboard')
         }
       }, 1000)
     } catch (err: any) {
@@ -264,6 +262,15 @@ export function LoginForm() {
                 <p className="text-xs text-red-400 font-medium">{errors.password.message}</p>
               )}
             </motion.div>
+
+            {/* Session expired banner */}
+            {expired && !error && (
+              <div className="p-3 bg-amber-400/10 border border-amber-400/20 rounded-lg">
+                <p className="text-xs text-amber-300 font-medium">
+                  Your session expired. Please log in again.
+                </p>
+              </div>
+            )}
 
             {/* Inline Error Message */}
             {error && (

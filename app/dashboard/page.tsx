@@ -25,15 +25,18 @@ import {
 } from 'lucide-react'
 import { premiumToast } from '@/lib/premium-toast'
 
+import api, { AuthError } from '@/lib/services/api'
+import { LOGIN_PATH } from '@/lib/auth'
+
 /* =========================================================
    CONFIG
 ========================================================= */
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  'https://nyaymitra-backend-production.up.railway.app/api/v1'
+// const API_BASE_URL =
+//   process.env.NEXT_PUBLIC_API_URL ||
+//   'https://nyaymitra-backend-production.up.railway.app/api/v1'
 
-const DASHBOARD_API = `${API_BASE_URL}/dashboard`
+// const DASHBOARD_API = `${API_BASE_URL}/dashboard`
 
 /* =========================================================
    TYPES
@@ -1794,7 +1797,7 @@ export default function DashboardPage() {
 
       if (!token || !storedUser) {
         setIsAuthenticated(false)
-        router.push('/login')
+        router.replace(LOGIN_PATH)
         return
       }
 
@@ -1808,23 +1811,18 @@ export default function DashboardPage() {
         setUser(parsedUser)
         setIsAuthenticated(true)
 
-        const response = await fetch(DASHBOARD_API, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          cache: 'no-store',
-        })
+        const { data: result } = await api.get<DashboardResponse>('/dashboard')
 
-        const result: DashboardResponse = await response.json()
-
-        if (!response.ok || !result.success) {
+        if (!result.success) {
           throw new Error(result.message || 'Failed to load dashboard')
         }
 
         setDashboard(normalizeDashboard(result.data))
       } catch (err) {
+        // Session is dead and a redirect to login is already in progress,
+        // so don't show an error screen or toast
+        if (err instanceof AuthError) return
+
         console.error('Dashboard fetch error:', err)
 
         const message =
@@ -1844,7 +1842,6 @@ export default function DashboardPage() {
     },
     [router]
   )
-
   useEffect(() => {
     fetchDashboard()
   }, [fetchDashboard])
@@ -1896,6 +1893,7 @@ export default function DashboardPage() {
           <button
             onClick={async () => {
               await fetchDashboard(true)
+              if (!localStorage.getItem('token')) return // session ended, redirecting
               premiumToast.success('Refreshed', {
                 description: 'Latest dashboard data loaded.',
                 duration: 2000,
