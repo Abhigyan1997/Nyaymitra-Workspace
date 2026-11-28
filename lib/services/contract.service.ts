@@ -710,7 +710,206 @@ export interface AIContractQuestionResponse {
     disclaimer: string;
 }
 
+// ============================================================
+// CONTRACT INDEXING READINESS
+// ============================================================
+
+export type ContractIndexingReadinessStatus =
+    | "Not Analyzed"
+    | "Analyzing"
+    | "Analysis Failed"
+    | "Dispatch Pending"
+    | "Dispatch Failed"
+    | "Pending"
+    | "Processing"
+    | "Ready"
+    | "Failed"
+    | "Not Indexed";
+
+export type ContractIndexingJobStatus =
+    | "Pending"
+    | "Processing"
+    | "Completed"
+    | "Failed";
+
+export interface ContractIndexingReadiness {
+
+    contractId: string;
+
+    contractVersionId: string;
+
+    versionNumber: number;
+
+    status: ContractIndexingReadinessStatus;
+
+    isReady: boolean;
+
+    canAskQuestions: boolean;
+
+    shouldPoll: boolean;
+
+    pollAfterMs: number | null;
+
+    message: string;
+
+    analysis: {
+
+        status:
+        | "Processing"
+        | "Completed"
+        | "Failed"
+        | null;
+
+        hasCompletedAnalysis: boolean;
+    };
+
+    indexing: {
+
+        status: ContractIndexingJobStatus | null;
+
+        attempts: number;
+
+        maxAttempts: number | null;
+
+        nextRunAt: string | null;
+
+        completedAt: string | null;
+
+        failedAt: string | null;
+
+        publishedAt: string | null;
+
+        totalChunks: number | null;
+
+        indexedChunks: number | null;
+
+        isLegacy: boolean;
+    };
+
+    checkedAt: string;
+}
+
 class ContractService {
+    // ==========================================================
+    // CONTRACT INDEXING READINESS
+    // ==========================================================
+
+    async getContractIndexingStatus(
+        contractId: string,
+        versionId: string,
+        signal?: AbortSignal
+    ): Promise<ContractIndexingReadiness> {
+
+        // ------------------------------------------------------
+        // 1. Validate resource identifiers
+        // ------------------------------------------------------
+
+        const objectIdPattern = /^[a-fA-F0-9]{24}$/;
+
+        if (!objectIdPattern.test(contractId)) {
+            throw new Error("Invalid contract ID.");
+        }
+
+        if (!objectIdPattern.test(versionId)) {
+            throw new Error("Invalid contract version ID.");
+        }
+
+        // ------------------------------------------------------
+        // 2. Request indexing readiness
+        // ------------------------------------------------------
+
+        const response = await fetch(
+            `${CONTRACTS_URL}/${contractId}/versions/${versionId}/indexing-status`,
+            {
+                method: "GET",
+
+                headers: getHeaders(),
+
+                cache: "no-store",
+
+                signal,
+            }
+        );
+
+        // ------------------------------------------------------
+        // 3. Process standardized backend response
+        // ------------------------------------------------------
+
+        const result =
+            await handleResponse<ContractIndexingReadiness>(
+                response,
+                "Unable to retrieve contract indexing status."
+            );
+
+        // ------------------------------------------------------
+        // 4. Validate response structure
+        // ------------------------------------------------------
+
+        const validStatuses: ContractIndexingReadinessStatus[] = [
+            "Not Analyzed",
+            "Analyzing",
+            "Analysis Failed",
+            "Dispatch Pending",
+            "Dispatch Failed",
+            "Pending",
+            "Processing",
+            "Ready",
+            "Failed",
+            "Not Indexed",
+        ];
+
+        if (
+            !result ||
+            result.contractId !== contractId.toLowerCase() ||
+            result.contractVersionId !== versionId.toLowerCase() ||
+            !validStatuses.includes(result.status) ||
+            typeof result.isReady !== "boolean" ||
+            typeof result.canAskQuestions !== "boolean" ||
+            typeof result.shouldPoll !== "boolean" ||
+            typeof result.message !== "string" ||
+            typeof result.checkedAt !== "string" ||
+            !result.analysis ||
+            !result.indexing
+        ) {
+            throw new Error(
+                "Invalid contract indexing status response."
+            );
+        }
+
+        // ------------------------------------------------------
+        // 5. Validate readiness consistency
+        // ------------------------------------------------------
+
+        if (
+            result.isReady !== result.canAskQuestions ||
+            result.isReady !== (result.status === "Ready") ||
+            (result.isReady && result.shouldPoll)
+        ) {
+            throw new Error(
+                "Inconsistent contract indexing status."
+            );
+        }
+
+        // ------------------------------------------------------
+        // 6. Validate polling instructions
+        // ------------------------------------------------------
+
+        if (
+            result.shouldPoll &&
+            (
+                typeof result.pollAfterMs !== "number" ||
+                !Number.isFinite(result.pollAfterMs) ||
+                result.pollAfterMs <= 0
+            )
+        ) {
+            throw new Error(
+                "Invalid contract indexing polling interval."
+            );
+        }
+
+        return result;
+    }
+
     async askContractQuestion(data: AIContractQuestionRequest, signal?: AbortSignal): Promise<AIContractQuestionResponse> {
         const query = data.query.trim();
         const { contractId = null, contractVersionId = null, limit = 8 } = data;

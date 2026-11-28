@@ -15,6 +15,7 @@ import {
     AIContractAnalysisRecord,
     AIContractQuestionResponse,
 } from "@/lib/services/contract.service";
+import { useContractIndexingStatus } from "@/lib/hooks/useContractIndexingStatus";
 
 /* -------------------------------------------------------------------------- */
 /*  Types                                                                     */
@@ -872,6 +873,66 @@ function QuestionResearch({ startedAt, onCancel }: { startedAt: number; onCancel
     );
 }
 
+/* Contract indexing readiness — backend-driven, no simulated progress. */
+function IndexingReadinessPanel({
+    readiness, isLoading, isPolling, isReady, error, refresh, disabled = false,
+}: ReturnType<typeof useContractIndexingStatus> & { disabled?: boolean }) {
+    const status = readiness?.status;
+    const working = isLoading || isPolling || readiness?.shouldPoll === true;
+    const failed = status === "Failed" || status === "Dispatch Failed" || status === "Analysis Failed";
+    const tone = isReady ? "text-emerald-300" : error || failed ? "text-rose-300" : "text-[#FBBF24]";
+    const borderTone = isReady ? "border-emerald-400/25" : error || failed ? "border-rose-400/25" : "border-[#F59E0B]/25";
+    const StatusIcon = isReady ? BadgeCheck : error || failed ? AlertTriangle : working ? Loader2 : CircleDashed;
+    const title = isReady ? "Contract intelligence ready" : error ? "Unable to verify readiness" : isLoading ? "Checking contract readiness" : failed ? "Contract preparation unsuccessful" : working ? "Preparing contract intelligence" : "Contract intelligence unavailable";
+    const total = readiness?.indexing.totalChunks ?? null;
+    const indexed = readiness?.indexing.indexedChunks ?? null;
+    const analysisCompleted = readiness?.analysis.hasCompletedAnalysis === true;
+    return (
+        <section aria-label="Contract intelligence readiness" className={`ci-fade overflow-hidden rounded-xl border ${borderTone} bg-[#0A0A0B]`}>
+            <div className="flex items-start gap-3 p-4">
+                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${borderTone} bg-[#161618]`}>
+                    <StatusIcon size={23} className={`${tone} ${working && !error && !isReady ? "motion-safe:animate-spin" : ""}`} />
+                </div>
+                <div className="min-w-0 flex-1" role="status" aria-live="polite">
+                    <p className={`text-xs font-medium ${tone}`}>{isReady ? "AI SEARCH AVAILABLE" : "CONTRACT INTELLIGENCE"}</p>
+                    <h4 className="ci-serif mt-1 text-base text-white">{title}</h4>
+                    <p className="mt-1 text-xs leading-relaxed text-neutral-400">{error || readiness?.message || "Checking whether your document is ready for AI questions."}</p>
+                </div>
+            </div>
+            {working && !isReady && !error && <div aria-hidden="true" className="mx-4 h-1 overflow-hidden rounded-full bg-[#26262A]"><div className="h-full w-full bg-gradient-to-r from-transparent via-[#F59E0B] to-transparent motion-safe:animate-pulse" /></div>}
+            <div className="space-y-3 p-4">
+                <div className="flex items-center gap-2.5">
+                    {analysisCompleted ? <CheckCircle2 size={15} className="shrink-0 text-emerald-400" /> : <CircleDashed size={15} className="shrink-0 text-neutral-500" />}
+                    <span className="flex-1 text-xs text-neutral-200">AI contract analysis</span>
+                    <span className="text-[11px] text-neutral-400">{analysisCompleted ? "Completed" : readiness?.analysis.status || (error ? "Unknown" : "Checking")}</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                    {isReady ? <CheckCircle2 size={15} className="shrink-0 text-emerald-400" /> : failed ? <AlertTriangle size={15} className="shrink-0 text-rose-300" /> : working && !error ? <Loader2 size={15} className="shrink-0 text-[#F59E0B] motion-safe:animate-spin" /> : <CircleDashed size={15} className="shrink-0 text-neutral-500" />}
+                    <span className="flex-1 text-xs text-neutral-200">Semantic indexing</span>
+                    <span className="text-[11px] text-neutral-400">{isReady ? "Available" : status || (error ? "Unknown" : "Checking")}</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                    {isReady ? <CheckCircle2 size={15} className="shrink-0 text-emerald-400" /> : <KeyRound size={15} className="shrink-0 text-neutral-500" />}
+                    <span className="flex-1 text-xs text-neutral-200">Contract Q&A</span>
+                    <span className={`text-[11px] ${isReady ? "text-emerald-300" : "text-neutral-500"}`}>{isReady ? "Unlocked" : "Locked"}</span>
+                </div>
+            </div>
+            {isReady && typeof total === "number" && Number.isFinite(total) && total > 0 && typeof indexed === "number" && Number.isFinite(indexed) && indexed >= 0 && indexed <= total && (
+                <div className="mx-4 mb-4 rounded-lg border border-[#26262A] bg-black/60 p-3">
+                    <div className="flex items-center justify-between gap-3"><span className="text-xs text-neutral-300">Reported indexed document segments</span><span className="text-xs font-medium tabular-nums text-emerald-300">{indexed}/{total}</span></div>
+                    <div className="mt-2 h-1 overflow-hidden rounded-full bg-[#26262A]"><div className="h-full rounded-full bg-emerald-400" style={{ width: `${indexed / total * 100}%` }} /></div>
+                </div>
+            )}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#26262A] px-4 py-3">
+                <span className="flex items-center gap-1.5 text-[11px] text-neutral-400"><Clock3 size={12} />{isPolling ? "Automatically checking status" : isReady ? "Ready for AI questions" : "Status check available"}</span>
+                <button type="button" onClick={refresh} disabled={disabled || isLoading} className={`${btnGhost} !px-2.5 !py-1.5 !text-xs`}><RefreshCw size={12} className={isLoading ? "motion-safe:animate-spin" : ""} /> Check status</button>
+                {failed && <p className="w-full text-[11px] leading-relaxed text-neutral-400">Checking status does not restart a failed indexing job. Contact support if preparation remains unsuccessful.</p>}
+                {error && isPolling && <p className="w-full text-[11px] text-neutral-400">Another status check will be attempted automatically.</p>}
+            </div>
+        </section>
+    );
+}
+
 function ContractQA({ item }: { item?: Item }) {
     const initialContractId = item?.contract._id;
     const [question, setQuestion] = useState("");
@@ -937,7 +998,13 @@ function ContractQA({ item }: { item?: Item }) {
     }, [reload, initialContractId]);
     const selectedContract = contracts.find(c => c._id === contractId);
     const selectedVersion = versions.find(v => v._id === versionId);
-    const ready = !loadingContracts && !listError && !!selectedContract && !!selectedVersion;
+    const hasValidSelection = !loadingContracts && !listError && !!selectedContract && !!selectedVersion;
+    const indexingStatus = useContractIndexingStatus({
+        contractId: selectedContract?._id ?? null,
+        versionId: selectedVersion?._id ?? null,
+        enabled: hasValidSelection,
+    });
+    const ready = hasValidSelection && indexingStatus.isReady && indexingStatus.canAskQuestions;
     const clearAnswer = () => { setAnswer(null); setError(""); };
     const submit = async () => {
         if (request.current || !question.trim() || !ready) return;
@@ -982,6 +1049,7 @@ function ContractQA({ item }: { item?: Item }) {
                 {selectedVersion?.status === "Draft" && <p className="mt-1 text-amber-300">This is a draft, not necessarily a signed agreement.</p>}
                 <p className="mt-1">Only completed analyses are listed. Some analysed documents may still need preparation for AI questions.</p>
             </div>
+            {hasValidSelection && <IndexingReadinessPanel {...indexingStatus} disabled={busy} />}
             <p className="text-xs font-medium text-neutral-300">Not sure what to ask? Try one of these:</p>
             <div className="flex flex-wrap gap-2">{["How can I end this agreement?", "What am I required to do?", "What should I check before signing?", "Are there any payment deadlines or penalties?"].map(q => <button type="button" key={q} disabled={busy || !ready} className={btnGhost} onClick={() => setQuestion(q)}>{q}</button>)}</div>
             <form onSubmit={e => { e.preventDefault(); void submit(); }} className="space-y-2">
